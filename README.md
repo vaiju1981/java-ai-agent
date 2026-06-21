@@ -71,6 +71,8 @@ Everything is an interface; implement the seam you need.
 - **A skill** — `Skill.of(name, description, instructions, tools)`, register it, and a
   `SkillfulAgent` equips it on demand.
 - **An observer** — implement `AgentObserver` (trace/meter/record); failures are isolated.
+- **A tool policy** — implement `ToolApprover.authorize(name, args)` (use `ToolApprovers.allowList(...)`,
+  or `ConsoleToolApprover` for human-in-the-loop); wire it via `DefaultAgent.builder().toolApprover(...)`.
 - **An agent** — implement `Agent.run(AgentRequest) -> AgentResponse`. Because everything is an
   `Agent`, your implementation can be a sub-agent of a `DeepAgent` or the worker of a
   `ReflectiveAgent` with no extra wiring.
