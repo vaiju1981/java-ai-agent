@@ -13,6 +13,7 @@ include(
     "agent-adk",
     "agent-mcp",
     "agent-observability-otel",
+    "agent-store-jdbc",
     "examples",
     "demos",
     "downstream-smoke",

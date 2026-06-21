@@ -17,6 +17,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 - **Cognition** — episodic memory (in-memory, file-persistent/cross-session, semantic/embedding);
   skills (registry, progressive disclosure, acquisition); reflective learning within a run and
   across sessions.
+- **Durable conversation store** — `agent-store-jdbc`: a `JdbcConversationStore`
+  (SQLite/PostgreSQL/MySQL) that persists each message to a queryable `agent_messages` table, so
+  conversations survive restarts and support SQL analytics; drops into
+  `DefaultAgent.builder().conversationStore(...)`, with optional windowing and faithful tool-call
+  persistence.
 - **Reliability** — `ResilientModelPort` (timeout + retry), `WindowedMemory`, graceful
   model-failure handling, **structured output** (`StructuredOutput`, schema-bound JSON; used by the
   planner, reflector, skill selector, and skill synthesizer).
