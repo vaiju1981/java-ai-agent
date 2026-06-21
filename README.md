@@ -118,6 +118,8 @@ Everything is an interface; implement the seam you need.
   transform / block). Compose them; `Guardrails.kidguard(guardModel)` returns the ordered pipeline.
 - **A skill** — `Skill.of(name, description, instructions, tools)`, register it, and a
   `SkillfulAgent` equips it on demand.
+- **Memory** — pick an `EpisodicStore`: `InMemoryEpisodicStore`, `FileEpisodicStore` (persistent,
+  cross-session), or `LangChain4jEpisodicStore` (semantic, embedding-based recall).
 - **An observer** — implement `AgentObserver` (trace/meter/record); failures are isolated.
 - **A tool policy** — implement `ToolApprover.authorize(name, args)` (use `ToolApprovers.allowList(...)`,
   or `ConsoleToolApprover` for human-in-the-loop); wire it via `DefaultAgent.builder().toolApprover(...)`.
