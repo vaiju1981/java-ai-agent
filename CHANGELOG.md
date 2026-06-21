@@ -28,6 +28,12 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 - **Trust governs the universal `Agent` seam** — new `PolicyEnforcingAgent` / `Trust.govern(agent,
   guardrails…)` enforces input/output guardrails and the request deadline around *any* agent, so
   composed and black-box agents (`DeepAgent`, `AdkAgent`) are governed too, not just `DefaultAgent`.
+- **Durable audit trail** — an `AuditEvent` (id, timestamp, traceId, session, principal, tenant,
+  type, detail) emitted by the runtime for the turn lifecycle, tool-authorization decisions, and
+  guardrail blocks; an `AuditSink` with `InMemoryAuditSink` and a flushed-per-event `FileAuditSink`.
+  Wired into `DefaultAgent.builder().auditSink(...)` and `PolicyEnforcingAgent`
+  (`Trust.govern(agent, sink, guardrails)`). Details are kept non-sensitive (names, decisions,
+  reasons), never raw content or arguments.
 - **Capability-based tool authorization** (breaking SPI) — tools declare a `ToolEffect`
   (`READ_ONLY`/`EFFECTFUL`, default effectful); `ToolApprover` now receives a `ToolCallContext`
   (spec/effect, arguments, principal, tenant) instead of `(name, json)`; `ToolApprovers.denyEffectful()`
