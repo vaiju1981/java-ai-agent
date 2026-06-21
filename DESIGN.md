@@ -71,7 +71,8 @@ tools) run on it.
   re-entering the model and tool exception detail never leaks into the context. **The default is `denyEffectful()`** — read-only tools run, effectful ones
   are denied unless allow-listed; `ToolApprovers.allowAll()` is an explicit dev-only opt-in. Also
   `allowList` or `ConsoleToolApprover` (HITL). The selector is enforced too: a tool not presented this
-  turn cannot run, even if the model names it.
+  turn cannot run, even if the model names it. Arguments are checked before invocation by a pluggable
+  **`ToolArgumentValidator`** (`agent-tools-jsonschema` is a JSON-schema implementation).
 - **`Guardrail`** — `check(stage, content) → allow / transform / block`; `Guardrails.kidguard(...)`
   is the ordered crisis → PII → Llama Guard pipeline.
 - **`PolicyEnforcingAgent` / `Trust.govern(agent, …)`** — wraps any `Agent` so input/output guardrails

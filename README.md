@@ -188,6 +188,8 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
 - **`agent-store-jdbc`** — a durable, queryable `ConversationStore` over any JDBC database
   (SQLite/PostgreSQL/MySQL): messages persist to an `agent_messages` table that survives restarts and
   supports SQL analytics; see [agent-store-jdbc/README.md](agent-store-jdbc/README.md).
+- **`agent-tools-jsonschema`** — a `ToolArgumentValidator` that validates tool arguments against their
+  JSON Schema before the tool runs, so malformed calls are rejected without side effects.
 - **`examples`** — a graduated set of runnable agents, from `MinimalAgent` to the `StudyBuddy`
   capstone (which composes everything); see [examples/README.md](examples/README.md).
 - **`demos`** — six real-world, end-to-end demos (finance, data, logs, support, health, research),

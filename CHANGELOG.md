@@ -44,8 +44,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   so policies can decide by correlation or remaining time, not just identity; tool results fed back to
   the model are capped (`maxToolResultChars`, default 8192) so a tool can't flood or poison the
   context; tool exception detail is logged but no longer leaks into the model context. (Still open:
-  JSON-schema argument validation, idempotency keys, explicit untrusted-result framing, per-tenant
-  skill/lesson isolation, and hard cancellation of interruption-ignoring tools — a JVM limitation.)
+  hard cancellation of interruption-ignoring tools — a JVM limitation.)
+- **Tool-argument validation** — a pluggable `ToolArgumentValidator` runs before a tool executes, so
+  a malformed or incomplete call is rejected without side effects; `agent-tools-jsonschema` provides a
+  JSON-schema validator (required fields + types, recursing into nested objects). The default is
+  no-op, keeping `agent-core` dependency-free.
 - **Untrusted-result framing + idempotency key** — tool results fed to the model are framed as
   untrusted data by default (resists prompt injection; opt out with `frameToolResults(false)`), and
   `ToolCallContext.idempotencyKey()` provides a stable key (tenant + session + tool + arguments) that

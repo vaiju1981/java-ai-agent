@@ -19,6 +19,7 @@ import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprover;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
+import dev.vaijanath.aiagent.tool.ToolArgumentValidator;
 import dev.vaijanath.aiagent.tool.ToolCallContext;
 import dev.vaijanath.aiagent.tool.ToolDecision;
 import dev.vaijanath.aiagent.tool.ToolExecutor;
@@ -33,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -65,6 +67,7 @@ public final class DefaultAgent implements Agent {
     private final List<Guardrail> guardrails;
     private final Map<String, Tool> tools;
     private final ToolApprover toolApprover;
+    private final ToolArgumentValidator toolArgumentValidator;
     private final ToolSelector toolSelector;
     private final ToolExecutor toolExecutor;
     private final ConversationStore conversations;
@@ -82,6 +85,8 @@ public final class DefaultAgent implements Agent {
         this.guardrails = List.copyOf(b.guardrails);
         this.observers = List.copyOf(b.observers);
         this.toolApprover = b.toolApprover != null ? b.toolApprover : ToolApprovers.denyEffectful();
+        this.toolArgumentValidator =
+                b.toolArgumentValidator != null ? b.toolArgumentValidator : ToolArgumentValidator.none();
         this.toolSelector = b.toolSelector != null ? b.toolSelector : ToolSelectors.all();
         this.toolExecutor = b.toolExecutor;
         this.conversations = b.conversationStore != null
@@ -268,6 +273,12 @@ public final class DefaultAgent implements Agent {
             audit("tool.denied", ctx, "tool=" + call.name() + " reason=" + decision.reason());
             return ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason());
         }
+        Optional<String> invalid = toolArgumentValidator.validate(tool.spec(), call.argumentsJson());
+        if (invalid.isPresent()) {
+            log.info("tool '{}' arguments invalid: {}", call.name(), invalid.get());
+            audit("tool.invalid", ctx, "tool=" + call.name() + " reason=" + invalid.get());
+            return ToolResult.error("tool '" + call.name() + "' arguments invalid: " + invalid.get());
+        }
         audit("tool.allowed", ctx, "tool=" + call.name() + " effect=" + tool.spec().effect());
         ToolResult result = safeInvoke(tool, call.argumentsJson());
         audit("tool.result", ctx, "tool=" + call.name() + " error=" + result.error());
@@ -349,6 +360,7 @@ public final class DefaultAgent implements Agent {
         private final List<AgentObserver> observers = new ArrayList<>();
         private AuditSink auditSink;
         private ToolApprover toolApprover;
+        private ToolArgumentValidator toolArgumentValidator;
         private ToolSelector toolSelector;
         private ToolExecutor toolExecutor;
         private Supplier<Memory> memoryFactory;
@@ -393,6 +405,12 @@ public final class DefaultAgent implements Agent {
          */
         public Builder toolApprover(ToolApprover toolApprover) {
             this.toolApprover = toolApprover;
+            return this;
+        }
+
+        /** Validate tool arguments against their schema before invoking. Default: accept all. */
+        public Builder toolArgumentValidator(ToolArgumentValidator toolArgumentValidator) {
+            this.toolArgumentValidator = toolArgumentValidator;
             return this;
         }
 
