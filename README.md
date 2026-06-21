@@ -44,6 +44,54 @@ education tools) are intended to run on it — which forces it to be genuinely e
 | **L2 — Cognition** | `java-ai-agent` | long-term/episodic memory, skills, self-improvement |
 | **L3 — Trust & Ops** | `java-ai-agent` | guardrails, permissions/sandboxing, audit, replay, HITL, cost, evals |
 
+```mermaid
+flowchart TB
+    subgraph L3["L3 · Trust &amp; Ops (owned)"]
+        direction LR
+        g["Guardrails<br/>(crisis · PII · Llama Guard)"]
+        perm["Tool permissions<br/>+ human-in-the-loop"]
+        obs["Observability<br/>(tokens · replay · OTel)"]
+        ev["Eval + budget"]
+    end
+    subgraph L2["L2 · Cognition (owned)"]
+        direction LR
+        mem["Memory<br/>(episodic · persistent)"]
+        sk["Skills<br/>(+ acquisition)"]
+        learn["Learning<br/>(reflection)"]
+    end
+    subgraph L1["L1 · Runtime (owned)"]
+        direction LR
+        da["DefaultAgent loop"]
+        deep["DeepAgent<br/>(plan + sub-agents)"]
+        str["Streaming"]
+    end
+    subgraph L0["L0 · Substrate (dependencies, as-is)"]
+        direction LR
+        lc["LangChain4j"]
+        sp["Spring AI"]
+        adk["Google ADK"]
+    end
+    L3 --> L1
+    L2 --> L1
+    L1 --> L0
+```
+
+## How it compares
+
+It is **not** a competitor to the substrate frameworks — it's the trust + orchestration layer that
+runs *on top* of them.
+
+| | java-ai-agent | LangChain4j / Spring AI | Embabel / ADK |
+|---|---|---|---|
+| Role | trust + orchestration layer **on top** | LLM toolkits | agent frameworks |
+| Consumes the others | **yes, as dependencies** | — | wrapped via the `Agent` seam |
+| Local-first by default | **yes** | partial | cloud-leaning |
+| Built-in safety guardrails | **yes** (Llama Guard, PII, crisis) | no | no |
+| Tool authorization + HITL | **yes** | no | no |
+| Cross-session learning (persistent) | **yes** | no | no |
+| Eval harness + budget enforcement | **yes** | partial | no |
+| Zero-dependency core | **yes** | no | no |
+
 ## Modules
 
 - **`agent-core`** — the SPIs and the runtime. **Zero framework dependencies** (only SLF4J).
