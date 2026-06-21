@@ -73,6 +73,8 @@ Everything is an interface; implement the seam you need.
 - **An observer** — implement `AgentObserver` (trace/meter/record); failures are isolated.
 - **A tool policy** — implement `ToolApprover.authorize(name, args)` (use `ToolApprovers.allowList(...)`,
   or `ConsoleToolApprover` for human-in-the-loop); wire it via `DefaultAgent.builder().toolApprover(...)`.
+- **Evaluate & cap cost** — `Evaluator.run(agent, cases)` reports a pass rate; wrap a `ModelPort` in
+  `BudgetModelPort(port, new TokenBudget(n))` to enforce a token ceiling.
 - **An agent** — implement `Agent.run(AgentRequest) -> AgentResponse`. Because everything is an
   `Agent`, your implementation can be a sub-agent of a `DeepAgent` or the worker of a
   `ReflectiveAgent` with no extra wiring.

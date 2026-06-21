@@ -34,6 +34,7 @@ still run, but the real behavior (tool orchestration, skill selection, self-corr
 | 7 | `LearningAgentExample` | **learning from real mistakes** — a deterministic verifier rejects banned words; the model slips, the agent records the lesson, retries, and self-corrects (watch the INFO log show each attempt) |
 | 8 | `MemoryAcrossSessions` | **cross-session memory** — learnings are persisted to a file with `FileEpisodicStore`; run it twice and the second (separate) process already knows the lesson |
 | 9 | `PermissionedAgent` | **tool authorization** — an allow-list (or human approval) gates tool calls; a sensitive tool is denied while a safe one runs |
+| 10 | `EvalExample` | **eval harness** — runs an agent against a suite of cases and reports a pass rate |
 
 (`DeepResearchAgent` is a smaller deep-agent demo kept as a stepping stone to `ResearchAssistant`.)
 
