@@ -4,11 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.vaijanath.aiagent.guardrail.Guardrail;
+import dev.vaijanath.aiagent.guardrail.GuardrailDecision;
+import dev.vaijanath.aiagent.guardrail.GuardrailStage;
 import dev.vaijanath.aiagent.guardrail.KeywordBlocklistGuardrail;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.StubModelPort;
+import dev.vaijanath.aiagent.observe.AgentObserver;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -71,6 +75,26 @@ class DefaultAgentTest {
         // The no-context convenience constructor is a fresh session every time.
         assertEquals("1", agent.run(new AgentRequest("a")).output());
         assertEquals("1", agent.run(new AgentRequest("b")).output());
+    }
+
+    @Test
+    void observersSeeGuardrailTransformedInputNotRaw() {
+        StringBuilder seen = new StringBuilder();
+        AgentObserver capture = new AgentObserver() {
+            @Override
+            public void onTurnStart(String input) {
+                seen.append(input);
+            }
+        };
+        Guardrail redactor = (stage, content) -> stage == GuardrailStage.INPUT
+                ? GuardrailDecision.allow(content.replace("secret", "[redacted]"))
+                : GuardrailDecision.allow(content);
+
+        DefaultAgent.builder().model(new StubModelPort()).guardrail(redactor).observer(capture).build()
+                .run(new AgentRequest("my secret code"));
+
+        assertEquals("my [redacted] code", seen.toString(),
+                "observers must see post-guardrail input, not the raw text");
     }
 
     @Test

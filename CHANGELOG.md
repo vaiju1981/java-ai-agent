@@ -28,6 +28,13 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 - **Trust governs the universal `Agent` seam** — new `PolicyEnforcingAgent` / `Trust.govern(agent,
   guardrails…)` enforces input/output guardrails and the request deadline around *any* agent, so
   composed and black-box agents (`DeepAgent`, `AdkAgent`) are governed too, not just `DefaultAgent`.
+- **Observability redaction and audit hardening** — input guardrails run before `onTurnStart`, so
+  observers and the audit trail see post-guardrail (e.g. PII-scrubbed) content, never the raw input,
+  and `LoggingObserver` no longer logs raw tool arguments. A throwing `AuditSink` is isolated (logged
+  and dropped) so it can't break a run; `DefaultAgent` now emits `turn.end` on every exit
+  (completed/blocked/max_steps/model_error/deadline) plus a `tool.result` event. `FileAuditSink`
+  fsyncs each event, sanitizes identity fields and Base64-encodes detail so no field can corrupt the
+  line, and never throws into the caller.
 - **Hard deadline and unbypassable output policy** — `PolicyEnforcingAgent` runs the delegate
   bounded by the remaining deadline (cancelling on expiry) and re-checks before delivering, so a
   blocking or late delegate cannot return a result past the deadline; output guardrails now run even

@@ -124,8 +124,13 @@ public final class PolicyEnforcingAgent implements Agent {
     }
 
     private void audit(String type, RequestContext ctx, String detail) {
-        auditSink.record(AuditEvent.now(
-                type, ctx.traceId(), ctx.sessionId(), ctx.principal(), ctx.tenant(), detail));
+        // Auditing must never break a run: a throwing sink is logged and the event dropped.
+        try {
+            auditSink.record(AuditEvent.now(
+                    type, ctx.traceId(), ctx.sessionId(), ctx.principal(), ctx.tenant(), detail));
+        } catch (RuntimeException e) {
+            log.warn("audit sink threw; dropping '{}' event", type, e);
+        }
     }
 
     private static boolean deadlineExceeded(RequestContext ctx) {

@@ -101,14 +101,16 @@ public final class DefaultAgent implements Agent {
     @Override
     public AgentResponse run(AgentRequest request) {
         RequestContext ctx = request.context();
-        notify(o -> o.onTurnStart(request.input()));
-        audit("turn.start", ctx, "input.len=" + request.input().length());
 
-        // 1. Input guardrails — block before anything reaches the model or memory.
+        // 1. Input guardrails first, so observers and audit only ever see post-guardrail (e.g.
+        //    PII-scrubbed) content — never the raw input.
         GuardrailDecision in = applyGuardrails(GuardrailStage.INPUT, request.input());
+        notify(o -> o.onTurnStart(in.content()));
+        audit("turn.start", ctx, "input.len=" + request.input().length());
         if (in.blocked()) {
             log.info("input blocked: {}", in.reason());
             audit("guardrail.block", ctx, "stage=INPUT reason=" + in.reason());
+            audit("turn.end", ctx, "blocked");
             return finish(AgentResponse.blocked(in.content(), in.reason()));
         }
 
@@ -159,6 +161,7 @@ public final class DefaultAgent implements Agent {
                 log.warn("model call failed; ending turn gracefully", e);
                 notify(o -> o.onError("model", e));
                 audit("error", ctx, "model call failed");
+                audit("turn.end", ctx, "model_error");
                 return finish(AgentResponse.stopped(
                         "I ran into a problem reaching the model. Please try again.", "model_error"));
             }
@@ -197,6 +200,7 @@ public final class DefaultAgent implements Agent {
         if (out.blocked()) {
             log.info("output blocked: {}", out.reason());
             audit("guardrail.block", ctx, "stage=OUTPUT reason=" + out.reason());
+            audit("turn.end", ctx, "blocked");
             return finish(AgentResponse.blocked(out.content(), out.reason()));
         }
         audit("turn.end", ctx, "completed");
@@ -208,8 +212,13 @@ public final class DefaultAgent implements Agent {
     }
 
     private void audit(String type, RequestContext ctx, String detail) {
-        auditSink.record(AuditEvent.now(
-                type, ctx.traceId(), ctx.sessionId(), ctx.principal(), ctx.tenant(), detail));
+        // Auditing must never break a run: a throwing sink is logged and the event dropped.
+        try {
+            auditSink.record(AuditEvent.now(
+                    type, ctx.traceId(), ctx.sessionId(), ctx.principal(), ctx.tenant(), detail));
+        } catch (RuntimeException e) {
+            log.warn("audit sink threw; dropping '{}' event", type, e);
+        }
     }
 
     private AgentResponse finish(AgentResponse response) {
@@ -251,7 +260,9 @@ public final class DefaultAgent implements Agent {
             return ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason());
         }
         audit("tool.allowed", ctx, "tool=" + call.name() + " effect=" + tool.spec().effect());
-        return safeInvoke(tool, call.argumentsJson());
+        ToolResult result = safeInvoke(tool, call.argumentsJson());
+        audit("tool.result", ctx, "tool=" + call.name() + " error=" + result.error());
+        return result;
     }
 
     private ToolResult safeInvoke(Tool tool, String args) {
