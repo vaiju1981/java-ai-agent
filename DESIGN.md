@@ -71,7 +71,9 @@ gateway, education tools) run on it, proving it is end-to-end and trustworthy, n
 - **Phase 2:** the safety layer as reference `Guardrail`s — `LlamaGuardGuardrail` (local
   `llama-guard3:1b` via a `ModelPort`, fails closed) + `PiiScrubGuardrail`. ✅ done — verified live
   (S1 content blocked at input). Next: crisis detection + blocklist to complete the `kidguard` suite.
-- **Phase 3:** OpenTelemetry tracing + cost accounting + deterministic replay.
+- **Phase 3:** observability & ops — an `AgentObserver` SPI (zero-dep) with built-in token
+  accounting, logging, and record/replay (`ReplayModelPort`), plus an OpenTelemetry tracing adapter
+  in `agent-observability-otel`. ✅ done — span emission verified via an in-memory exporter.
 - **Phase 4:** planning + sub-agents (Loom structured concurrency) + deep-agent workspace.
 - **Phase 5:** skills (manifest + registry) and long-term/episodic memory.
 - **Phase 6:** Google ADK + Spring AI adapters via the existing seams.

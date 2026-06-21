@@ -10,11 +10,13 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.output.TokenUsage;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
+import dev.vaijanath.aiagent.model.Usage;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,17 +58,27 @@ public final class LangChain4jModelPort implements ModelPort {
 
         ChatResponse response = chatModel.chat(builder.build());
         AiMessage ai = response.aiMessage();
+        Usage usage = toUsage(response.tokenUsage());
 
         if (ai.hasToolExecutionRequests()) {
             List<ToolCall> calls = new ArrayList<>();
             for (ToolExecutionRequest req : ai.toolExecutionRequests()) {
                 calls.add(new ToolCall(req.id(), req.name(), req.arguments()));
             }
-            return new ModelResponse(ai.text(), calls);
+            return new ModelResponse(ai.text(), calls, usage);
         }
 
         String text = ai.text();
-        return ModelResponse.text(text == null ? "" : text);
+        return new ModelResponse(text == null ? "" : text, List.of(), usage);
+    }
+
+    private static Usage toUsage(TokenUsage tokenUsage) {
+        if (tokenUsage == null) {
+            return Usage.UNKNOWN;
+        }
+        Integer in = tokenUsage.inputTokenCount();
+        Integer out = tokenUsage.outputTokenCount();
+        return new Usage(in == null ? 0 : in, out == null ? 0 : out);
     }
 
     private static List<ToolSpecification> toToolSpecifications(List<ToolSpec> specs) {

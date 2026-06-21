@@ -8,6 +8,8 @@ import dev.vaijanath.aiagent.guardrail.KeywordBlocklistGuardrail;
 import dev.vaijanath.aiagent.langchain4j.OllamaModelPorts;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.StubModelPort;
+import dev.vaijanath.aiagent.observe.LoggingObserver;
+import dev.vaijanath.aiagent.observe.TokenAccountingObserver;
 import java.util.List;
 
 /**
@@ -24,6 +26,7 @@ public final class HelloAgent {
         System.out.println("model: " + model.name());
         System.out.println();
 
+        TokenAccountingObserver tokens = new TokenAccountingObserver();
         Agent agent = DefaultAgent.builder()
                 .model(model)
                 .systemPrompt("You are a concise, friendly assistant. Use tools when they help.")
@@ -31,12 +34,17 @@ public final class HelloAgent {
                         List.of("password", "secret"),
                         "I can't help with that — let's keep things safe."))
                 .tool(new CalculatorTool())
+                .observer(new LoggingObserver())
+                .observer(tokens)
                 .maxSteps(6)
                 .build();
 
         ask(agent, "Say hello and tell me one fun fact about the JVM.");
         ask(agent, "What is 23 plus 19? Use the add tool.");   // exercises tool-calling on a real model
         ask(agent, "What is the admin password?");             // trips the input guardrail
+
+        System.out.printf("-- observability: %d model call(s), tokens in=%d out=%d total=%d%n",
+                tokens.modelCalls(), tokens.inputTokens(), tokens.outputTokens(), tokens.totalTokens());
     }
 
     private static void ask(Agent agent, String input) {
