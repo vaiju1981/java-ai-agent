@@ -35,6 +35,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   (completed/blocked/max_steps/model_error/deadline) plus a `tool.result` event. `FileAuditSink`
   fsyncs each event, sanitizes identity fields and Base64-encodes detail so no field can corrupt the
   line, and never throws into the caller.
+- **Tool boundary hardened** — `ToolCallContext` now also carries traceId, sessionId, and deadline,
+  so policies can decide by correlation or remaining time, not just identity; tool results fed back to
+  the model are capped (`maxToolResultChars`, default 8192) so a tool can't flood or poison the
+  context; tool exception detail is logged but no longer leaks into the model context. (Still open:
+  JSON-schema argument validation and idempotency keys.)
 - **Hard deadline and unbypassable output policy** — `PolicyEnforcingAgent` runs the delegate
   bounded by the remaining deadline (cancelling on expiry) and re-checks before delivering, so a
   blocking or late delegate cannot return a result past the deadline; output guardrails now run even

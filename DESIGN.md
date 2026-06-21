@@ -66,8 +66,9 @@ tools) run on it.
   `Agent` can be a sub-agent or worker of another — composition needs no extra wiring.
 - **`Tool` / `ToolSpec`** (MCP-aligned; each tool declares a `ToolEffect` — `READ_ONLY` or
   `EFFECTFUL`, defaulting to effectful) + **`ToolApprover`** — authorization runs before execution and
-  sees a `ToolCallContext` (the spec/effect, arguments, principal, tenant), so policies decide by
-  capability or identity. **The default is `denyEffectful()`** — read-only tools run, effectful ones
+  sees a `ToolCallContext` (the spec/effect, arguments, principal, tenant, trace, session, deadline),
+  so policies decide by capability, identity, or remaining time; tool results are size-capped before
+  re-entering the model and tool exception detail never leaks into the context. **The default is `denyEffectful()`** — read-only tools run, effectful ones
   are denied unless allow-listed; `ToolApprovers.allowAll()` is an explicit dev-only opt-in. Also
   `allowList` or `ConsoleToolApprover` (HITL). The selector is enforced too: a tool not presented this
   turn cannot run, even if the model names it.
