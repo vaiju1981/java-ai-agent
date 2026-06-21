@@ -26,7 +26,22 @@ public final class SyntheticData {
         {"Delta", "Travel"}, {"Marriott", "Travel"}, {"Airbnb", "Travel"},
     };
 
-    /** Creates a temp SQLite DB with {@code rows} transactions and returns its JDBC URL. */
+    /**
+     * Fixed monthly subscriptions, charged once a month at the same amount, so recurring-charge
+     * detection has something real to find amid the random spending.
+     */
+    private static final String[][] SUBSCRIPTIONS = {
+        {"Netflix", "Entertainment", "15.49"},
+        {"Spotify", "Entertainment", "9.99"},
+        {"Disney+", "Entertainment", "13.99"},
+        {"Comcast", "Utilities", "79.99"},
+        {"AT&T", "Utilities", "65.00"},
+    };
+
+    /**
+     * Creates a temp SQLite DB with {@code rows} random transactions plus a fixed set of monthly
+     * subscriptions (one charge per month), and returns its JDBC URL.
+     */
     public static String createTransactionsDb(int rows) throws Exception {
         Path file = Files.createTempFile("jaa-demo-", ".sqlite");
         file.toFile().deleteOnExit();
@@ -52,6 +67,17 @@ public final class SyntheticData {
                     ps.addBatch();
                     if (i % 1000 == 0) {
                         ps.executeBatch();
+                    }
+                }
+                ps.executeBatch();
+
+                for (String[] sub : SUBSCRIPTIONS) {
+                    for (int month = 1; month <= 12; month++) {
+                        ps.setString(1, LocalDate.of(2025, month, 5).toString());
+                        ps.setString(2, sub[0]);
+                        ps.setString(3, sub[1]);
+                        ps.setDouble(4, Double.parseDouble(sub[2]));
+                        ps.addBatch();
                     }
                 }
                 ps.executeBatch();

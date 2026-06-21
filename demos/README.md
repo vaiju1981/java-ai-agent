@@ -13,36 +13,39 @@ full main class for each demo is shown with its section below.
 
 ## DataAnalystDemo — explore, then query, at scale
 
-Generates a synthetic **SQLite database of 5,000 transactions** and gives the agent a **6-tool
+Generates a synthetic **SQLite database of ~5,000 transactions** and gives the agent a **7-tool
 toolkit**: schema discovery (`list_tables`, `describe_table`, `sample_rows`, `distinct_values`,
-`row_count`) plus a read-only `sql` tool. The model **explores the schema, then writes SQL** to
-answer. The point: the rows never enter the prompt — only each tool's result does — so it scales to
-large datasets, and the discovery tools let the agent work without being told the schema up front.
-Identifiers passed to the schema tools are validated, so an injected table/column name can't smuggle
-SQL.
+`row_count`), a parameterized `aggregate` (group-by sum/avg/count/min/max), and a read-only `sql`
+tool. The model **explores the schema, then aggregates or queries** to answer. The rows never enter
+the prompt — only each tool's result does — so it scales to large datasets, and the discovery tools
+let the agent work without being told the schema up front. Identifiers passed to the tools are
+validated, so an injected table/column name can't smuggle SQL.
 
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.data.DataAnalystDemo
 ```
 
-Sample (verified live, 6 tools): lists the `transactions` columns (`describe_table`), enumerates the
-distinct categories (`distinct_values`), totals spend per category sorted high-to-low (`sql`), and
-shows sample rows (`sample_rows`) — each routed to the right tool over all 5,000 rows.
+Sample (verified live, 7 tools): lists the `transactions` columns (`describe_table`), enumerates the
+distinct categories (`distinct_values`), totals spend per category sorted high-to-low, and shows
+sample rows (`sample_rows`) — each routed to the right tool over all ~5,000 rows.
 
 ## PersonalFinanceDemo — many tools, the model picks the right one
 
-A personal-finance assistant with a realistic **~24-tool** toolkit: `categorize_merchant`,
-`budget_check`, `sql` (over the transactions), plus ~20 finance calculators (compound interest, loan
-payment, tip, savings rate, ROI, …). All tools are presented at once — so this also **validates that
-the agent picks the correct tool when there are many**.
+A personal-finance assistant with a realistic **~24-tool** toolkit in three groups: data lookups
+(`categorize_merchant`, `budget_check`, `sql`), **data-aware analyses** over the actual transactions
+(`top_merchants`, `recurring_subscriptions`, `spending_by_category`, `category_budget_status`,
+`largest_expenses`, `monthly_spending`), and planning calculators (compound interest, loan payment,
+tip, savings rate, ROI, …). All tools are presented at once — so this also **validates that the agent
+picks the correct tool when there are many**.
 
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.finance.PersonalFinanceDemo
 ```
 
-Sample (verified live, 24 tools): categorizes Blue Bottle → Dining; flags Entertainment over budget;
-finds Travel as the top category (sql); computes the future value of an investment, a mortgage
-payment, and an 18% tip — each routed to the right tool, with correct math.
+Sample (verified live, 24 tools): categorizes Blue Bottle → Dining; lists the five recurring
+subscriptions (Netflix, Spotify, Disney+, Comcast, AT&T); ranks the top merchants by spend; reports
+every category against its budget for a month; finds the largest purchases; and computes an
+investment's future value and an 18% tip — each routed to the right tool, with correct math.
 
 (The runtime is also unit-tested to dispatch correctly across **40** tools, and a `ToolSelector` can
 present only the relevant subset per turn when a toolkit grows larger still.)

@@ -10,9 +10,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A personal-finance assistant with a realistic, large toolkit (~24 tools: categorize_merchant,
- * budget_check, sql, plus many finance calculators). All tools are presented at once, so this also
- * validates that the agent picks the right tool when there are many. Needs {@code AGENT_MODEL}.
+ * A personal-finance assistant with a realistic, large toolkit (~24 tools): data lookups, data-aware
+ * analyses over the user's actual transactions (top merchants, recurring subscriptions, budget
+ * status, ...), and planning calculators. All tools are presented at once, so this also validates
+ * that the agent picks the right tool when there are many. Needs {@code AGENT_MODEL}.
  */
 public final class PersonalFinanceDemo {
 
@@ -48,10 +49,11 @@ public final class PersonalFinanceDemo {
 
         String[] questions = {
             "What spending category does 'Blue Bottle Coffee' belong to?",
-            "Was I within my Entertainment budget in month 3?",
-            "What is my single biggest spending category overall?",
+            "What are my recurring subscriptions?",
+            "Which 3 merchants do I spend the most at?",
+            "How am I tracking against my category budgets in month 3?",
+            "What were my 3 largest individual purchases?",
             "If I invest 10000 at 6% for 10 years with annual compounding, what is the future value?",
-            "What is the monthly payment on a 300000 mortgage at 5% over 30 years?",
             "What's an 18% tip on a 54 dollar bill?",
         };
         for (String q : questions) {

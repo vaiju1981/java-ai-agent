@@ -13,7 +13,7 @@ class SqlToolTest {
         String db = SyntheticData.createTransactionsDb(100);
         ToolResult r = new SqlTool(db, 50).invoke("{\"query\":\"SELECT COUNT(*) AS n FROM transactions\"}");
         assertFalse(r.error());
-        assertTrue(r.content().contains("100"));
+        assertTrue(r.content().contains(String.valueOf(SyntheticData.count(db, "transactions"))));
     }
 
     @Test
