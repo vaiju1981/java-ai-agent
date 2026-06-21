@@ -7,10 +7,12 @@
 > observability **built in**. It does **not** replace LangChain4j, Spring AI, or Google ADK —
 > it **uses them as dependencies** and adds the layer above them that none of them own.
 
-**Status: Phase 0 — walking skeleton.** The core seams (`Agent`, `ModelPort`, `Tool`,
-`Guardrail`, `Memory`) and a runnable agent loop exist and are tested. Following the discipline
-borrowed from Mitra: **real where cheap, stubbed where expensive, and the app never fakes success
-silently** — every stub returns an obvious placeholder, never a fake answer.
+**Status: Phases 0–2 complete.** The core seams (`Agent`, `ModelPort`, `Tool`, `Guardrail`,
+`Memory`) and a runnable agent loop are in place and tested; agents can **call tools** through the
+substrate (verified live), and a **real, local safety layer** exists — a Llama Guard classifier and
+a PII scrubber. Following the discipline borrowed from Mitra: **real where cheap, stubbed where
+expensive, and the app never fakes success silently** — every stub returns an obvious placeholder,
+and the safety guard fails *closed*, never silently open.
 
 ---
 
@@ -59,6 +61,14 @@ against a real local model, start [Ollama](https://ollama.com) and set:
 export AGENT_MODEL=llama3.2        # any pulled Ollama model
 export OLLAMA_BASE_URL=http://localhost:11434   # optional, this is the default
 ./gradlew :examples:run
+```
+
+**Safety demo** (`SafeAgent`) — PII scrubbing + a local Llama Guard classifier on input and output:
+
+```bash
+ollama pull llama-guard3:1b
+AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
+  -PmainClass=dev.vaijanath.aiagent.examples.SafeAgent
 ```
 
 ## Roadmap
