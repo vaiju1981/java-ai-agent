@@ -13,8 +13,9 @@ public final class ConsoleToolApprover implements ToolApprover {
     private final BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
 
     @Override
-    public ToolDecision authorize(String toolName, String argumentsJson) {
-        System.out.printf("%n[approval] run tool '%s' with args %s ? [y/N] ", toolName, argumentsJson);
+    public ToolDecision authorize(ToolCallContext call) {
+        System.out.printf("%n[approval] run %s tool '%s' with args %s ? [y/N] ",
+                call.spec().effect(), call.toolName(), call.argumentsJson());
         System.out.flush();
         try {
             String line = in.readLine();

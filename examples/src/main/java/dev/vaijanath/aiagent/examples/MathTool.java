@@ -3,10 +3,11 @@ package dev.vaijanath.aiagent.examples;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 
-/** A real arithmetic tool: add / subtract / multiply / divide two numbers. */
+/** A real arithmetic tool: add / subtract / multiply / divide two numbers. Pure, so read-only. */
 public final class MathTool implements Tool {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -22,7 +23,8 @@ public final class MathTool implements Tool {
                    "op":{"type":"string"},
                    "a":{"type":"number"},
                    "b":{"type":"number"}},
-                 "required":["op","a","b"]}""");
+                 "required":["op","a","b"]}""",
+                ToolEffect.READ_ONLY);
     }
 
     @Override

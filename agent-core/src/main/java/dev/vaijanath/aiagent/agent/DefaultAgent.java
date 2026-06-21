@@ -17,6 +17,7 @@ import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprover;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
+import dev.vaijanath.aiagent.tool.ToolCallContext;
 import dev.vaijanath.aiagent.tool.ToolDecision;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSelector;
@@ -144,7 +145,7 @@ public final class DefaultAgent implements Agent {
                 memory.add(Message.assistant(resp.text(), resp.toolCalls()));
                 for (ToolCall call : resp.toolCalls()) {
                     notify(o -> o.onToolCall(call));
-                    ToolResult result = invokeWithPolicy(call, activeByName);
+                    ToolResult result = invokeWithPolicy(call, activeByName, ctx);
                     notify(o -> o.onToolResult(call.name(), result));
                     memory.add(Message.toolResult(call.id(), call.name(), result.content()));
                 }
@@ -200,13 +201,14 @@ public final class DefaultAgent implements Agent {
      * turn cannot be invoked — even if the model names it (hallucination or prompt injection) — and a
      * denied call becomes a result the model can react to rather than an execution.
      */
-    private ToolResult invokeWithPolicy(ToolCall call, Map<String, Tool> available) {
+    private ToolResult invokeWithPolicy(ToolCall call, Map<String, Tool> available, RequestContext ctx) {
         Tool tool = available.get(call.name());
         if (tool == null) {
             log.info("tool '{}' not available this turn", call.name());
             return ToolResult.error("tool '" + call.name() + "' is not available");
         }
-        ToolDecision decision = toolApprover.authorize(call.name(), call.argumentsJson());
+        ToolDecision decision = toolApprover.authorize(
+                new ToolCallContext(tool.spec(), call.argumentsJson(), ctx.principal(), ctx.tenant()));
         if (!decision.allowed()) {
             log.info("tool '{}' denied: {}", call.name(), decision.reason());
             return ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason());

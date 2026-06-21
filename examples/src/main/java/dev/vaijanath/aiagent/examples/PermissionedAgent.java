@@ -8,13 +8,19 @@ import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.ToolCall;
+import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
+import dev.vaijanath.aiagent.tool.ToolEffect;
+import dev.vaijanath.aiagent.tool.ToolResult;
+import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.List;
 
 /**
- * Tool authorization in action. The agent is permitted only the {@code math} tool; when the model
- * tries a sensitive {@code delete_data} tool it is denied and the model reacts to the refusal. Swap
- * {@code ToolApprovers.allowList(...)} for a {@code ConsoleToolApprover} to require human approval.
+ * Capability-based tool authorization. Both tools are registered, but the policy is
+ * {@code denyEffectful()}: the read-only {@code math} tool runs, while the effectful
+ * {@code delete_data} tool is denied by default — no allow-list needed. Swap in
+ * {@code ToolApprovers.denyEffectful("delete_data")} to permit it, or a {@code ConsoleToolApprover}
+ * to require human approval.
  *
  * <p>Deterministic and offline: a scripted model drives the tool calls so the policy is unmistakable.
  */
@@ -39,23 +45,41 @@ public final class PermissionedAgent {
             private String summarize(ModelRequest request) {
                 List<Message> tools = request.messages().stream()
                         .filter(m -> m.role() == Role.TOOL).toList();
-                return "Tool results seen: "
-                        + tools.stream().map(Message::content).toList();
+                return "Tool results seen: " + tools.stream().map(Message::content).toList();
             }
         };
 
-        System.out.println("== PermissionedAgent ==  (allow-list: only 'math')\n");
+        System.out.println("== PermissionedAgent ==  (policy: deny effectful tools by default)\n");
 
         String out = DefaultAgent.builder()
                 .model(scripted)
-                .tool(new MathTool())
-                .toolApprover(ToolApprovers.allowList("math")) // 'delete_data' is NOT permitted
+                .tool(new MathTool())          // READ_ONLY
+                .tool(new DeleteDataTool())    // EFFECTFUL
+                .toolApprover(ToolApprovers.denyEffectful()) // read-only runs; effectful denied
                 .maxSteps(5)
                 .build()
                 .run(new AgentRequest("Clean up the database, then tell me 2+2."))
                 .output();
 
         System.out.println(out);
-        System.out.println("\n→ 'delete_data' was blocked by the policy; 'math' ran and returned 4.");
+        System.out.println("\n→ 'delete_data' is effectful, so it was denied by default; "
+                + "'math' is read-only, so it ran and returned 4.");
+    }
+
+    /** A deliberately dangerous tool, marked EFFECTFUL — denied unless explicitly authorized. */
+    private static final class DeleteDataTool implements Tool {
+        @Override
+        public ToolSpec spec() {
+            return new ToolSpec(
+                    "delete_data",
+                    "Permanently delete all records.",
+                    "{\"type\":\"object\",\"properties\":{}}",
+                    ToolEffect.EFFECTFUL);
+        }
+
+        @Override
+        public ToolResult invoke(String argumentsJson) {
+            return ToolResult.ok("ALL DATA DELETED"); // never reached under denyEffectful()
+        }
     }
 }

@@ -64,10 +64,18 @@ tools) run on it.
   model/tool loop, **stateless across calls**), `DeepAgent` (plan → sub-agents → synthesize),
   `ReflectiveAgent` (learn from mistakes), `SkilledAgent`, `SkillAcquiringAgent`, `AdkAgent`. Any
   `Agent` can be a sub-agent or worker of another — composition needs no extra wiring.
-- **`Tool` / `ToolSpec`** (MCP-aligned) + **`ToolApprover`** (allow-list, or `ConsoleToolApprover`
-  for HITL) — authorization runs before execution.
+- **`Tool` / `ToolSpec`** (MCP-aligned; each tool declares a `ToolEffect` — `READ_ONLY` or
+  `EFFECTFUL`, defaulting to effectful) + **`ToolApprover`** — authorization runs before execution and
+  sees a `ToolCallContext` (the spec/effect, arguments, principal, tenant), so policies decide by
+  capability or identity. `ToolApprovers.denyEffectful()` (read-only runs, effectful denied),
+  `allowList`, or `ConsoleToolApprover` for HITL. The selector is enforced too: a tool not presented
+  this turn cannot run, even if the model names it.
 - **`Guardrail`** — `check(stage, content) → allow / transform / block`; `Guardrails.kidguard(...)`
   is the ordered crisis → PII → Llama Guard pipeline.
+- **`PolicyEnforcingAgent` / `Trust.govern(agent, …)`** — wraps any `Agent` so input/output guardrails
+  and the request deadline are enforced at the universal seam, governing composed and black-box agents
+  (`DeepAgent`, `AdkAgent`) uniformly. Trust is a wrapper over the seam, not per-implementation
+  configuration.
 - **`Memory`** — short-term (`InMemoryMemory` / `WindowedMemory`), scoped per session by a
   **`ConversationStore`** (`InMemoryConversationStore`) so one agent serves many sessions without
   interleaving; **`EpisodicStore`** for long-term, cross-session learning (in-memory, file-persistent,

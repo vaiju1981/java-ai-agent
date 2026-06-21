@@ -11,6 +11,7 @@ import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.List;
@@ -41,10 +42,14 @@ class ToolApprovalTest {
     }
 
     private static Tool namedTool(String name, AtomicBoolean invokedFlag, String result) {
+        return namedTool(name, invokedFlag, result, ToolEffect.EFFECTFUL);
+    }
+
+    private static Tool namedTool(String name, AtomicBoolean invokedFlag, String result, ToolEffect effect) {
         return new Tool() {
             @Override
             public ToolSpec spec() {
-                return new ToolSpec(name, name, "{\"type\":\"object\",\"properties\":{}}");
+                return new ToolSpec(name, name, "{\"type\":\"object\",\"properties\":{}}", effect);
             }
 
             @Override
@@ -81,5 +86,33 @@ class ToolApprovalTest {
 
         assertTrue(invoked.get(), "an allowed tool should run");
         assertTrue(r.output().contains("42"), "got: " + r.output());
+    }
+
+    @Test
+    void effectfulToolIsDeniedByDefaultUnderDenyEffectful() {
+        AtomicBoolean invoked = new AtomicBoolean(false);
+        AgentResponse r = DefaultAgent.builder()
+                .model(callsThenEchoes("delete"))
+                .tool(namedTool("delete", invoked, "deleted", ToolEffect.EFFECTFUL))
+                .toolApprover(ToolApprovers.denyEffectful())
+                .build()
+                .run(new AgentRequest("go"));
+
+        assertFalse(invoked.get(), "an effectful tool must be denied by default");
+        assertTrue(r.output().contains("not permitted"), "got: " + r.output());
+    }
+
+    @Test
+    void readOnlyToolRunsUnderDenyEffectful() {
+        AtomicBoolean invoked = new AtomicBoolean(false);
+        AgentResponse r = DefaultAgent.builder()
+                .model(callsThenEchoes("lookup"))
+                .tool(namedTool("lookup", invoked, "value", ToolEffect.READ_ONLY))
+                .toolApprover(ToolApprovers.denyEffectful())
+                .build()
+                .run(new AgentRequest("go"));
+
+        assertTrue(invoked.get(), "a read-only tool should run under denyEffectful");
+        assertTrue(r.output().contains("value"), "got: " + r.output());
     }
 }

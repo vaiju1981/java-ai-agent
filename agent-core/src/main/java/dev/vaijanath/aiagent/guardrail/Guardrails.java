@@ -21,4 +21,20 @@ public final class Guardrails {
                 new PiiScrubGuardrail(),
                 new LlamaGuardGuardrail(guardModel));
     }
+
+    /**
+     * Runs guardrails in order for a stage: the first to block wins, transformations chain. Shared by
+     * the runtime and the {@code PolicyEnforcingAgent} so governance is applied identically.
+     */
+    public static GuardrailDecision apply(List<Guardrail> guardrails, GuardrailStage stage, String content) {
+        String current = content;
+        for (Guardrail g : guardrails) {
+            GuardrailDecision d = g.check(stage, current);
+            if (d.blocked()) {
+                return d;
+            }
+            current = d.content();
+        }
+        return GuardrailDecision.allow(current);
+    }
 }
