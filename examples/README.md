@@ -35,6 +35,24 @@ still run, but the real behavior (tool orchestration, skill selection, self-corr
 
 (`DeepResearchAgent` is a smaller deep-agent demo kept as a stepping stone to `ResearchAssistant`.)
 
+## Capstone — everything at once
+
+| Example | Composes |
+|---------|----------|
+| `StudyBuddy` | **kidguard guardrails + skills + tools + deep agent + learning + observability**, all through the one `Agent` seam |
+
+`StudyBuddy` runs four turns on one safe, skilled, observed worker: a homework question (skill + tool),
+a harmful request (blocked by Llama Guard), an encouragement that must be signed "Mitra" (self-corrects
+on the second attempt), and a "why is the sky blue" explainer answered by a deep agent whose
+sub-agents are themselves safe and skilled — then prints total token usage. Best with
+`AGENT_MODEL` set and `ollama pull llama-guard3:1b`.
+
+```bash
+ollama pull llama-guard3:1b
+AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
+  -PmainClass=dev.vaijanath.aiagent.examples.StudyBuddy
+```
+
 ## What to look for
 
 - **ToolUsingAssistant** — DEBUG trace: `tool 'convert' -> ok`, `tool 'math' -> ok`; the model never
