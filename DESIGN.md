@@ -73,6 +73,31 @@ tools) run on it.
 - **`Planner` / `Reflector` / `SkillSelector` / `SkillSynthesizer`** — LLM-driven helpers, each
   preferring `StructuredOutput` with a free-text fallback.
 
+## A turn, step by step
+
+```mermaid
+sequenceDiagram
+    participant U as Caller
+    participant A as DefaultAgent
+    participant G as Guardrails
+    participant M as ModelPort
+    participant T as Tool (+ ToolApprover)
+    U->>A: run(input)
+    A->>G: input guardrails
+    G-->>A: allow / transform / block
+    loop until a final answer (≤ maxSteps)
+        A->>M: chat(history, tools) — streams tokens to observers
+        M-->>A: text, or tool calls
+        opt tool calls
+            A->>T: authorize, then invoke
+            T-->>A: result (fed back into history)
+        end
+    end
+    A->>G: output guardrails
+    G-->>A: allow / transform / block
+    A-->>U: AgentResponse
+```
+
 ## Decisions
 
 - **Build:** Gradle (Kotlin DSL) + version catalog. **Java 21 baseline** (built on a newer JDK via
