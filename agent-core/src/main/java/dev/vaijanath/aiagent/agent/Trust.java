@@ -1,5 +1,6 @@
 package dev.vaijanath.aiagent.agent;
 
+import dev.vaijanath.aiagent.audit.AuditSink;
 import dev.vaijanath.aiagent.guardrail.Guardrail;
 import java.util.List;
 
@@ -26,11 +27,16 @@ public final class Trust {
 
     /** Govern an agent with guardrails applied to its input and output (and the request deadline). */
     public static Agent govern(Agent delegate, Guardrail... guardrails) {
-        return new PolicyEnforcingAgent(delegate, List.of(guardrails));
+        return new PolicyEnforcingAgent(delegate, List.of(guardrails), null);
     }
 
     /** Govern an agent with a list of guardrails. */
     public static Agent govern(Agent delegate, List<Guardrail> guardrails) {
-        return new PolicyEnforcingAgent(delegate, guardrails);
+        return new PolicyEnforcingAgent(delegate, guardrails, null);
+    }
+
+    /** Govern an agent and record an audit trail of its seam-level decisions. */
+    public static Agent govern(Agent delegate, AuditSink auditSink, List<Guardrail> guardrails) {
+        return new PolicyEnforcingAgent(delegate, guardrails, auditSink);
     }
 }

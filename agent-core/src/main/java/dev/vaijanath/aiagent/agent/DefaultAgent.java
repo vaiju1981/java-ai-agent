@@ -1,5 +1,7 @@
 package dev.vaijanath.aiagent.agent;
 
+import dev.vaijanath.aiagent.audit.AuditEvent;
+import dev.vaijanath.aiagent.audit.AuditSink;
 import dev.vaijanath.aiagent.guardrail.Guardrail;
 import dev.vaijanath.aiagent.guardrail.GuardrailDecision;
 import dev.vaijanath.aiagent.guardrail.GuardrailStage;
@@ -60,6 +62,7 @@ public final class DefaultAgent implements Agent {
     private final ToolSelector toolSelector;
     private final ConversationStore conversations;
     private final List<AgentObserver> observers;
+    private final AuditSink auditSink;
     private final String systemPrompt;
     private final int maxSteps;
     private final boolean streamRawTokens;
@@ -74,6 +77,7 @@ public final class DefaultAgent implements Agent {
                 ? b.conversationStore
                 : new InMemoryConversationStore(
                         b.memoryFactory != null ? b.memoryFactory : InMemoryMemory::new);
+        this.auditSink = b.auditSink != null ? b.auditSink : AuditSink.none();
         this.systemPrompt = b.systemPrompt;
         this.maxSteps = b.maxSteps;
         this.streamRawTokens = b.streamRawTokens;
@@ -88,11 +92,13 @@ public final class DefaultAgent implements Agent {
     public AgentResponse run(AgentRequest request) {
         RequestContext ctx = request.context();
         notify(o -> o.onTurnStart(request.input()));
+        audit("turn.start", ctx, "input.len=" + request.input().length());
 
         // 1. Input guardrails — block before anything reaches the model or memory.
         GuardrailDecision in = applyGuardrails(GuardrailStage.INPUT, request.input());
         if (in.blocked()) {
             log.info("input blocked: {}", in.reason());
+            audit("guardrail.block", ctx, "stage=INPUT reason=" + in.reason());
             return finish(AgentResponse.blocked(in.content(), in.reason()));
         }
 
@@ -124,6 +130,7 @@ public final class DefaultAgent implements Agent {
         for (int step = 0; step < maxSteps; step++) {
             if (deadlineExceeded(ctx)) {
                 log.info("turn deadline exceeded for session {}", ctx.sessionId());
+                audit("turn.end", ctx, "deadline_exceeded");
                 return finish(AgentResponse.stopped(
                         "I ran out of time on this request.", "deadline_exceeded"));
             }
@@ -141,6 +148,7 @@ public final class DefaultAgent implements Agent {
                 // Graceful failure: surface it, never crash out of run().
                 log.warn("model call failed; ending turn gracefully", e);
                 notify(o -> o.onError("model", e));
+                audit("error", ctx, "model call failed");
                 return finish(AgentResponse.stopped(
                         "I ran into a problem reaching the model. Please try again.", "model_error"));
             }
@@ -163,6 +171,7 @@ public final class DefaultAgent implements Agent {
 
         if (finalText == null) {
             log.warn("agent stopped after maxSteps={} without a final answer", maxSteps);
+            audit("turn.end", ctx, "max_steps");
             return finish(AgentResponse.stopped(
                     "I couldn't finish that within my step budget. Please try rephrasing.",
                     "max_steps"));
@@ -173,13 +182,20 @@ public final class DefaultAgent implements Agent {
         memory.add(Message.assistant(out.content()));
         if (out.blocked()) {
             log.info("output blocked: {}", out.reason());
+            audit("guardrail.block", ctx, "stage=OUTPUT reason=" + out.reason());
             return finish(AgentResponse.blocked(out.content(), out.reason()));
         }
+        audit("turn.end", ctx, "completed");
         return finish(AgentResponse.completed(out.content()));
     }
 
     private boolean deadlineExceeded(RequestContext ctx) {
         return ctx.deadlineAt().map(d -> !Instant.now().isBefore(d)).orElse(false);
+    }
+
+    private void audit(String type, RequestContext ctx, String detail) {
+        auditSink.record(AuditEvent.now(
+                type, ctx.traceId(), ctx.sessionId(), ctx.principal(), ctx.tenant(), detail));
     }
 
     private AgentResponse finish(AgentResponse response) {
@@ -210,14 +226,17 @@ public final class DefaultAgent implements Agent {
         Tool tool = available.get(call.name());
         if (tool == null) {
             log.info("tool '{}' not available this turn", call.name());
+            audit("tool.denied", ctx, "tool=" + call.name() + " reason=not-available");
             return ToolResult.error("tool '" + call.name() + "' is not available");
         }
         ToolDecision decision = toolApprover.authorize(
                 new ToolCallContext(tool.spec(), call.argumentsJson(), ctx.principal(), ctx.tenant()));
         if (!decision.allowed()) {
             log.info("tool '{}' denied: {}", call.name(), decision.reason());
+            audit("tool.denied", ctx, "tool=" + call.name() + " reason=" + decision.reason());
             return ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason());
         }
+        audit("tool.allowed", ctx, "tool=" + call.name() + " effect=" + tool.spec().effect());
         return safeInvoke(tool, call.argumentsJson());
     }
 
@@ -255,6 +274,7 @@ public final class DefaultAgent implements Agent {
         private final List<Guardrail> guardrails = new ArrayList<>();
         private final List<Tool> tools = new ArrayList<>();
         private final List<AgentObserver> observers = new ArrayList<>();
+        private AuditSink auditSink;
         private ToolApprover toolApprover;
         private ToolSelector toolSelector;
         private Supplier<Memory> memoryFactory;
@@ -280,6 +300,12 @@ public final class DefaultAgent implements Agent {
 
         public Builder observer(AgentObserver observer) {
             this.observers.add(observer);
+            return this;
+        }
+
+        /** Durably record an audit trail of turns (tool decisions, guardrail blocks, lifecycle). */
+        public Builder auditSink(AuditSink auditSink) {
+            this.auditSink = auditSink;
             return this;
         }
 
