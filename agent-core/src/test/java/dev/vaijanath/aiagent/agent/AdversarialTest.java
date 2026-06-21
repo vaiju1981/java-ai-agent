@@ -158,6 +158,64 @@ class AdversarialTest {
                 "sub-agents must inherit the tenant: " + tenantsSeen);
     }
 
+    @Test
+    void oversizedToolResultIsCapped() {
+        String huge = "x".repeat(50_000);
+        AgentResponse r = DefaultAgent.builder()
+                .model(callsThenEchoes("flood"))
+                .tool(readOnly("flood", huge))
+                .build()
+                .run(new AgentRequest("flood me"));
+
+        assertTrue(r.output().contains("truncated"), "a huge tool result must be capped");
+        assertTrue(r.output().length() < huge.length(), "output should be far smaller than the raw result");
+    }
+
+    @Test
+    void toolExceptionMessageDoesNotLeakToTheModel() {
+        Tool boom = new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec("boom", "boom", "{\"type\":\"object\",\"properties\":{}}",
+                        ToolEffect.READ_ONLY);
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                throw new RuntimeException("SECRET-INTERNAL-DETAIL");
+            }
+        };
+        AgentResponse r = DefaultAgent.builder()
+                .model(callsThenEchoes("boom"))
+                .tool(boom)
+                .build()
+                .run(new AgentRequest("go"));
+
+        assertFalse(r.output().contains("SECRET-INTERNAL-DETAIL"),
+                "raw exception detail must not reach the model context");
+        assertTrue(r.output().contains("failed"), "the model should still see a generic failure: " + r.output());
+    }
+
+    /** A model that calls {@code toolName} once, then echoes the last tool result. */
+    private static ModelPort callsThenEchoes(String toolName) {
+        return new ModelPort() {
+            private int n = 0;
+
+            @Override
+            public ModelResponse chat(ModelRequest request) {
+                if (++n == 1) {
+                    return new ModelResponse("", List.of(new ToolCall("c1", toolName, "{}")));
+                }
+                String tool = request.messages().stream()
+                        .filter(m -> m.role() == Role.TOOL)
+                        .reduce((a, b) -> b)
+                        .map(Message::content)
+                        .orElse("");
+                return ModelResponse.text("got:" + tool);
+            }
+        };
+    }
+
     private static Tool readOnly(String name, String result) {
         return new Tool() {
             @Override

@@ -74,6 +74,7 @@ public final class DefaultAgent implements Agent {
     private final int maxSteps;
     private final boolean streamRawTokens;
     private final Duration toolTimeout;
+    private final int maxToolResultChars;
 
     private DefaultAgent(Builder b) {
         this.model = Objects.requireNonNull(b.model, "model");
@@ -91,6 +92,7 @@ public final class DefaultAgent implements Agent {
         this.maxSteps = b.maxSteps;
         this.streamRawTokens = b.streamRawTokens;
         this.toolTimeout = b.toolTimeout;
+        this.maxToolResultChars = b.maxToolResultChars;
         Map<String, Tool> map = new LinkedHashMap<>();
         for (Tool tool : b.tools) {
             map.put(tool.name(), tool);
@@ -177,7 +179,8 @@ public final class DefaultAgent implements Agent {
                             ? toolExecutor.execute(call.name(), call.argumentsJson())
                             : invokeWithPolicy(call, activeByName, ctx);
                     notify(o -> o.onToolResult(call.name(), result));
-                    memory.add(Message.toolResult(call.id(), call.name(), result.content()));
+                    memory.add(Message.toolResult(
+                            call.id(), call.name(), capped(result.content(), maxToolResultChars)));
                 }
                 continue; // let the model react to the tool results
             }
@@ -252,8 +255,9 @@ public final class DefaultAgent implements Agent {
             audit("tool.denied", ctx, "tool=" + call.name() + " reason=not-available");
             return ToolResult.error("tool '" + call.name() + "' is not available");
         }
-        ToolDecision decision = toolApprover.authorize(
-                new ToolCallContext(tool.spec(), call.argumentsJson(), ctx.principal(), ctx.tenant()));
+        ToolDecision decision = toolApprover.authorize(new ToolCallContext(
+                tool.spec(), call.argumentsJson(), ctx.principal(), ctx.tenant(),
+                ctx.traceId(), ctx.sessionId(), ctx.deadline()));
         if (!decision.allowed()) {
             log.info("tool '{}' denied: {}", call.name(), decision.reason());
             audit("tool.denied", ctx, "tool=" + call.name() + " reason=" + decision.reason());
@@ -283,7 +287,8 @@ public final class DefaultAgent implements Agent {
             Thread.currentThread().interrupt();
             return ToolResult.error("tool '" + tool.name() + "' was interrupted");
         } catch (ExecutionException e) {
-            return ToolResult.error("tool '" + tool.name() + "' failed: " + e.getCause());
+            log.warn("tool '{}' threw", tool.name(), e.getCause());
+            return ToolResult.error("tool '" + tool.name() + "' failed");
         }
     }
 
@@ -291,9 +296,20 @@ public final class DefaultAgent implements Agent {
         try {
             return tool.invoke(args);
         } catch (RuntimeException e) {
+            // The exception detail goes to the log, never into the model's context.
             log.warn("tool '{}' threw", tool.name(), e);
-            return ToolResult.error("tool '" + tool.name() + "' failed: " + e.getMessage());
+            return ToolResult.error("tool '" + tool.name() + "' failed");
         }
+    }
+
+    /** Caps tool output fed back to the model, so a tool can't flood (or poison) the context. */
+    private static String capped(String content, int max) {
+        if (content == null) {
+            return "";
+        }
+        return content.length() <= max
+                ? content
+                : content.substring(0, max) + "\n…(truncated " + (content.length() - max) + " chars)";
     }
 
     private void emitToken(String token) {
@@ -331,6 +347,7 @@ public final class DefaultAgent implements Agent {
         private int maxSteps = 8;
         private boolean streamRawTokens = false;
         private Duration toolTimeout;
+        private int maxToolResultChars = 8192;
 
         public Builder model(ModelPort model) {
             this.model = model;
@@ -409,6 +426,12 @@ public final class DefaultAgent implements Agent {
         /** Bound each tool call; on timeout the call returns an error instead of hanging the turn. */
         public Builder toolTimeout(Duration toolTimeout) {
             this.toolTimeout = toolTimeout;
+            return this;
+        }
+
+        /** Cap the characters of each tool result fed back to the model (default 8192). */
+        public Builder maxToolResultChars(int maxToolResultChars) {
+            this.maxToolResultChars = maxToolResultChars;
             return this;
         }
 
