@@ -55,8 +55,18 @@ public final class SqlTool implements Tool {
         }
 
         try (Connection c = DriverManager.getConnection(jdbcUrl);
-                Statement s = c.createStatement();
-                ResultSet rs = s.executeQuery(query)) {
+                Statement s = c.createStatement()) {
+            // The database enforces the security property. Prefix checks alone are bypassable by
+            // writable CTEs and comments.
+            s.execute("PRAGMA query_only = ON");
+            return executeQuery(s, query);
+        } catch (SQLException e) {
+            return ToolResult.error("SQL error: " + e.getMessage());
+        }
+    }
+
+    private ToolResult executeQuery(Statement statement, String query) throws SQLException {
+        try (ResultSet rs = statement.executeQuery(query)) {
             ResultSetMetaData md = rs.getMetaData();
             int cols = md.getColumnCount();
             StringBuilder sb = new StringBuilder();
@@ -76,8 +86,6 @@ public final class SqlTool implements Tool {
                 sb.append("... (truncated at ").append(maxRows).append(" rows)\n");
             }
             return ToolResult.ok(sb.toString().strip());
-        } catch (SQLException e) {
-            return ToolResult.error("SQL error: " + e.getMessage());
         }
     }
 }
