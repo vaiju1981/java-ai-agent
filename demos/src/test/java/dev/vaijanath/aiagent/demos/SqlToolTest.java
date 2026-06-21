@@ -31,4 +31,18 @@ class SqlToolTest {
         assertFalse(r.error());
         assertTrue(r.content().contains("truncated"));
     }
+
+    @Test
+    void databaseRejectsAWriteHiddenBehindAWithClause() throws Exception {
+        String db = SyntheticData.createTransactionsDb(10);
+        long before = SyntheticData.count(db, "transactions");
+
+        ToolResult r = new SqlTool(db, 5)
+                .invoke("{\"query\":\"WITH chosen AS (SELECT id FROM transactions LIMIT 1) "
+                        + "DELETE FROM transactions WHERE id IN (SELECT id FROM chosen) RETURNING id\"}");
+
+        assertTrue(r.error());
+        assertTrue(r.content().contains("readonly"));
+        assertTrue(before == SyntheticData.count(db, "transactions"));
+    }
 }
