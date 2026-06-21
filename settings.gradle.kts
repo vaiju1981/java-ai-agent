@@ -14,6 +14,7 @@ include(
     "agent-mcp",
     "agent-observability-otel",
     "agent-store-jdbc",
+    "agent-tools-jsonschema",
     "examples",
     "demos",
     "downstream-smoke",

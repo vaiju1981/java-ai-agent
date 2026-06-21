@@ -115,4 +115,18 @@ class ToolApprovalTest {
         assertTrue(invoked.get(), "a read-only tool should run under denyEffectful");
         assertTrue(r.output().contains("value"), "got: " + r.output());
     }
+
+    @Test
+    void invalidArgumentsAreRejectedBeforeInvoking() {
+        AtomicBoolean invoked = new AtomicBoolean(false);
+        AgentResponse r = DefaultAgent.builder()
+                .model(callsThenEchoes("lookup"))
+                .tool(namedTool("lookup", invoked, "value", ToolEffect.READ_ONLY))
+                .toolArgumentValidator((spec, args) -> java.util.Optional.of("missing field"))
+                .build()
+                .run(new AgentRequest("go"));
+
+        assertFalse(invoked.get(), "invalid arguments must not reach the tool");
+        assertTrue(r.output().contains("invalid"), "got: " + r.output());
+    }
 }
