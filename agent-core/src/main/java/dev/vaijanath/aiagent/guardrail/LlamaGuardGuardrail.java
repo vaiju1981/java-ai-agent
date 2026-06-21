@@ -47,15 +47,24 @@ public final class LlamaGuardGuardrail implements Guardrail {
                 (stage == GuardrailStage.INPUT) ? Message.user(content) : Message.assistant(content);
         try {
             ModelResponse resp = classifier.chat(ModelRequest.of(List.of(message)));
-            String verdict = resp.text() == null ? "" : resp.text().strip();
-            if (verdict.toLowerCase(Locale.ROOT).startsWith("unsafe")) {
-                String categories = verdict.substring("unsafe".length()).strip();
+            String raw = resp.text() == null ? "" : resp.text().strip();
+            String verdict = raw.toLowerCase(Locale.ROOT);
+            if (verdict.startsWith("safe")) {
+                return GuardrailDecision.allow(content);
+            }
+            if (verdict.startsWith("unsafe")) {
+                String categories = raw.substring("unsafe".length()).strip(); // keep original case (e.g. S1)
                 log.info("llama-guard flagged {} content: {}",
                         stage, categories.isBlank() ? "(unspecified)" : categories);
                 return GuardrailDecision.block(replacement,
                         "llama-guard:" + stage + (categories.isBlank() ? "" : ":" + categories));
             }
-            return GuardrailDecision.allow(content);
+            // Malformed/empty verdict (neither "safe" nor "unsafe") = inconclusive → fail closed.
+            log.warn("llama-guard returned an inconclusive verdict at {} (failOpen={}): '{}'",
+                    stage, failOpen, verdict);
+            return failOpen
+                    ? GuardrailDecision.allow(content)
+                    : GuardrailDecision.block(replacement, "safety check inconclusive at " + stage);
         } catch (RuntimeException e) {
             log.warn("llama-guard classification failed at {} (failOpen={})", stage, failOpen, e);
             return failOpen

@@ -51,6 +51,11 @@ public final class LoggingObserver implements AgentObserver {
         log.info("turn end: {} ({})", response.blocked() ? "BLOCKED" : "ok", response.stopReason());
     }
 
+    @Override
+    public void onError(String stage, Throwable error) {
+        log.warn("error at {}: {}", stage, error.toString());
+    }
+
     private static String truncate(String s) {
         if (s == null) {
             return "";

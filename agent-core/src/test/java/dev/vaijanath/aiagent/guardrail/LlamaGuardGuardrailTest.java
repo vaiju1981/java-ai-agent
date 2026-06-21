@@ -26,6 +26,13 @@ class LlamaGuardGuardrailTest {
     }
 
     @Test
+    void inconclusiveVerdictFailsClosed() {
+        ModelPort classifier = request -> ModelResponse.text("I'm not sure about that.");
+        GuardrailDecision d = new LlamaGuardGuardrail(classifier).check(GuardrailStage.INPUT, "x");
+        assertFalse(d.allowed(), "a non-safe/non-unsafe verdict should fail closed");
+    }
+
+    @Test
     void failsClosedWhenClassifierThrows() {
         ModelPort boom = request -> {
             throw new RuntimeException("classifier down");
