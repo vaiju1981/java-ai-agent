@@ -30,4 +30,7 @@ public interface AgentObserver {
     default void onToolResult(String toolName, ToolResult result) {}
 
     default void onTurnEnd(AgentResponse response) {}
+
+    /** A recoverable failure during a turn (e.g. the model call threw). The turn ends gracefully. */
+    default void onError(String stage, Throwable error) {}
 }

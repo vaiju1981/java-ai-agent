@@ -85,7 +85,16 @@ public final class DefaultAgent implements Agent {
         for (int step = 0; step < maxSteps; step++) {
             ModelRequest req = new ModelRequest(memory.history(), toolSpecs);
             notify(o -> o.onModelCall(req));
-            ModelResponse resp = model.chat(req);
+            final ModelResponse resp;
+            try {
+                resp = model.chat(req);
+            } catch (RuntimeException e) {
+                // Graceful failure: surface it, never crash out of run().
+                log.warn("model call failed; ending turn gracefully", e);
+                notify(o -> o.onError("model", e));
+                return finish(AgentResponse.stopped(
+                        "I ran into a problem reaching the model. Please try again.", "model_error"));
+            }
             notify(o -> o.onModelResponse(resp));
 
             if (resp.hasToolCalls()) {

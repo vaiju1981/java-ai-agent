@@ -1,7 +1,7 @@
 # java-ai-agent — Design
 
-> The durable architecture. For the strategic/market rationale see
-> `../project-ideas/ideas/java-ai-agent.md`.
+> The durable architecture and the reasoning behind it. (Strategic/market rationale lives in the
+> author's private notes; this document is self-contained for contributors.)
 
 ## North star
 

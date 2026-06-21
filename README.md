@@ -7,7 +7,7 @@
 > observability **built in**. It does **not** replace LangChain4j, Spring AI, or Google ADK —
 > it **uses them as dependencies** and adds the layer above them that none of them own.
 
-**Status: Phases 0–5 complete.** In place and tested: the core seams and a runnable agent loop;
+**Status: Phases 0–6 complete, plus a hardening pass.** In place and tested: the core seams and a runnable agent loop;
 **tool-calling** through the substrate (verified live); a **real, local safety layer** (Llama Guard
 + PII scrub); an **observability layer** (token/cost accounting, deterministic record/replay,
 OpenTelemetry tracing); **deep agents** (planning, sub-agents fanned out concurrently on **virtual
@@ -16,7 +16,10 @@ disclosure, episodic memory, and a reflective agent that **learns from its mista
 lessons and applies them on retry and across future runs). Following the discipline borrowed from
 Mitra: **real where cheap, stubbed where expensive, and the app never fakes success silently** —
 every stub returns an obvious placeholder, the safety guard fails *closed*, and learned lessons are
-explicit recorded episodes, never silent drift.
+explicit recorded episodes, never silent drift. Substrate adapters cover **LangChain4j**
+(tool-calling), **Spring AI**, and **Google ADK**; the model layer is hardened with per-call
+timeouts + retries (`ResilientModelPort`), bounded context (`WindowedMemory`), and graceful
+model-failure handling.
 
 ---
 
@@ -54,6 +57,23 @@ education tools) are intended to run on it — which forces it to be genuinely e
   keeps the OTel SDK out of `agent-core`.
 - **`examples`** — runnable agents (`HelloAgent`, `SafeAgent`) showing the loop, tools, guardrails,
   and observability.
+
+## Extending it
+
+Everything is an interface; implement the seam you need.
+
+- **A model provider** — implement `ModelPort.chat(ModelRequest) -> ModelResponse` (see
+  `LangChain4jModelPort`, `SpringAiModelPort`). Wrap any port in `ResilientModelPort` for
+  timeouts/retries.
+- **A tool** — implement `Tool` (`spec()` returns an MCP-aligned `ToolSpec`; `invoke(json)` runs it).
+- **A guardrail** — implement `Guardrail.check(stage, content) -> GuardrailDecision` (allow /
+  transform / block). Compose them; `Guardrails.kidguard(guardModel)` returns the ordered pipeline.
+- **A skill** — `Skill.of(name, description, instructions, tools)`, register it, and a
+  `SkillfulAgent` equips it on demand.
+- **An observer** — implement `AgentObserver` (trace/meter/record); failures are isolated.
+- **An agent** — implement `Agent.run(AgentRequest) -> AgentResponse`. Because everything is an
+  `Agent`, your implementation can be a sub-agent of a `DeepAgent` or the worker of a
+  `ReflectiveAgent` with no extra wiring.
 
 ## Build & run
 
