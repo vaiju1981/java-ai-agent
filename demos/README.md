@@ -70,3 +70,16 @@ ollama pull llama-guard3:1b
 Sample (verified live): explains glucose 110 / LDL 160 against their reference ranges with a "discuss
 with your doctor" and no diagnosis; a distress message is **blocked by the crisis guardrail** with a
 supportive response before the model is ever called.
+
+## ResearchBriefingDemo — a deep agent
+
+Plans a topic into sections (via structured output), writes each with a **concurrent sub-agent**, and
+synthesizes a briefing — printing the plan, the per-section workspace drafts, and the final document.
+
+```bash
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.ResearchBriefingDemo
+```
+
+Sample (verified live): a balanced "Kotlin vs Java for a 2026 backend" briefing with a recommendation,
+assembled from independently-written sections. (The deep-agent orchestration is covered by the core
+test suite.)
