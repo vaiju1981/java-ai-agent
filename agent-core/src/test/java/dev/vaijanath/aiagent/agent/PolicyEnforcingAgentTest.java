@@ -4,6 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.vaijanath.aiagent.audit.AuditEvent;
+import dev.vaijanath.aiagent.audit.InMemoryAuditSink;
+import dev.vaijanath.aiagent.guardrail.Guardrail;
+import dev.vaijanath.aiagent.guardrail.GuardrailDecision;
 import dev.vaijanath.aiagent.guardrail.KeywordBlocklistGuardrail;
 import java.time.Instant;
 import java.util.List;
@@ -104,5 +108,36 @@ class PolicyEnforcingAgentTest {
         assertEquals("deadline_exceeded", r.stopReason());
         assertFalse(r.output().contains("late answer"),
                 "a result produced after the deadline must not be delivered");
+    }
+
+    @Test
+    void aHangingGuardrailCannotExceedTheDeadline() {
+        Guardrail slow = (stage, content) -> {
+            try {
+                Thread.sleep(60_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return GuardrailDecision.allow(content);
+        };
+        Agent governed = Trust.govern(request -> AgentResponse.completed("x"), slow);
+        RequestContext soon = new RequestContext(
+                "s", null, null, null, Instant.now().plusMillis(100), null);
+
+        AgentResponse r = governed.run(new AgentRequest("hi", soon));
+
+        assertEquals("deadline_exceeded", r.stopReason(), "a hanging guardrail must not beat the deadline");
+    }
+
+    @Test
+    void emitsTurnStartAndTurnEndAtTheSeam() {
+        InMemoryAuditSink audit = new InMemoryAuditSink();
+        Agent governed = Trust.govern(request -> AgentResponse.completed("ok"), audit, List.of());
+
+        governed.run(new AgentRequest("hi"));
+
+        List<String> types = audit.events().stream().map(AuditEvent::type).toList();
+        assertTrue(types.contains("turn.start"), types.toString());
+        assertTrue(types.contains("turn.end"), types.toString());
     }
 }
