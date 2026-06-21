@@ -90,7 +90,8 @@ tools) run on it.
 - **`AuditSink` / `AuditEvent`** — a durable, identity-bearing audit trail emitted by the *runtime*
   (which holds the request context), not by best-effort observers: each event carries an id,
   timestamp, traceId, session, principal, and tenant. `FileAuditSink` appends and fsyncs per event
-  (sanitized fields, never throws into the caller). Distinct from `AgentObserver` (best-effort
+  (sanitized fields, never throws into the caller); `AsyncAuditSink` wraps any sink to deliver events
+  off the request path so a slow sink can't blow a deadline. Distinct from `AgentObserver` (best-effort
   telemetry): audit answers "who did what, when, under which trace". Note that observers see the
   post-input-guardrail input, but `onModelResponse` and `onToolResult` carry raw, pre-output-guardrail
   content (tool results are size-capped) — so a recorder holds sensitive data and should be treated
