@@ -33,12 +33,13 @@ public final class LangChain4jEpisodicStore implements EpisodicStore {
     }
 
     @Override
-    public List<Episode> recall(String query, int limit) {
+    public List<Episode> recall(String tenant, String query, int limit) {
         if (entries.isEmpty()) {
             return List.of();
         }
         float[] q = embed(query);
         return entries.stream()
+                .filter(e -> e.episode().tenant().equals(tenant))
                 .map(e -> Map.entry(e.episode(), cosine(q, e.vector())))
                 .filter(m -> m.getValue() > 0.0)
                 .sorted(Comparator.comparingDouble(Map.Entry<Episode, Double>::getValue).reversed())

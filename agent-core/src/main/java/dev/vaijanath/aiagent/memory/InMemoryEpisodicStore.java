@@ -14,7 +14,7 @@ public final class InMemoryEpisodicStore implements EpisodicStore {
     }
 
     @Override
-    public List<Episode> recall(String query, int limit) {
-        return Episodes.recall(List.copyOf(episodes), query, limit);
+    public List<Episode> recall(String tenant, String query, int limit) {
+        return Episodes.recall(List.copyOf(episodes), tenant, query, limit);
     }
 }

@@ -46,7 +46,9 @@ public final class ReflectiveAgent implements Agent {
     @Override
     public AgentResponse run(AgentRequest request) {
         String task = request.input();
-        StringBuilder lessons = new StringBuilder(formatPastLessons(memory.recall(task, recallLimit)));
+        String tenant = request.context().tenant();
+        StringBuilder lessons =
+                new StringBuilder(formatPastLessons(memory.recall(tenant, task, recallLimit)));
 
         AgentResponse last = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -66,7 +68,7 @@ public final class ReflectiveAgent implements Agent {
 
             // Learn from the mistake: record it and carry the lesson into the next attempt.
             log.info("attempt {} unsatisfactory; lesson: {}", attempt, reflection.lesson());
-            memory.record(new Episode(task, last.output(), false, reflection.lesson()));
+            memory.record(new Episode(tenant, task, last.output(), false, reflection.lesson()));
             lessons.append("- ").append(reflection.lesson()).append('\n');
         }
         return last;
