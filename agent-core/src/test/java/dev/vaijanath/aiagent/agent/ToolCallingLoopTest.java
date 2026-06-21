@@ -68,7 +68,7 @@ class ToolCallingLoopTest {
 
         assertFalse(r.blocked());
         assertEquals("completed", r.stopReason());
-        assertTrue(r.output().startsWith("done: echoed:"), "got: " + r.output());
+        assertTrue(r.output().contains("echoed:"), "got: " + r.output());
     }
 
     @Test

@@ -46,6 +46,10 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   context; tool exception detail is logged but no longer leaks into the model context. (Still open:
   JSON-schema argument validation, idempotency keys, explicit untrusted-result framing, per-tenant
   skill/lesson isolation, and hard cancellation of interruption-ignoring tools — a JVM limitation.)
+- **Untrusted-result framing + idempotency key** — tool results fed to the model are framed as
+  untrusted data by default (resists prompt injection; opt out with `frameToolResults(false)`), and
+  `ToolCallContext.idempotencyKey()` provides a stable key (tenant + session + tool + arguments) that
+  an effectful `ToolApprover` or tool can use to make a repeated operation idempotent.
 - **Off-request-path audit delivery** — `AsyncAuditSink` delivers events to a delegate sink on a
   background thread, so a slow or hanging sink (e.g. an fsync) can't delay the request beyond its
   deadline — the audit writes around the bounded turn no longer count against it. `record` is
