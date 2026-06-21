@@ -2,7 +2,7 @@ plugins {
     `java-library`
 }
 
-description = "Durable JDBC-backed ConversationStore (SQLite, PostgreSQL, MySQL, …), queryable for analytics."
+description = "Durable SQLite/PostgreSQL ConversationStore, queryable for analytics."
 
 dependencies {
     api(project(":agent-core"))
@@ -14,4 +14,5 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.launcher)
     testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.postgresql)
 }

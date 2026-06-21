@@ -14,25 +14,24 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * A durable {@link ConversationStore} backed by a SQL database (SQLite, PostgreSQL, MySQL, …). Each
+ * A durable {@link ConversationStore} backed by SQLite or PostgreSQL. Each
  * message is a row in a queryable {@code agent_messages} table — tenant, session, sequence, role,
  * content, tool-call data, and a timestamp — so conversations survive restarts and can be analysed
  * with plain SQL (unlike an in-memory or opaque file store). Wire it into an agent with
  * {@code DefaultAgent.builder().conversationStore(store)}.
  *
- * <p>Set a {@code maxMessages} window to replay only the most recent N messages to the model while
- * still persisting the full history for analytics.
+ * <p>Set a {@code maxTurns} window to replay only the most recent N complete turns plus all system
+ * messages while still persisting the full history for analytics.
  *
  * <p>Concurrency: work on a single {@code (tenant, session)} is serialized in-process (striped
  * locks), correct for a single service instance. If multiple instances may write the same session
- * concurrently, use sticky routing or external coordination — a clash surfaces as a primary-key
- * conflict (a loud failure), never silent corruption.
+ * concurrently, use sticky routing or external coordination — a clash rolls back the whole turn and
+ * surfaces as a primary-key conflict, never a partially persisted conversation.
  */
 public final class JdbcConversationStore implements ConversationStore {
 
@@ -41,37 +40,47 @@ public final class JdbcConversationStore implements ConversationStore {
 
     private final ConnectionSource connections;
     private final ObjectMapper mapper = new ObjectMapper();
-    private final int maxMessages; // 0 = replay the whole history
+    private final int maxTurns; // 0 = replay the whole history
     private final Object[] locks = new Object[STRIPES];
 
     public JdbcConversationStore(ConnectionSource connections) {
-        this(connections, 0);
+        this(connections, 0, false);
     }
 
-    public JdbcConversationStore(ConnectionSource connections, int maxMessages) {
+    public JdbcConversationStore(ConnectionSource connections, int maxTurns) {
+        this(connections, maxTurns, false);
+    }
+
+    private JdbcConversationStore(ConnectionSource connections, int maxTurns, boolean initializeSchema) {
         this.connections = Objects.requireNonNull(connections, "connections");
-        this.maxMessages = Math.max(0, maxMessages);
+        this.maxTurns = Math.max(0, maxTurns);
         for (int i = 0; i < STRIPES; i++) {
             locks[i] = new Object();
         }
-        createSchema();
+        if (initializeSchema) {
+            createSchema();
+        }
     }
 
     /** A store over a JDBC URL (the driver must be on the classpath), e.g. {@code jdbc:sqlite:app.db}. */
     public static JdbcConversationStore fromJdbcUrl(String jdbcUrl) {
-        return new JdbcConversationStore(() -> DriverManager.getConnection(jdbcUrl));
+        return new JdbcConversationStore(() -> DriverManager.getConnection(jdbcUrl), 0, true);
     }
 
-    /** A store over a JDBC URL that replays only the most recent {@code maxMessages} per session. */
-    public static JdbcConversationStore fromJdbcUrl(String jdbcUrl, int maxMessages) {
-        return new JdbcConversationStore(() -> DriverManager.getConnection(jdbcUrl), maxMessages);
+    /** A store over a JDBC URL that replays only the most recent {@code maxTurns} complete turns. */
+    public static JdbcConversationStore fromJdbcUrl(String jdbcUrl, int maxTurns) {
+        return new JdbcConversationStore(
+                () -> DriverManager.getConnection(jdbcUrl), maxTurns, true);
     }
 
     @Override
     public <R> R withMemory(String tenant, String sessionId, Function<Memory, R> action) {
         // Serialize same-session work in-process; different sessions (different stripes) run freely.
         synchronized (locks[Math.floorMod(Objects.hash(tenant, sessionId), STRIPES)]) {
-            return action.apply(load(tenant, sessionId));
+            JdbcMemory memory = load(tenant, sessionId);
+            R result = action.apply(memory);
+            memory.commit();
+            return result;
         }
     }
 
@@ -80,20 +89,28 @@ public final class JdbcConversationStore implements ConversationStore {
         long nextSeq;
         try (Connection c = connections.get()) {
             nextSeq = nextSeq(c, tenant, sessionId);
-            String sql = "SELECT seq, role, content, tool_call_id, tool_name, tool_calls "
-                    + "FROM agent_messages WHERE tenant = ? AND session_id = ? ORDER BY seq"
-                    + (maxMessages > 0 ? " DESC LIMIT " + maxMessages : " ASC");
+            String sql = "SELECT m.seq, m.role, m.content, m.tool_call_id, m.tool_name, m.tool_calls "
+                    + "FROM agent_messages m JOIN agent_turns t "
+                    + "ON t.tenant=m.tenant AND t.session_id=m.session_id AND t.turn_id=m.turn_id "
+                    + "WHERE m.tenant = ? AND m.session_id = ? "
+                    + (maxTurns > 0
+                            ? "AND (m.role='SYSTEM' OR t.turn_id IN (SELECT turn_id FROM agent_turns "
+                                    + "WHERE tenant=? AND session_id=? ORDER BY first_seq DESC LIMIT " + maxTurns
+                                    + ")) "
+                            : "")
+                    + "ORDER BY m.seq";
             try (PreparedStatement ps = c.prepareStatement(sql)) {
                 ps.setString(1, tenant);
                 ps.setString(2, sessionId);
+                if (maxTurns > 0) {
+                    ps.setString(3, tenant);
+                    ps.setString(4, sessionId);
+                }
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         window.add(toMessage(rs));
                     }
                 }
-            }
-            if (maxMessages > 0) {
-                Collections.reverse(window); // DESC LIMIT returned newest-first; restore chronological
             }
         } catch (SQLException e) {
             throw new IllegalStateException(
@@ -140,9 +157,22 @@ public final class JdbcConversationStore implements ConversationStore {
                 + "tool_call_id VARCHAR(255),"
                 + "tool_name VARCHAR(255),"
                 + "tool_calls TEXT,"
+                + "turn_id VARCHAR(255) NOT NULL,"
                 + "created_at BIGINT NOT NULL,"
-                + "PRIMARY KEY (tenant, session_id, seq))";
+                + "PRIMARY KEY (tenant, session_id, seq),"
+                + "FOREIGN KEY (tenant, session_id, turn_id) "
+                + "REFERENCES agent_turns(tenant, session_id, turn_id))";
+        String turnsDdl = "CREATE TABLE IF NOT EXISTS agent_turns ("
+                + "tenant VARCHAR(255) NOT NULL,"
+                + "session_id VARCHAR(255) NOT NULL,"
+                + "turn_id VARCHAR(255) NOT NULL,"
+                + "first_seq BIGINT NOT NULL,"
+                + "message_count INTEGER NOT NULL,"
+                + "completed_at BIGINT NOT NULL,"
+                + "PRIMARY KEY (tenant, session_id, turn_id),"
+                + "UNIQUE (tenant, session_id, first_seq))";
         try (Connection c = connections.get(); Statement s = c.createStatement()) {
+            s.execute(turnsDdl);
             s.execute(ddl);
             s.execute("CREATE INDEX IF NOT EXISTS idx_agent_messages_created "
                     + "ON agent_messages(created_at)");
