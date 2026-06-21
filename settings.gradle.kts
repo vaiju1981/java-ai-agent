@@ -18,4 +18,5 @@ include(
     "examples",
     "demos",
     "downstream-smoke",
+    "production-reference",
 )
