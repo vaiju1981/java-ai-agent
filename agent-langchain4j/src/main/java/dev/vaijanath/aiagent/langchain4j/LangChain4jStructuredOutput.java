@@ -1,15 +1,12 @@
 package dev.vaijanath.aiagent.langchain4j;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.StructuredOutput;
 import java.lang.reflect.RecordComponent;
@@ -33,10 +30,7 @@ public final class LangChain4jStructuredOutput implements StructuredOutput {
 
     @Override
     public <T> T generate(ModelRequest request, Class<T> type) {
-        List<ChatMessage> messages = new ArrayList<>();
-        for (Message m : request.messages()) {
-            messages.add(toLangChain4j(m));
-        }
+        List<ChatMessage> messages = new ArrayList<>(LangChain4jMessages.toLangChain4j(request.messages()));
         messages.add(UserMessage.from(
                 "Respond with ONLY a JSON object" + fieldsHint(type) + ". No prose, no code fences."));
 
@@ -87,12 +81,4 @@ public final class LangChain4jStructuredOutput implements StructuredOutput {
         return t.strip();
     }
 
-    private static ChatMessage toLangChain4j(Message m) {
-        return switch (m.role()) {
-            case SYSTEM -> SystemMessage.from(m.content());
-            case ASSISTANT -> AiMessage.from(m.content());
-            case TOOL -> UserMessage.from("[tool result] " + m.content());
-            default -> UserMessage.from(m.content());
-        };
-    }
 }
