@@ -77,8 +77,12 @@ gateway, education tools) run on it, proving it is end-to-end and trustworthy, n
 - **Phase 4:** deep agents — `Planner`/`LlmPlanner`, a `DeepAgent` that plans → fans sub-agents out
   concurrently on virtual threads (Loom; `StructuredTaskScope` once it's non-preview) → synthesizes,
   and a `Workspace` scratchpad. ✅ done — concurrency covered by a test; verified live.
-- **Phase 5:** skills (manifest + registry) and long-term/episodic memory.
-- **Phase 6:** Google ADK + Spring AI adapters via the existing seams.
+- **Phase 5:** skills + memory + learning. `Skill`/`SkillRegistry`/`SkillSelector` (keyword + LLM)
+  with progressive disclosure via `SkillfulAgent`; episodic memory (`EpisodicStore`); and a
+  `ReflectiveAgent` that recalls lessons, self-critiques (`Reflector`/`LlmReflector`), and retries —
+  learning within a run and across runs. ✅ done — cross-run learning covered by a test.
+- **Phase 6:** Google ADK + Spring AI adapters via the existing seams; finish `kidguard` (crisis
+  detection + blocklist).
 
 ## Decisions
 

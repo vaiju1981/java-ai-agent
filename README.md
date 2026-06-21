@@ -7,14 +7,16 @@
 > observability **built in**. It does **not** replace LangChain4j, Spring AI, or Google ADK —
 > it **uses them as dependencies** and adds the layer above them that none of them own.
 
-**Status: Phases 0–4 complete.** In place and tested: the core seams (`Agent`, `ModelPort`,
-`Tool`, `Guardrail`, `Memory`, `AgentObserver`) and a runnable agent loop; **tool-calling** through
-the substrate (verified live); a **real, local safety layer** (a Llama Guard classifier + a PII
-scrubber); an **observability layer** (token/cost accounting, deterministic record/replay,
-OpenTelemetry tracing); and **deep agents** — planning, sub-agents fanned out concurrently on
-**virtual threads** (Loom), and a shared workspace. Following the discipline borrowed from Mitra:
-**real where cheap, stubbed where expensive, and the app never fakes success silently** — every stub
-returns an obvious placeholder, and the safety guard fails *closed*, never silently open.
+**Status: Phases 0–5 complete.** In place and tested: the core seams and a runnable agent loop;
+**tool-calling** through the substrate (verified live); a **real, local safety layer** (Llama Guard
++ PII scrub); an **observability layer** (token/cost accounting, deterministic record/replay,
+OpenTelemetry tracing); **deep agents** (planning, sub-agents fanned out concurrently on **virtual
+threads**, shared workspace); and **skills + memory + learning** — a skill system with progressive
+disclosure, episodic memory, and a reflective agent that **learns from its mistakes** (records
+lessons and applies them on retry and across future runs). Following the discipline borrowed from
+Mitra: **real where cheap, stubbed where expensive, and the app never fakes success silently** —
+every stub returns an obvious placeholder, the safety guard fails *closed*, and learned lessons are
+explicit recorded episodes, never silent drift.
 
 ---
 
