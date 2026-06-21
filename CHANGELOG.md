@@ -25,6 +25,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 
 ### Hardening (trust-review remediation)
 
+- **Stateless runtime with a request context** — `AgentRequest` now carries a `RequestContext`
+  (session, principal, tenant, trace, deadline). `DefaultAgent` holds no per-conversation state;
+  memory is scoped per session via `ConversationStore`, so one instance serves many concurrent
+  users/tenants without interleaving histories, and a turn past its deadline stops cleanly. Sub-agent
+  calls (e.g. `DeepAgent` workers) inherit identity/tenant/trace with their own session.
 - **Tool dispatch enforces the selector** — a tool not presented to the model this turn can no longer
   be invoked, even if the model names it (hallucination or prompt injection).
 - **Skill acquisition is gated on genuine success** — blocked, errored, and step-exhausted turns no
