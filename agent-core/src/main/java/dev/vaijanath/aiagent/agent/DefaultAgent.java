@@ -17,6 +17,8 @@ import dev.vaijanath.aiagent.tool.ToolApprover;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
 import dev.vaijanath.aiagent.tool.ToolDecision;
 import dev.vaijanath.aiagent.tool.ToolResult;
+import dev.vaijanath.aiagent.tool.ToolSelector;
+import dev.vaijanath.aiagent.tool.ToolSelectors;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -45,6 +47,7 @@ public final class DefaultAgent implements Agent {
     private final List<Guardrail> guardrails;
     private final Map<String, Tool> tools;
     private final ToolApprover toolApprover;
+    private final ToolSelector toolSelector;
     private final Memory memory;
     private final List<AgentObserver> observers;
     private final String systemPrompt;
@@ -57,6 +60,7 @@ public final class DefaultAgent implements Agent {
         this.guardrails = List.copyOf(b.guardrails);
         this.observers = List.copyOf(b.observers);
         this.toolApprover = b.toolApprover != null ? b.toolApprover : ToolApprovers.allowAll();
+        this.toolSelector = b.toolSelector != null ? b.toolSelector : ToolSelectors.all();
         this.memory = b.memory != null ? b.memory : new InMemoryMemory();
         this.systemPrompt = b.systemPrompt;
         this.maxSteps = b.maxSteps;
@@ -85,8 +89,10 @@ public final class DefaultAgent implements Agent {
         }
         memory.add(Message.user(in.content()));
 
-        // 3. Model / tool loop.
-        List<ToolSpec> toolSpecs = tools.values().stream().map(Tool::spec).toList();
+        // 3. Model / tool loop. Present only the tools the selector deems relevant (default: all),
+        // so an agent with dozens of tools still shows the model a focused, manageable set.
+        List<Tool> activeTools = toolSelector.select(in.content(), List.copyOf(tools.values()));
+        List<ToolSpec> toolSpecs = activeTools.stream().map(Tool::spec).toList();
         String finalText = null;
         for (int step = 0; step < maxSteps; step++) {
             ModelRequest req = new ModelRequest(memory.history(), toolSpecs);
@@ -204,6 +210,7 @@ public final class DefaultAgent implements Agent {
         private final List<Tool> tools = new ArrayList<>();
         private final List<AgentObserver> observers = new ArrayList<>();
         private ToolApprover toolApprover;
+        private ToolSelector toolSelector;
         private Memory memory;
         private String systemPrompt;
         private int maxSteps = 8;
@@ -231,6 +238,12 @@ public final class DefaultAgent implements Agent {
         /** Gate tool execution behind a policy (allow-list, human approval, …). Default: allow all. */
         public Builder toolApprover(ToolApprover toolApprover) {
             this.toolApprover = toolApprover;
+            return this;
+        }
+
+        /** Choose which tools to present per turn (e.g. relevant subset of many). Default: all. */
+        public Builder toolSelector(ToolSelector toolSelector) {
+            this.toolSelector = toolSelector;
             return this;
         }
 
