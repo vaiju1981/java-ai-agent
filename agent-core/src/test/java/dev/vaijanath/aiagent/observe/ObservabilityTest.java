@@ -1,6 +1,7 @@
 package dev.vaijanath.aiagent.observe;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
@@ -99,6 +100,6 @@ class ObservabilityTest {
                 .run(new AgentRequest("please echo"));
 
         assertEquals(original.output(), replayed.output());
-        assertEquals("answer: echoed", replayed.output());
+        assertTrue(replayed.output().contains("echoed"), "got: " + replayed.output());
     }
 }

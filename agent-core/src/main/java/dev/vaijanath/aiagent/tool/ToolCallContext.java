@@ -33,4 +33,19 @@ public record ToolCallContext(
     public Optional<Instant> deadlineAt() {
         return Optional.ofNullable(deadline);
     }
+
+    /**
+     * A stable key for this logical call — the same tenant, session, tool, and arguments yield the
+     * same key. An effectful {@link ToolApprover} (or a tool) can use it to make an operation
+     * idempotent, e.g. deny or no-op a duplicate. It embeds the raw arguments, so treat it as sensitive.
+     */
+    public String idempotencyKey() {
+        // Length-prefixed parts so no value can collide with another through the delimiter.
+        return part(tenant) + part(sessionId) + part(spec.name()) + part(argumentsJson);
+    }
+
+    private static String part(String value) {
+        String v = value == null ? "" : value;
+        return v.length() + ":" + v;
+    }
 }
