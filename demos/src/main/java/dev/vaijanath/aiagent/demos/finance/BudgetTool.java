@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.demos.finance;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.sql.Connection;
@@ -30,7 +31,8 @@ public final class BudgetTool implements Tool {
                 "Compare a category's spending in a month (1-12) against its monthly budget.",
                 "{\"type\":\"object\",\"properties\":{"
                         + "\"category\":{\"type\":\"string\"},\"month\":{\"type\":\"integer\"}},"
-                        + "\"required\":[\"category\",\"month\"]}");
+                        + "\"required\":[\"category\",\"month\"]}",
+                ToolEffect.READ_ONLY);
     }
 
     @Override

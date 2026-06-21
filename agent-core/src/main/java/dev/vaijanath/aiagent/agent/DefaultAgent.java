@@ -79,7 +79,7 @@ public final class DefaultAgent implements Agent {
         this.model = Objects.requireNonNull(b.model, "model");
         this.guardrails = List.copyOf(b.guardrails);
         this.observers = List.copyOf(b.observers);
-        this.toolApprover = b.toolApprover != null ? b.toolApprover : ToolApprovers.allowAll();
+        this.toolApprover = b.toolApprover != null ? b.toolApprover : ToolApprovers.denyEffectful();
         this.toolSelector = b.toolSelector != null ? b.toolSelector : ToolSelectors.all();
         this.toolExecutor = b.toolExecutor;
         this.conversations = b.conversationStore != null
@@ -347,7 +347,11 @@ public final class DefaultAgent implements Agent {
             return this;
         }
 
-        /** Gate tool execution behind a policy (allow-list, human approval, …). Default: allow all. */
+        /**
+         * Gate tool execution behind a policy. <b>Default: {@code denyEffectful()}</b> — read-only
+         * tools run, effectful ones are denied unless allow-listed. Pass {@code ToolApprovers.allowAll()}
+         * to explicitly opt into an unsafe, dev-only "run anything" mode.
+         */
         public Builder toolApprover(ToolApprover toolApprover) {
             this.toolApprover = toolApprover;
             return this;

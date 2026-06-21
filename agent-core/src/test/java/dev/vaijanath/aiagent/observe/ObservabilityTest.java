@@ -14,7 +14,9 @@ import dev.vaijanath.aiagent.model.ReplayModelPort;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.model.Usage;
+import dev.vaijanath.aiagent.tool.ReplayToolExecutor;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.List;
@@ -75,7 +77,8 @@ class ObservabilityTest {
         Tool echo = new Tool() {
             @Override
             public ToolSpec spec() {
-                return new ToolSpec("echo", "echo", "{\"type\":\"object\",\"properties\":{}}");
+                return new ToolSpec("echo", "echo", "{\"type\":\"object\",\"properties\":{}}",
+                        ToolEffect.READ_ONLY);
             }
 
             @Override
@@ -90,7 +93,9 @@ class ObservabilityTest {
                 .run(new AgentRequest("please echo"));
 
         AgentResponse replayed = DefaultAgent.builder()
-                .model(new ReplayModelPort(recorder.modelResponses())).tool(echo).build()
+                .model(new ReplayModelPort(recorder.modelResponses())).tool(echo)
+                .toolExecutor(new ReplayToolExecutor(recorder.toolResults()))
+                .build()
                 .run(new AgentRequest("please echo"));
 
         assertEquals(original.output(), replayed.output());

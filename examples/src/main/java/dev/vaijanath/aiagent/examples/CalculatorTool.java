@@ -3,6 +3,7 @@ package dev.vaijanath.aiagent.examples;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 
@@ -19,7 +20,8 @@ public final class CalculatorTool implements Tool {
                 """
                 {"type":"object",
                  "properties":{"a":{"type":"number"},"b":{"type":"number"}},
-                 "required":["a","b"]}""");
+                 "required":["a","b"]}""",
+                ToolEffect.READ_ONLY);
     }
 
     @Override

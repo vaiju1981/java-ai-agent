@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.demos.finance;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.LinkedHashMap;
@@ -46,7 +47,8 @@ public final class CategorizeMerchantTool implements Tool {
                 "Classify a merchant name into a spending category (Dining, Groceries, Transport, "
                         + "Travel, Entertainment, Utilities, or Other).",
                 "{\"type\":\"object\",\"properties\":{\"merchant\":{\"type\":\"string\"}},"
-                        + "\"required\":[\"merchant\"]}");
+                        + "\"required\":[\"merchant\"]}",
+                ToolEffect.READ_ONLY);
     }
 
     @Override

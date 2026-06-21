@@ -11,6 +11,7 @@ import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.List;
@@ -46,7 +47,8 @@ class ToolCallingLoopTest {
             return new ToolSpec(
                     "echo",
                     "Echoes its text argument.",
-                    "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}}}");
+                    "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"}}}",
+                    ToolEffect.READ_ONLY);
         }
 
         @Override

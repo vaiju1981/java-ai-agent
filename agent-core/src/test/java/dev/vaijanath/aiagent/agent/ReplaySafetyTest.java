@@ -12,6 +12,7 @@ import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.RecordingObserver;
 import dev.vaijanath.aiagent.tool.ReplayToolExecutor;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolApprovers;
 import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
@@ -61,6 +62,7 @@ class ReplaySafetyTest {
         AgentResponse first = DefaultAgent.builder()
                 .model(callsActThenEchoes())
                 .tool(effectful)
+                .toolApprover(ToolApprovers.allowAll()) // this test deliberately runs an effectful tool
                 .observer(recording)
                 .build()
                 .run(new AgentRequest("go"));

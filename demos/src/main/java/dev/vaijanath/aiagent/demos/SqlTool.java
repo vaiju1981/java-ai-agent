@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.demos;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.sql.Connection;
@@ -36,7 +37,8 @@ public final class SqlTool implements Tool {
                 "Run ONE read-only SQLite SELECT against the database and return the rows. "
                         + "Use it for any data question.",
                 "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},"
-                        + "\"required\":[\"query\"]}");
+                        + "\"required\":[\"query\"]}",
+                ToolEffect.READ_ONLY);
     }
 
     @Override

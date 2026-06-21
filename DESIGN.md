@@ -67,9 +67,10 @@ tools) run on it.
 - **`Tool` / `ToolSpec`** (MCP-aligned; each tool declares a `ToolEffect` — `READ_ONLY` or
   `EFFECTFUL`, defaulting to effectful) + **`ToolApprover`** — authorization runs before execution and
   sees a `ToolCallContext` (the spec/effect, arguments, principal, tenant), so policies decide by
-  capability or identity. `ToolApprovers.denyEffectful()` (read-only runs, effectful denied),
-  `allowList`, or `ConsoleToolApprover` for HITL. The selector is enforced too: a tool not presented
-  this turn cannot run, even if the model names it.
+  capability or identity. **The default is `denyEffectful()`** — read-only tools run, effectful ones
+  are denied unless allow-listed; `ToolApprovers.allowAll()` is an explicit dev-only opt-in. Also
+  `allowList` or `ConsoleToolApprover` (HITL). The selector is enforced too: a tool not presented this
+  turn cannot run, even if the model names it.
 - **`Guardrail`** — `check(stage, content) → allow / transform / block`; `Guardrails.kidguard(...)`
   is the ordered crisis → PII → Llama Guard pipeline.
 - **`PolicyEnforcingAgent` / `Trust.govern(agent, …)`** — wraps any `Agent` so input/output guardrails
