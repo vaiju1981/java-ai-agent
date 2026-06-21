@@ -39,7 +39,8 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   so policies can decide by correlation or remaining time, not just identity; tool results fed back to
   the model are capped (`maxToolResultChars`, default 8192) so a tool can't flood or poison the
   context; tool exception detail is logged but no longer leaks into the model context. (Still open:
-  JSON-schema argument validation and idempotency keys.)
+  JSON-schema argument validation, idempotency keys, explicit untrusted-result framing, per-tenant
+  skill/lesson isolation, and hard cancellation of interruption-ignoring tools — a JVM limitation.)
 - **Whole-turn deadline and complete seam lifecycle** — `PolicyEnforcingAgent` now bounds the entire
   turn — input guardrails, the delegate, and output guardrails — under the deadline, so even a hanging
   model-backed guardrail cannot exceed it; and it emits a `turn.start` and a matching `turn.end` on
