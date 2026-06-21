@@ -40,6 +40,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   the model are capped (`maxToolResultChars`, default 8192) so a tool can't flood or poison the
   context; tool exception detail is logged but no longer leaks into the model context. (Still open:
   JSON-schema argument validation and idempotency keys.)
+- **Whole-turn deadline and complete seam lifecycle** — `PolicyEnforcingAgent` now bounds the entire
+  turn — input guardrails, the delegate, and output guardrails — under the deadline, so even a hanging
+  model-backed guardrail cannot exceed it; and it emits a `turn.start` and a matching `turn.end` on
+  every path (completed, input/output blocked, deadline) for a complete audit lifecycle. (Cancellation
+  remains cooperative — a JVM thread cannot be force-stopped.)
 - **Hard deadline and unbypassable output policy** — `PolicyEnforcingAgent` runs the delegate
   bounded by the remaining deadline (cancelling on expiry) and re-checks before delivering, so a
   blocking or late delegate cannot return a result past the deadline; output guardrails now run even
