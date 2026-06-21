@@ -32,6 +32,7 @@ still run, but the real behavior (tool orchestration, skill selection, self-corr
 | 5 | `SkilledAgentExample` | **skills, model-selected** — an `LlmSkillSelector` picks `math-tutor` (with the math tool) vs `french-translator` per task; the equipped skill's instructions + tools steer the answer |
 | 6 | `ResearchAssistant` | **deep agent** — plans a CTO briefing into sections, writes each with a concurrent sub-agent (virtual threads), and synthesizes; prints the plan, the per-section **workspace artifacts**, and the final briefing |
 | 7 | `LearningAgentExample` | **learning from real mistakes** — a deterministic verifier rejects banned words; the model slips, the agent records the lesson, retries, and self-corrects (watch the INFO log show each attempt) |
+| 8 | `MemoryAcrossSessions` | **cross-session memory** — learnings are persisted to a file with `FileEpisodicStore`; run it twice and the second (separate) process already knows the lesson |
 
 (`DeepResearchAgent` is a smaller deep-agent demo kept as a stepping stone to `ResearchAssistant`.)
 
