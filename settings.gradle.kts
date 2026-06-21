@@ -14,4 +14,5 @@ include(
     "agent-mcp",
     "agent-observability-otel",
     "examples",
+    "demos",
 )

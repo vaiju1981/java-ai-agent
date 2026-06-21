@@ -9,6 +9,7 @@ opentelemetry = "1.43.0"
 springai = "1.0.0"
 googleadk = "1.4.0"
 langchain4jMcp = "1.0.0-beta5"
+sqlite = "3.46.1.0"
 # LangChain4j is our first reference integration (the L0 substrate adapter).
 # Managed via its BOM so all langchain4j-* modules stay version-aligned.
 langchain4j = "1.0.1"
@@ -44,3 +45,6 @@ google-adk = { module = "com.google.adk:google-adk", version.ref = "googleadk" }
 
 # Model Context Protocol client (expose MCP server tools as java-ai-agent Tools).
 langchain4j-mcp = { module = "dev.langchain4j:langchain4j-mcp", version.ref = "langchain4jMcp" }
+
+# Demos: an embedded SQL database to show the agent querying large datasets via a tool.
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
