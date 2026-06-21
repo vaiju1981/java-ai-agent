@@ -81,8 +81,11 @@ gateway, education tools) run on it, proving it is end-to-end and trustworthy, n
   with progressive disclosure via `SkillfulAgent`; episodic memory (`EpisodicStore`); and a
   `ReflectiveAgent` that recalls lessons, self-critiques (`Reflector`/`LlmReflector`), and retries —
   learning within a run and across runs. ✅ done — cross-run learning covered by a test.
-- **Phase 6:** Google ADK + Spring AI adapters via the existing seams; finish `kidguard` (crisis
-  detection + blocklist).
+- **Phase 6:** more substrate + finish `kidguard`. ✅ done — `SpringAiModelPort` (second L0
+  substrate; text + usage), an `AdkAgent` that wraps a Google ADK agent via the agent-as-component
+  seam (compiles against ADK 1.4.0; reduction logic tested with real ADK objects), and the
+  `CrisisGuardrail` + `Guardrails.kidguard(...)` pipeline. Follow-ups: tool-calling parity for the
+  Spring AI adapter; live ADK end-to-end needs a configured ADK model.
 
 ## Decisions
 

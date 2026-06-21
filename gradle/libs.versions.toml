@@ -7,6 +7,7 @@ junit = "5.11.3"
 jackson = "2.17.2"
 opentelemetry = "1.43.0"
 springai = "1.0.0"
+googleadk = "1.4.0"
 # LangChain4j is our first reference integration (the L0 substrate adapter).
 # Managed via its BOM so all langchain4j-* modules stay version-aligned.
 langchain4j = "1.0.1"
@@ -36,3 +37,6 @@ opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testi
 # Spring AI — a second L0 substrate adapter.
 spring-ai-bom = { module = "org.springframework.ai:spring-ai-bom", version.ref = "springai" }
 spring-ai-client-chat = { module = "org.springframework.ai:spring-ai-client-chat" }
+
+# Google ADK — wrapped as an Agent-as-component (a full agent framework, consumed one level up).
+google-adk = { module = "com.google.adk:google-adk", version.ref = "googleadk" }

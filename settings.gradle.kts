@@ -10,6 +10,7 @@ include(
     "agent-core",
     "agent-langchain4j",
     "agent-spring-ai",
+    "agent-adk",
     "agent-observability-otel",
     "examples",
 )
