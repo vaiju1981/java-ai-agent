@@ -3,6 +3,7 @@ package dev.vaijanath.aiagent.examples;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.Locale;
@@ -23,7 +24,8 @@ public final class UnitConverterTool implements Tool {
                    "value":{"type":"number"},
                    "from":{"type":"string"},
                    "to":{"type":"string"}},
-                 "required":["value","from","to"]}""");
+                 "required":["value","from","to"]}""",
+                ToolEffect.READ_ONLY);
     }
 
     @Override

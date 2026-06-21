@@ -28,6 +28,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 - **Trust governs the universal `Agent` seam** — new `PolicyEnforcingAgent` / `Trust.govern(agent,
   guardrails…)` enforces input/output guardrails and the request deadline around *any* agent, so
   composed and black-box agents (`DeepAgent`, `AdkAgent`) are governed too, not just `DefaultAgent`.
+- **Deny-effectful is the runtime default** — `DefaultAgent` (and `SkillfulAgent`, which now exposes
+  a `toolApprover`) deny effectful tools unless allow-listed; opt into `ToolApprovers.allowAll()`
+  explicitly for dev/test. Read-only demo, example, and built-in tools are classified `READ_ONLY` so
+  they keep running under the safe default; tools of unspecified effect (e.g. MCP server tools) are
+  treated as effectful and denied until allow-listed.
 - **Tool-call timeout** — `DefaultAgent.builder().toolTimeout(Duration)` bounds each tool call on a
   virtual thread, so a hung tool returns an error instead of stalling the turn.
 - **Adversarial + concurrency tests** — cross-session leakage under 64 concurrent sessions, a

@@ -8,6 +8,7 @@ import dev.vaijanath.aiagent.demos.SimpleTool;
 import dev.vaijanath.aiagent.demos.Sql;
 import dev.vaijanath.aiagent.demos.SqlTool;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.sql.Connection;
@@ -215,7 +216,7 @@ final class FinanceTools {
         return new Tool() {
             @Override
             public ToolSpec spec() {
-                return new ToolSpec(name, description, schema);
+                return new ToolSpec(name, description, schema, ToolEffect.READ_ONLY);
             }
 
             @Override

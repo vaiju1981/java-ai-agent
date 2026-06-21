@@ -3,12 +3,13 @@ package dev.vaijanath.aiagent.demos;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.function.Function;
 
-/** A compact {@link Tool} built from a name, description, JSON schema, and a function — so a large
- *  toolkit of small calculators/lookups can be defined inline without one class each. */
+/** A compact {@link Tool} built from a name, description, JSON schema, and a pure function — so a
+ *  large toolkit of small calculators/lookups can be defined inline. Pure, so {@link ToolEffect#READ_ONLY}. */
 public final class SimpleTool implements Tool {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -27,7 +28,7 @@ public final class SimpleTool implements Tool {
 
     @Override
     public ToolSpec spec() {
-        return new ToolSpec(name, description, schema);
+        return new ToolSpec(name, description, schema, ToolEffect.READ_ONLY);
     }
 
     @Override

@@ -9,6 +9,7 @@ import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.List;
@@ -21,7 +22,8 @@ class ManyToolsDispatchTest {
         return new Tool() {
             @Override
             public ToolSpec spec() {
-                return new ToolSpec("tool_" + n, "operation " + n, "{\"type\":\"object\"}");
+                return new ToolSpec("tool_" + n, "operation " + n, "{\"type\":\"object\"}",
+                        ToolEffect.READ_ONLY);
             }
 
             @Override

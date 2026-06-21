@@ -12,6 +12,7 @@ import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.List;
@@ -22,7 +23,8 @@ class SkillfulAgentTest {
     private static final Tool ADD = new Tool() {
         @Override
         public ToolSpec spec() {
-            return new ToolSpec("add", "add numbers", "{\"type\":\"object\",\"properties\":{}}");
+            return new ToolSpec("add", "add numbers", "{\"type\":\"object\",\"properties\":{}}",
+                    ToolEffect.READ_ONLY);
         }
 
         @Override

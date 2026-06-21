@@ -8,6 +8,7 @@ import dev.vaijanath.aiagent.guardrail.Guardrail;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolApprover;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -31,6 +32,7 @@ public final class SkillfulAgent implements Agent {
     private final List<Tool> baseTools;
     private final List<Guardrail> guardrails;
     private final List<AgentObserver> observers;
+    private final ToolApprover toolApprover;
     private final int maxSteps;
 
     private SkillfulAgent(Builder b) {
@@ -41,6 +43,7 @@ public final class SkillfulAgent implements Agent {
         this.baseTools = List.copyOf(b.baseTools);
         this.guardrails = List.copyOf(b.guardrails);
         this.observers = List.copyOf(b.observers);
+        this.toolApprover = b.toolApprover;
         this.maxSteps = b.maxSteps;
     }
 
@@ -54,6 +57,9 @@ public final class SkillfulAgent implements Agent {
         baseTools.forEach(builder::tool);
         guardrails.forEach(builder::guardrail);
         observers.forEach(builder::observer);
+        if (toolApprover != null) {
+            builder.toolApprover(toolApprover);
+        }
 
         for (Skill skill : selected) {
             if (!prompt.isEmpty()) {
@@ -78,6 +84,7 @@ public final class SkillfulAgent implements Agent {
         private final List<Tool> baseTools = new ArrayList<>();
         private final List<Guardrail> guardrails = new ArrayList<>();
         private final List<AgentObserver> observers = new ArrayList<>();
+        private ToolApprover toolApprover;
         private int maxSteps = 8;
 
         public Builder model(ModelPort model) {
@@ -112,6 +119,12 @@ public final class SkillfulAgent implements Agent {
 
         public Builder observer(AgentObserver observer) {
             this.observers.add(observer);
+            return this;
+        }
+
+        /** Gate the equipped tools' execution. Default (via the runtime): deny effectful tools. */
+        public Builder toolApprover(ToolApprover toolApprover) {
+            this.toolApprover = toolApprover;
             return this;
         }
 

@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.demos.health;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.LinkedHashMap;
@@ -39,7 +40,8 @@ public final class LabReferenceTool implements Tool {
                 "lab_reference",
                 "Look up the normal reference range for a common lab test (e.g. glucose, LDL, A1C, TSH).",
                 "{\"type\":\"object\",\"properties\":{\"test\":{\"type\":\"string\"}},"
-                        + "\"required\":[\"test\"]}");
+                        + "\"required\":[\"test\"]}",
+                ToolEffect.READ_ONLY);
     }
 
     @Override
