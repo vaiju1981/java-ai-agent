@@ -7,6 +7,7 @@ import dev.vaijanath.aiagent.memory.InMemoryMemory;
 import dev.vaijanath.aiagent.memory.Memory;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
+import dev.vaijanath.aiagent.model.ModelPorts;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
@@ -92,7 +93,9 @@ public final class DefaultAgent implements Agent {
             notify(o -> o.onModelCall(req));
             final ModelResponse resp;
             try {
-                resp = model.chat(req);
+                // Stream when the model supports it, forwarding tokens to observers; otherwise
+                // ModelPorts.stream falls back to a single chat() call.
+                resp = ModelPorts.stream(model, req, this::emitToken);
             } catch (RuntimeException e) {
                 // Graceful failure: surface it, never crash out of run().
                 log.warn("model call failed; ending turn gracefully", e);
@@ -173,6 +176,10 @@ public final class DefaultAgent implements Agent {
             log.warn("tool '{}' threw", tool.name(), e);
             return ToolResult.error("tool '" + tool.name() + "' failed: " + e.getMessage());
         }
+    }
+
+    private void emitToken(String token) {
+        notify(o -> o.onToken(token));
     }
 
     /** Dispatches an event to every observer, isolating failures so they never break the run. */

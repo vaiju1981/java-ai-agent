@@ -31,6 +31,9 @@ public interface AgentObserver {
 
     default void onTurnEnd(AgentResponse response) {}
 
+    /** A streamed output chunk from the model (when the model supports streaming). */
+    default void onToken(String token) {}
+
     /** A recoverable failure during a turn (e.g. the model call threw). The turn ends gracefully. */
     default void onError(String stage, Throwable error) {}
 }
