@@ -1,11 +1,11 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.research;
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
 import dev.vaijanath.aiagent.agent.DefaultAgent;
 import dev.vaijanath.aiagent.deep.DeepAgent;
 import dev.vaijanath.aiagent.deep.LlmPlanner;
+import dev.vaijanath.aiagent.demos.Demos;
 import dev.vaijanath.aiagent.langchain4j.OllamaModelPorts;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.StructuredOutput;

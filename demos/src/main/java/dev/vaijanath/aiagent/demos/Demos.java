@@ -5,12 +5,12 @@ import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.StubModelPort;
 
 /** Shared helpers for the demos. */
-final class Demos {
+public final class Demos {
 
     private Demos() {}
 
     /** A real Ollama model if {@code AGENT_MODEL} is set, else an honest stub. */
-    static ModelPort modelFromEnv() {
+    public static ModelPort modelFromEnv() {
         String modelName = System.getenv("AGENT_MODEL");
         if (modelName == null || modelName.isBlank()) {
             return new StubModelPort();
@@ -19,7 +19,7 @@ final class Demos {
         return OllamaModelPorts.ollama(baseUrl, modelName);
     }
 
-    static boolean isStub(ModelPort port) {
+    public static boolean isStub(ModelPort port) {
         return port instanceof StubModelPort;
     }
 }

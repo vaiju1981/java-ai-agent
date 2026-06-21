@@ -1,4 +1,4 @@
-package dev.vaijanath.aiagent.demos;
+package dev.vaijanath.aiagent.demos.logs;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

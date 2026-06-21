@@ -1,4 +1,4 @@
-package dev.vaijanath.aiagent.demos;
+package dev.vaijanath.aiagent.demos.support;
 
 import java.util.ArrayList;
 import java.util.List;

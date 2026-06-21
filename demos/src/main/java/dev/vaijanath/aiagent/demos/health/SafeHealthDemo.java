@@ -1,9 +1,9 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.health;
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
 import dev.vaijanath.aiagent.agent.DefaultAgent;
+import dev.vaijanath.aiagent.demos.Demos;
 import dev.vaijanath.aiagent.guardrail.CrisisGuardrail;
 import dev.vaijanath.aiagent.guardrail.LlamaGuardGuardrail;
 import dev.vaijanath.aiagent.guardrail.PiiScrubGuardrail;

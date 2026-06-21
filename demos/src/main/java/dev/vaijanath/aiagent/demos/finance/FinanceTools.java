@@ -1,7 +1,8 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.finance;
 import static dev.vaijanath.aiagent.demos.SimpleTool.numbers;
 
+import dev.vaijanath.aiagent.demos.SimpleTool;
+import dev.vaijanath.aiagent.demos.SqlTool;
 import dev.vaijanath.aiagent.tool.Tool;
 import java.util.ArrayList;
 import java.util.List;

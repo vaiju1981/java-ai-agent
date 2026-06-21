@@ -19,7 +19,7 @@ dependencies {
 application {
     // Override with -PmainClass=...<Demo> to run a different demo.
     mainClass.set(providers.gradleProperty("mainClass")
-        .orElse("dev.vaijanath.aiagent.demos.DataAnalystDemo"))
+        .orElse("dev.vaijanath.aiagent.demos.data.DataAnalystDemo"))
     // SQLite loads a native lib; opt in so JDK 22+ doesn't warn.
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }

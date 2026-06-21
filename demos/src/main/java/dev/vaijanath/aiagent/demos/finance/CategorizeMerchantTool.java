@@ -1,4 +1,4 @@
-package dev.vaijanath.aiagent.demos;
+package dev.vaijanath.aiagent.demos.finance;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.tool.Tool;

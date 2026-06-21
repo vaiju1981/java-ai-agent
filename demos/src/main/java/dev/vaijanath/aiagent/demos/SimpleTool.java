@@ -40,7 +40,7 @@ public final class SimpleTool implements Tool {
     }
 
     /** Builds an object schema with the given number properties, all required. */
-    static String numbers(String... names) {
+    public static String numbers(String... names) {
         StringBuilder props = new StringBuilder();
         StringBuilder required = new StringBuilder();
         for (int i = 0; i < names.length; i++) {

@@ -1,8 +1,9 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.finance;
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.DefaultAgent;
+import dev.vaijanath.aiagent.demos.Demos;
+import dev.vaijanath.aiagent.demos.SyntheticData;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.tool.Tool;
 import java.util.List;
