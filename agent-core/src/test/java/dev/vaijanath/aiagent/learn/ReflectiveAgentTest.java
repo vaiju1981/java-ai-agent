@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
+import dev.vaijanath.aiagent.agent.RequestContext;
 import dev.vaijanath.aiagent.memory.InMemoryEpisodicStore;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
@@ -56,5 +59,22 @@ class ReflectiveAgentTest {
 
         assertTrue(second.output().contains("Canberra"),
                 "cross-run learning should fix it on the first attempt; got: " + second.output());
+    }
+
+    @Test
+    void retriesCarryTheCallersGovernanceContext() {
+        List<String> tenantsSeen = new CopyOnWriteArrayList<>();
+        Supplier<Agent> worker = () -> request -> {
+            tenantsSeen.add(request.context().tenant());
+            return AgentResponse.completed("ok");
+        };
+        ReflectiveAgent agent = ReflectiveAgent.builder()
+                .worker(worker).reflector((task, answer) -> Reflection.ok()).maxAttempts(1)
+                .build();
+
+        agent.run(new AgentRequest("hi", new RequestContext("s", "alice", "acme", null, null, null)));
+
+        assertTrue(tenantsSeen.contains("acme"),
+                "the worker must inherit the caller's tenant, not an anonymous context: " + tenantsSeen);
     }
 }
