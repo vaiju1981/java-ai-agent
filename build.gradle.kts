@@ -92,6 +92,17 @@ subprojects {
                     }
                 }
             }
+            repositories {
+                // Credentials come from ~/.gradle/gradle.properties (never the repo).
+                maven {
+                    name = "centralSnapshots"
+                    setUrl("https://central.sonatype.com/repository/maven-snapshots/")
+                    credentials {
+                        username = project.findProperty("centralUsername") as String?
+                        password = project.findProperty("centralPassword") as String?
+                    }
+                }
+            }
         }
     }
 }
