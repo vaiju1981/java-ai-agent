@@ -20,18 +20,23 @@ never enter the prompt — only each query's aggregated result does — so it sc
 Sample (verified live): "total spent per category", "top-5 merchants", "count over $200 + average"
 — each answered by a single generated `SELECT` over all 5,000 rows.
 
-## PersonalFinanceDemo — many tools, the model picks
+## PersonalFinanceDemo — many tools, the model picks the right one
 
-A personal-finance assistant over the same data with three tools — `categorize_merchant` (classify a
-merchant), `budget_check` (spend vs. monthly budget), and `sql` (anything else, at scale). The model
-chooses the right tool per question.
+A personal-finance assistant with a realistic **~24-tool** toolkit: `categorize_merchant`,
+`budget_check`, `sql` (over the transactions), plus ~20 finance calculators (compound interest, loan
+payment, tip, savings rate, ROI, …). All tools are presented at once — so this also **validates that
+the agent picks the correct tool when there are many**.
 
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.PersonalFinanceDemo
 ```
 
-Sample (verified live): classifies "Blue Bottle Coffee" → Dining; flags Entertainment as over budget
-in March; identifies Travel as the biggest category and suggests where to cut back.
+Sample (verified live, 24 tools): categorizes Blue Bottle → Dining; flags Entertainment over budget;
+finds Travel as the top category (sql); computes the future value of an investment, a mortgage
+payment, and an 18% tip — each routed to the right tool, with correct math.
+
+(The runtime is also unit-tested to dispatch correctly across **40** tools, and a `ToolSelector` can
+present only the relevant subset per turn when a toolkit grows larger still.)
 
 ## LogAnalystDemo — scale, a different dataset
 
