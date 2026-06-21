@@ -81,7 +81,8 @@ tools) run on it.
   interleaving; **`EpisodicStore`** for long-term, cross-session learning (in-memory, file-persistent,
   or semantic/embedding-based).
 - **`AgentObserver`** — lifecycle events; `LoggingObserver`, `TokenAccountingObserver`,
-  `RecordingObserver` (+ `ReplayModelPort` for deterministic replay), `OtelAgentObserver`.
+  `RecordingObserver` (+ `ReplayModelPort` and `ReplayToolExecutor` for deterministic,
+  side-effect-free replay), `OtelAgentObserver`.
 - **`AuditSink` / `AuditEvent`** — a durable, identity-bearing audit trail emitted by the *runtime*
   (which holds the request context), not by best-effort observers: each event carries an id,
   timestamp, traceId, session, principal, and tenant. `FileAuditSink` appends and flushes per event.
