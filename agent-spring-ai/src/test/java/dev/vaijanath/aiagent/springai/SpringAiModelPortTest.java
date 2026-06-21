@@ -1,7 +1,6 @@
 package dev.vaijanath.aiagent.springai;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vaijanath.aiagent.model.Message;

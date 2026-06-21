@@ -1,10 +1,16 @@
+import com.diffplug.gradle.spotless.SpotlessExtension
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.javadoc.Javadoc
 import org.gradle.external.javadoc.StandardJavadocDocletOptions
+import org.gradle.testing.jacoco.tasks.JacocoReport
 
 // Root build — shared configuration for every module.
+
+plugins {
+    id("com.diffplug.spotless") version "7.0.2"
+}
 
 allprojects {
     group = "io.github.vaiju1981"
@@ -16,7 +22,6 @@ allprojects {
 }
 
 subprojects {
-    // Target Java 21 (the baseline consumers need) even though we build on a newer JDK.
     tasks.withType<JavaCompile>().configureEach {
         options.release.set(21)
         options.encoding = "UTF-8"
@@ -27,10 +32,31 @@ subprojects {
         useJUnitPlatform()
     }
 
-    // Publishing for library modules only (the examples application is not published).
-    plugins.withId("java-library") {
-        apply(plugin = "maven-publish")
+    // Formatting + import hygiene for every module; `spotlessCheck` runs as part of `check`.
+    apply(plugin = "com.diffplug.spotless")
+    configure<SpotlessExtension> {
+        java {
+            target("src/**/*.java")
+            removeUnusedImports()
+            importOrder()
+            trimTrailingWhitespace()
+            endWithNewline()
+        }
+    }
 
+    // Library modules: coverage report + publishing.
+    plugins.withId("java-library") {
+        apply(plugin = "jacoco")
+        tasks.named("test") {
+            finalizedBy(tasks.named("jacocoTestReport"))
+        }
+        tasks.withType<JacocoReport>().configureEach {
+            reports {
+                xml.required.set(true)
+            }
+        }
+
+        apply(plugin = "maven-publish")
         extensions.configure<JavaPluginExtension> {
             withSourcesJar()
             withJavadocJar()
