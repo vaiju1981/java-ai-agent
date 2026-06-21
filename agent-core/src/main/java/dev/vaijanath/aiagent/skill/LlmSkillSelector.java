@@ -37,7 +37,7 @@ public final class LlmSkillSelector implements SkillSelector {
     }
 
     @Override
-    public List<Skill> select(SkillRegistry registry, String task) {
+    public List<Skill> select(SkillCatalog registry, String task) {
         String catalog = registry.catalog();
         if (catalog.isBlank()) {
             return List.of();

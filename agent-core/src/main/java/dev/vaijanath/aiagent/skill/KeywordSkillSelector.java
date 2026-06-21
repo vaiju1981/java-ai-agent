@@ -10,9 +10,9 @@ import java.util.Locale;
 public final class KeywordSkillSelector implements SkillSelector {
 
     @Override
-    public List<Skill> select(SkillRegistry registry, String task) {
+    public List<Skill> select(SkillCatalog catalog, String task) {
         String t = task.toLowerCase(Locale.ROOT);
-        return registry.all().stream()
+        return catalog.all().stream()
                 .filter(s -> matches(t, s))
                 .toList();
     }
