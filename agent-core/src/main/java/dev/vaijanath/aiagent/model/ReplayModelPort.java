@@ -5,8 +5,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A {@link ModelPort} that replays previously recorded model responses in order. Combined with
- * {@code RecordingObserver}, this gives deterministic replay of a run: the model's (nondeterministic)
- * outputs are fixed, so the loop — including tool execution — reproduces.
+ * {@code RecordingObserver} and a {@code ReplayToolExecutor}, this gives deterministic replay of a
+ * run: the model's (nondeterministic) outputs are fixed and recorded tool results are returned
+ * without re-running the real tools, so the loop reproduces with no repeated side effects.
  */
 public final class ReplayModelPort implements ModelPort {
 

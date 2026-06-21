@@ -48,6 +48,10 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   memory is scoped per session via `ConversationStore`, so one instance serves many concurrent
   users/tenants without interleaving histories, and a turn past its deadline stops cleanly. Sub-agent
   calls (e.g. `DeepAgent` workers) inherit identity/tenant/trace with their own session.
+- **Side-effect-free replay** — `RecordingObserver` now records tool results as well as model
+  responses, and a new `ReplayToolExecutor` returns them in order during replay instead of re-running
+  the real tools (`DefaultAgent.builder().toolExecutor(...)`). A recorded run reproduces
+  deterministically without repeating writes, payments, or emails.
 - **Streaming no longer bypasses output safety** — raw, pre-guardrail tokens are not streamed by
   default; `AgentObserver.onToken` is documented as an explicitly unsafe/raw channel, opt-in via
   `streamRawTokens(true)`. The guarded result is delivered only after output guardrails run.

@@ -21,6 +21,7 @@ import dev.vaijanath.aiagent.tool.ToolApprover;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
 import dev.vaijanath.aiagent.tool.ToolCallContext;
 import dev.vaijanath.aiagent.tool.ToolDecision;
+import dev.vaijanath.aiagent.tool.ToolExecutor;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSelector;
 import dev.vaijanath.aiagent.tool.ToolSelectors;
@@ -60,6 +61,7 @@ public final class DefaultAgent implements Agent {
     private final Map<String, Tool> tools;
     private final ToolApprover toolApprover;
     private final ToolSelector toolSelector;
+    private final ToolExecutor toolExecutor;
     private final ConversationStore conversations;
     private final List<AgentObserver> observers;
     private final AuditSink auditSink;
@@ -73,6 +75,7 @@ public final class DefaultAgent implements Agent {
         this.observers = List.copyOf(b.observers);
         this.toolApprover = b.toolApprover != null ? b.toolApprover : ToolApprovers.allowAll();
         this.toolSelector = b.toolSelector != null ? b.toolSelector : ToolSelectors.all();
+        this.toolExecutor = b.toolExecutor;
         this.conversations = b.conversationStore != null
                 ? b.conversationStore
                 : new InMemoryConversationStore(
@@ -158,7 +161,11 @@ public final class DefaultAgent implements Agent {
                 memory.add(Message.assistant(resp.text(), resp.toolCalls()));
                 for (ToolCall call : resp.toolCalls()) {
                     notify(o -> o.onToolCall(call));
-                    ToolResult result = invokeWithPolicy(call, activeByName, ctx);
+                    // A configured executor (e.g. ReplayToolExecutor) overrides real execution;
+                    // otherwise authorize and invoke the real tool.
+                    ToolResult result = (toolExecutor != null)
+                            ? toolExecutor.execute(call.name(), call.argumentsJson())
+                            : invokeWithPolicy(call, activeByName, ctx);
                     notify(o -> o.onToolResult(call.name(), result));
                     memory.add(Message.toolResult(call.id(), call.name(), result.content()));
                 }
@@ -277,6 +284,7 @@ public final class DefaultAgent implements Agent {
         private AuditSink auditSink;
         private ToolApprover toolApprover;
         private ToolSelector toolSelector;
+        private ToolExecutor toolExecutor;
         private Supplier<Memory> memoryFactory;
         private ConversationStore conversationStore;
         private String systemPrompt;
@@ -318,6 +326,16 @@ public final class DefaultAgent implements Agent {
         /** Choose which tools to present per turn (e.g. relevant subset of many). Default: all. */
         public Builder toolSelector(ToolSelector toolSelector) {
             this.toolSelector = toolSelector;
+            return this;
+        }
+
+        /**
+         * Override how tool calls become results — e.g. a {@code ReplayToolExecutor} for
+         * side-effect-free replay. When set, it replaces the authorize-then-invoke path, so use it
+         * only for replay or testing, never to bypass authorization in production.
+         */
+        public Builder toolExecutor(ToolExecutor toolExecutor) {
+            this.toolExecutor = toolExecutor;
             return this;
         }
 
