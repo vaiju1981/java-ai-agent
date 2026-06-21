@@ -40,7 +40,10 @@ human-in-the-loop, evals). This project turns that fragmentation into its reason
 It is also designed to be **dogfooded**: the author's own products (Mitra, the kid-safety gateway,
 education tools) are intended to run on it — which forces it to be genuinely end-to-end, not a demo.
 
-## The layering (see [DESIGN.md](DESIGN.md))
+## Architecture (see [DESIGN.md](DESIGN.md))
+
+**Four layers** — the substrate you depend on, plus the runtime, cognition, and trust layers this
+project owns on top:
 
 | Layer | Owner | What |
 |---|---|---|
@@ -81,6 +84,55 @@ flowchart TB
     L1 --> L0
 ```
 
+### How a request flows
+
+One turn through `DefaultAgent`: input guardrails, then a reason-and-act loop over a (decorated)
+`ModelPort` and authorized tools, then output guardrails. The rows of a database, an MCP server's
+tools, or a cloud model all sit *outside* the core, reached only through a seam — so `agent-core`
+stays dependency-free, and memory, skills, and observers attach without touching the loop.
+
+```mermaid
+flowchart TB
+    req([AgentRequest]) --> IG["Input guardrails<br/>crisis · PII · Llama Guard · fail-closed"]
+    IG --> LOOP
+
+    subgraph CORE["agent-core · DefaultAgent loop — reason and act, up to maxSteps"]
+      direction LR
+      LOOP["agent loop"]
+      LOOP -->|chat| MODEL["ModelPort<br/>Resilient ▸ Budget ▸ Observing"]
+      MODEL -->|text or tool calls| LOOP
+      LOOP -->|tool call| TOOLS["Tools<br/>ToolSelector ▸ ToolApprover ▸ invoke"]
+      TOOLS -->|result| LOOP
+    end
+
+    MODEL --> ADP["L0 adapter · LangChain4j / Spring AI"] --> LLM[("LLM · Ollama / cloud")]
+    TOOLS --> EXT["local tools · MCP servers · wrapped ADK agent"]
+
+    LOOP -. recall · store .-> COG["Memory and skills<br/>episodic · persistent · semantic · reflection"]
+    LOOP -. events .-> OBS["Observers<br/>tokens · replay · OpenTelemetry"]
+
+    LOOP -->|final answer| OG["Output guardrails"] --> resp([AgentResponse])
+```
+
+### Deep agents — plan, fan out, synthesize
+
+A `DeepAgent` plans a task into steps, runs a sub-agent per step **concurrently on Loom virtual
+threads** writing to a shared workspace, then synthesizes the result. Each sub-agent is itself an
+`Agent`, so any agent — even another `DeepAgent` — composes as a sub-agent with no extra wiring.
+
+```mermaid
+flowchart LR
+    task([task]) --> P["LlmPlanner<br/>structured output"]
+    P --> plan["Plan · steps 1..n"]
+    plan --> W1["sub-agent 1"]
+    plan --> W2["sub-agent 2"]
+    plan --> Wn["sub-agent n"]
+    W1 --> WS[("shared Workspace")]
+    W2 --> WS
+    Wn --> WS
+    WS --> SYN["synthesize"] --> out([result])
+```
+
 ## How it compares
 
 It is **not** a competitor to the substrate frameworks — it's the trust + orchestration layer that
@@ -97,6 +149,27 @@ runs *on top* of them.
 | Eval harness + budget enforcement | **yes** | partial | no |
 | Zero-dependency core | **yes** | no | no |
 
+## Demos
+
+The [`demos`](demos/README.md) module has six runnable, end-to-end demos — each backed by real data
+or the real trust layer, and verified live against a local model:
+
+```bash
+export AGENT_MODEL=gemma4:31b-cloud   # any pulled, tool-capable Ollama model
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.<group>.<Demo>
+```
+
+| Demo | Package | What it shows |
+|---|---|---|
+| **PersonalFinanceDemo** | `finance` | a ~24-tool toolkit — data lookups, data-aware analyses over real transactions (top merchants, recurring subscriptions, budget status), and planning calculators — so the agent must pick the right tool among many |
+| **DataAnalystDemo** | `data` | explore-then-query over ~5,000 SQLite rows: schema discovery + a group-by `aggregate` + read-only `sql`; rows stay in the DB, so it scales |
+| **LogAnalystDemo** | `logs` | natural-language questions over ~10,000 request logs, each answered by one generated `SELECT` |
+| **SupportTriageDemo** | `support` | structured classification — tickets → `{priority, category, team}` bound straight to a record (no parsing) |
+| **SafeHealthDemo** | `health` | the trust layer on sensitive data: kidguard guardrails (crisis · PII · Llama Guard) under an explain-never-diagnose rule |
+| **ResearchBriefingDemo** | `research` | a deep agent — plan → concurrent sub-agents → synthesized briefing |
+
+See [demos/README.md](demos/README.md) for what each one does and sample output.
+
 ## Modules
 
 - **`agent-core`** — the SPIs and the runtime. **Zero framework dependencies** (only SLF4J).
@@ -111,6 +184,8 @@ runs *on top* of them.
   keeps the OTel SDK out of `agent-core`.
 - **`examples`** — a graduated set of runnable agents, from `MinimalAgent` to the `StudyBuddy`
   capstone (which composes everything); see [examples/README.md](examples/README.md).
+- **`demos`** — six real-world, end-to-end demos (finance, data, logs, support, health, research),
+  each verified live against a local model; see [demos/README.md](demos/README.md).
 
 ## Extending it
 
