@@ -87,8 +87,10 @@ tools) run on it.
   side-effect-free replay), `OtelAgentObserver`.
 - **`AuditSink` / `AuditEvent`** — a durable, identity-bearing audit trail emitted by the *runtime*
   (which holds the request context), not by best-effort observers: each event carries an id,
-  timestamp, traceId, session, principal, and tenant. `FileAuditSink` appends and flushes per event.
-  Distinct from `AgentObserver` (telemetry): audit answers "who did what, when, under which trace".
+  timestamp, traceId, session, principal, and tenant. `FileAuditSink` appends and fsyncs per event
+  (sanitized fields, never throws into the caller). Distinct from `AgentObserver` (best-effort
+  telemetry, which only ever sees post-guardrail content): audit answers "who did what, when, under
+  which trace".
 - **`Planner` / `Reflector` / `SkillSelector` / `SkillSynthesizer`** — LLM-driven helpers, each
   preferring `StructuredOutput` with a free-text fallback.
 - **`SkillQuarantine` / `SkillApprover`** — governed learning: an acquired skill is quarantined with

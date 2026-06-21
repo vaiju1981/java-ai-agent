@@ -38,7 +38,8 @@ public final class LoggingObserver implements AgentObserver {
 
     @Override
     public void onToolCall(ToolCall call) {
-        log.debug("tool call: {} {}", call.name(), call.argumentsJson());
+        // Log the tool name only — raw arguments may carry sensitive data.
+        log.debug("tool call: {}", call.name());
     }
 
     @Override

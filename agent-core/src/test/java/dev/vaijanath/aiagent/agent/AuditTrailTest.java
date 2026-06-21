@@ -1,14 +1,17 @@
 package dev.vaijanath.aiagent.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vaijanath.aiagent.audit.AuditEvent;
+import dev.vaijanath.aiagent.audit.AuditSink;
 import dev.vaijanath.aiagent.audit.FileAuditSink;
 import dev.vaijanath.aiagent.audit.InMemoryAuditSink;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
+import dev.vaijanath.aiagent.model.StubModelPort;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
@@ -80,5 +83,21 @@ class AuditTrailTest {
         assertEquals(2, lines.size());
         assertTrue(lines.get(0).contains("tool.denied"));
         assertTrue(lines.get(0).contains("\t"), "tab-separated line");
+    }
+
+    @Test
+    void aThrowingAuditSinkDoesNotBreakTheRun() {
+        AuditSink boom = event -> {
+            throw new RuntimeException("sink down");
+        };
+
+        AgentResponse r = DefaultAgent.builder()
+                .model(new StubModelPort())
+                .auditSink(boom)
+                .build()
+                .run(new AgentRequest("hi"));
+
+        assertFalse(r.blocked());
+        assertEquals("completed", r.stopReason());
     }
 }
