@@ -41,11 +41,12 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   context; tool exception detail is logged but no longer leaks into the model context. (Still open:
   JSON-schema argument validation, idempotency keys, explicit untrusted-result framing, per-tenant
   skill/lesson isolation, and hard cancellation of interruption-ignoring tools — a JVM limitation.)
-- **Whole-turn deadline and complete seam lifecycle** — `PolicyEnforcingAgent` now bounds the entire
+- **Whole-turn deadline and exactly-once seam lifecycle** — `PolicyEnforcingAgent` bounds the entire
   turn — input guardrails, the delegate, and output guardrails — under the deadline, so even a hanging
-  model-backed guardrail cannot exceed it; and it emits a `turn.start` and a matching `turn.end` on
-  every path (completed, input/output blocked, deadline) for a complete audit lifecycle. (Cancellation
-  remains cooperative — a JVM thread cannot be force-stopped.)
+  model-backed guardrail cannot exceed it. `turn.end` is recorded **exactly once** in a `finally`
+  (covering completion, blocks, the deadline, and exceptions) and only by the caller, so a thrown
+  guardrail/delegate still closes the lifecycle and a late interruption-ignoring worker cannot
+  double-record. (Cancellation remains cooperative — a JVM thread cannot be force-stopped.)
 - **Hard deadline and unbypassable output policy** — `PolicyEnforcingAgent` runs the delegate
   bounded by the remaining deadline (cancelling on expiry) and re-checks before delivering, so a
   blocking or late delegate cannot return a result past the deadline; output guardrails now run even
