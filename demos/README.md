@@ -7,18 +7,23 @@ export AGENT_MODEL=gemma4:31b-cloud   # any pulled, tool-capable Ollama model
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.<Demo>
 ```
 
-## DataAnalystDemo — works at scale
+## DataAnalystDemo — explore, then query, at scale
 
-Generates a synthetic **SQLite database of 5,000 transactions**, then answers natural-language
-questions by having the model write **SQL that a read-only tool executes**. The point: the rows
-never enter the prompt — only each query's aggregated result does — so it scales to large datasets.
+Generates a synthetic **SQLite database of 5,000 transactions** and gives the agent a **6-tool
+toolkit**: schema discovery (`list_tables`, `describe_table`, `sample_rows`, `distinct_values`,
+`row_count`) plus a read-only `sql` tool. The model **explores the schema, then writes SQL** to
+answer. The point: the rows never enter the prompt — only each tool's result does — so it scales to
+large datasets, and the discovery tools let the agent work without being told the schema up front.
+Identifiers passed to the schema tools are validated, so an injected table/column name can't smuggle
+SQL.
 
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.DataAnalystDemo
 ```
 
-Sample (verified live): "total spent per category", "top-5 merchants", "count over $200 + average"
-— each answered by a single generated `SELECT` over all 5,000 rows.
+Sample (verified live, 6 tools): lists the `transactions` columns (`describe_table`), enumerates the
+distinct categories (`distinct_values`), totals spend per category sorted high-to-low (`sql`), and
+shows sample rows (`sample_rows`) — each routed to the right tool over all 5,000 rows.
 
 ## PersonalFinanceDemo — many tools, the model picks the right one
 

@@ -4,11 +4,14 @@ import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.DefaultAgent;
 import dev.vaijanath.aiagent.model.ModelPort;
+import dev.vaijanath.aiagent.tool.Tool;
+import java.util.List;
 
 /**
- * A data analyst over a 5,000-row SQLite database. The agent answers natural-language questions by
- * writing SQL that a tool executes — proving it scales to large data: the rows never enter the
- * prompt, only each query's aggregated result does. Needs {@code AGENT_MODEL} (a SQL-capable model).
+ * A data analyst over a 5,000-row SQLite database. It has a toolkit — schema discovery
+ * ({@code list_tables}, {@code describe_table}, {@code sample_rows}, {@code distinct_values},
+ * {@code row_count}) plus read-only {@code sql} — so the agent can explore the data, then query it.
+ * Scales because the rows stay in the DB; only results enter context. Needs {@code AGENT_MODEL}.
  */
 public final class DataAnalystDemo {
 
@@ -16,27 +19,29 @@ public final class DataAnalystDemo {
         ModelPort model = Demos.modelFromEnv();
         String db = SyntheticData.createTransactionsDb(5_000);
         int rows = SyntheticData.count(db, "transactions");
+        List<Tool> toolkit = DataTools.toolkit(db);
 
         System.out.println("== DataAnalystDemo ==  model: " + model.name());
-        System.out.println("synthetic SQLite DB: " + rows + " transactions in one table\n");
+        System.out.println(rows + " transactions, " + toolkit.size() + " tools (explore + query)\n");
         if (Demos.isStub(model)) {
             System.out.println("(set AGENT_MODEL to a SQL-capable Ollama model — the stub can't write SQL)\n");
         }
 
-        Agent agent = DefaultAgent.builder()
+        DefaultAgent.Builder builder = DefaultAgent.builder()
                 .model(model)
-                .systemPrompt("You are a data analyst. The SQLite table 'transactions' has columns: "
-                        + "id (int), txn_date (TEXT 'YYYY-MM-DD'), merchant (TEXT), category (TEXT), "
-                        + "amount (REAL). Answer every question by calling the 'sql' tool with ONE "
-                        + "read-only SELECT, then summarize the result in plain language.")
-                .tool(new SqlTool(db, 50))
-                .maxSteps(6)
-                .build();
+                .systemPrompt("You are a data analyst. Explore the database with list_tables, "
+                        + "describe_table, sample_rows, distinct_values, and row_count, and run "
+                        + "read-only queries with the sql tool. For any question, explore the schema "
+                        + "if you need to, then answer in plain language.")
+                .maxSteps(8);
+        toolkit.forEach(builder::tool);
+        Agent agent = builder.build();
 
         String[] questions = {
+            "What tables and columns are available in this database?",
+            "What distinct spending categories exist?",
             "What is the total amount spent in each category? Sort highest to lowest.",
-            "Which 5 merchants did I spend the most money at?",
-            "How many transactions were over $200, and what is the overall average transaction amount?",
+            "Show me 3 sample transactions.",
         };
         for (String q : questions) {
             System.out.println("> " + q);
