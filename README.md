@@ -121,6 +121,9 @@ Everything is an interface; implement the seam you need.
   `SkillfulAgent` equips it on demand.
 - **Memory** — pick an `EpisodicStore`: `InMemoryEpisodicStore`, `FileEpisodicStore` (persistent,
   cross-session), or `LangChain4jEpisodicStore` (semantic, embedding-based recall).
+- **Structured output** — declare a result `record` and use `StructuredOutput.generate(request, T.class)`
+  (e.g. `OllamaModelPorts.ollamaStructured(...)`); the model returns JSON bound straight to your type,
+  so you never write a parser. `LlmPlanner(StructuredOutput)` uses this.
 - **An observer** — implement `AgentObserver` (trace/meter/record); failures are isolated.
 - **A tool policy** — implement `ToolApprover.authorize(name, args)` (use `ToolApprovers.allowList(...)`,
   or `ConsoleToolApprover` for human-in-the-loop); wire it via `DefaultAgent.builder().toolApprover(...)`.
