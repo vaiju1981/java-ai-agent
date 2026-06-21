@@ -3,6 +3,8 @@ package dev.vaijanath.aiagent.agent;
 import dev.vaijanath.aiagent.guardrail.Guardrail;
 import dev.vaijanath.aiagent.guardrail.GuardrailDecision;
 import dev.vaijanath.aiagent.guardrail.GuardrailStage;
+import dev.vaijanath.aiagent.memory.ConversationStore;
+import dev.vaijanath.aiagent.memory.InMemoryConversationStore;
 import dev.vaijanath.aiagent.memory.InMemoryMemory;
 import dev.vaijanath.aiagent.memory.Memory;
 import dev.vaijanath.aiagent.model.Message;
@@ -20,12 +22,14 @@ import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSelector;
 import dev.vaijanath.aiagent.tool.ToolSelectors;
 import dev.vaijanath.aiagent.tool.ToolSpec;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +39,11 @@ import org.slf4j.LoggerFactory;
  * <pre>
  *   input guardrails -&gt; ( model call -&gt; optional tool calls )* -&gt; output guardrails
  * </pre>
+ *
+ * <p>The agent is <b>stateless across calls</b>: conversation memory is scoped to the request's
+ * {@link RequestContext#sessionId()} via a {@link ConversationStore}, so one instance can serve many
+ * sessions, users, and tenants concurrently without their histories interleaving. Work on a single
+ * session is serialized so that session's memory stays consistent.
  *
  * <p>Every step emits {@link AgentObserver} events (for tracing, metering, recording). Observer
  * callbacks are isolated: a throwing observer is logged and ignored, never breaking the run.
@@ -48,12 +57,10 @@ public final class DefaultAgent implements Agent {
     private final Map<String, Tool> tools;
     private final ToolApprover toolApprover;
     private final ToolSelector toolSelector;
-    private final Memory memory;
+    private final ConversationStore conversations;
     private final List<AgentObserver> observers;
     private final String systemPrompt;
     private final int maxSteps;
-
-    private boolean systemInstalled = false;
 
     private DefaultAgent(Builder b) {
         this.model = Objects.requireNonNull(b.model, "model");
@@ -61,7 +68,10 @@ public final class DefaultAgent implements Agent {
         this.observers = List.copyOf(b.observers);
         this.toolApprover = b.toolApprover != null ? b.toolApprover : ToolApprovers.allowAll();
         this.toolSelector = b.toolSelector != null ? b.toolSelector : ToolSelectors.all();
-        this.memory = b.memory != null ? b.memory : new InMemoryMemory();
+        this.conversations = b.conversationStore != null
+                ? b.conversationStore
+                : new InMemoryConversationStore(
+                        b.memoryFactory != null ? b.memoryFactory : InMemoryMemory::new);
         this.systemPrompt = b.systemPrompt;
         this.maxSteps = b.maxSteps;
         Map<String, Tool> map = new LinkedHashMap<>();
@@ -73,32 +83,47 @@ public final class DefaultAgent implements Agent {
 
     @Override
     public AgentResponse run(AgentRequest request) {
+        RequestContext ctx = request.context();
         notify(o -> o.onTurnStart(request.input()));
 
-        // 1. Input guardrails — block before anything reaches the model.
+        // 1. Input guardrails — block before anything reaches the model or memory.
         GuardrailDecision in = applyGuardrails(GuardrailStage.INPUT, request.input());
         if (in.blocked()) {
             log.info("input blocked: {}", in.reason());
             return finish(AgentResponse.blocked(in.content(), in.reason()));
         }
 
-        // 2. Seed the conversation.
-        if (!systemInstalled && systemPrompt != null && !systemPrompt.isBlank()) {
-            memory.add(Message.system(systemPrompt));
-            systemInstalled = true;
+        // 2. Serialize work on this session so its memory stays consistent; different sessions
+        //    (different users/tenants) use different memory objects and run concurrently.
+        Memory memory = conversations.get(ctx.sessionId());
+        synchronized (memory) {
+            return converse(ctx, in.content(), memory);
         }
-        memory.add(Message.user(in.content()));
+    }
 
-        // 3. Model / tool loop. Present only the tools the selector deems relevant (default: all),
-        // so an agent with dozens of tools still shows the model a focused, manageable set.
-        List<Tool> activeTools = toolSelector.select(in.content(), List.copyOf(tools.values()));
+    /** The model/tool loop for one turn, holding the session's memory lock. */
+    private AgentResponse converse(RequestContext ctx, String userContent, Memory memory) {
+        if (memory.history().isEmpty() && systemPrompt != null && !systemPrompt.isBlank()) {
+            memory.add(Message.system(systemPrompt));
+        }
+        memory.add(Message.user(userContent));
+
+        // Present only the tools the selector deems relevant (default: all), so an agent with dozens
+        // of tools still shows the model a focused, manageable set.
+        List<Tool> activeTools = toolSelector.select(userContent, List.copyOf(tools.values()));
         List<ToolSpec> toolSpecs = activeTools.stream().map(Tool::spec).toList();
         Map<String, Tool> activeByName = new LinkedHashMap<>();
         for (Tool t : activeTools) {
             activeByName.put(t.name(), t);
         }
+
         String finalText = null;
         for (int step = 0; step < maxSteps; step++) {
+            if (deadlineExceeded(ctx)) {
+                log.info("turn deadline exceeded for session {}", ctx.sessionId());
+                return finish(AgentResponse.stopped(
+                        "I ran out of time on this request.", "deadline_exceeded"));
+            }
             ModelRequest req = new ModelRequest(memory.history(), toolSpecs);
             notify(o -> o.onModelCall(req));
             final ModelResponse resp;
@@ -137,7 +162,7 @@ public final class DefaultAgent implements Agent {
                     "max_steps"));
         }
 
-        // 4. Output guardrails — nothing unsafe reaches the user.
+        // Output guardrails — nothing unsafe reaches the user.
         GuardrailDecision out = applyGuardrails(GuardrailStage.OUTPUT, finalText);
         memory.add(Message.assistant(out.content()));
         if (out.blocked()) {
@@ -145,6 +170,10 @@ public final class DefaultAgent implements Agent {
             return finish(AgentResponse.blocked(out.content(), out.reason()));
         }
         return finish(AgentResponse.completed(out.content()));
+    }
+
+    private boolean deadlineExceeded(RequestContext ctx) {
+        return ctx.deadlineAt().map(d -> !Instant.now().isBefore(d)).orElse(false);
     }
 
     private AgentResponse finish(AgentResponse response) {
@@ -221,7 +250,8 @@ public final class DefaultAgent implements Agent {
         private final List<AgentObserver> observers = new ArrayList<>();
         private ToolApprover toolApprover;
         private ToolSelector toolSelector;
-        private Memory memory;
+        private Supplier<Memory> memoryFactory;
+        private ConversationStore conversationStore;
         private String systemPrompt;
         private int maxSteps = 8;
 
@@ -257,8 +287,15 @@ public final class DefaultAgent implements Agent {
             return this;
         }
 
-        public Builder memory(Memory memory) {
-            this.memory = memory;
+        /** How to create per-session conversation memory (default: in-memory). */
+        public Builder memoryFactory(Supplier<Memory> memoryFactory) {
+            this.memoryFactory = memoryFactory;
+            return this;
+        }
+
+        /** Full control over where session memory lives (advanced; overrides {@code memoryFactory}). */
+        public Builder conversationStore(ConversationStore conversationStore) {
+            this.conversationStore = conversationStore;
             return this;
         }
 

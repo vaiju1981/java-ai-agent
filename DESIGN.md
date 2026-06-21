@@ -58,16 +58,20 @@ tools) run on it.
 - **`ModelPort`** — `chat(ModelRequest) → ModelResponse`. Decorators: `ResilientModelPort`
   (timeout + retry), `BudgetModelPort` (token ceiling). Variants: `StreamingModelPort`,
   `StructuredOutput` (typed JSON). Impls: `StubModelPort`, `LangChain4jModelPort`, `SpringAiModelPort`.
-- **`Agent`** — `run(AgentRequest) → AgentResponse`, the universal seam. Impls: `DefaultAgent`
-  (guardrail-wrapped model/tool loop), `DeepAgent` (plan → sub-agents → synthesize), `ReflectiveAgent`
-  (learn from mistakes), `SkilledAgent`, `SkillAcquiringAgent`, `AdkAgent`. Any `Agent` can be a
-  sub-agent or worker of another — composition needs no extra wiring.
+- **`Agent`** — `run(AgentRequest) → AgentResponse`, the universal seam. `AgentRequest` carries a
+  **`RequestContext`** (session, principal, tenant, trace, deadline), so identity and governance
+  travel with every turn and propagate to sub-agents. Impls: `DefaultAgent` (guardrail-wrapped
+  model/tool loop, **stateless across calls**), `DeepAgent` (plan → sub-agents → synthesize),
+  `ReflectiveAgent` (learn from mistakes), `SkilledAgent`, `SkillAcquiringAgent`, `AdkAgent`. Any
+  `Agent` can be a sub-agent or worker of another — composition needs no extra wiring.
 - **`Tool` / `ToolSpec`** (MCP-aligned) + **`ToolApprover`** (allow-list, or `ConsoleToolApprover`
   for HITL) — authorization runs before execution.
 - **`Guardrail`** — `check(stage, content) → allow / transform / block`; `Guardrails.kidguard(...)`
   is the ordered crisis → PII → Llama Guard pipeline.
-- **`Memory`** — short-term (`InMemoryMemory` / `WindowedMemory`); **`EpisodicStore`** for long-term,
-  cross-session learning (in-memory, file-persistent, or semantic/embedding-based).
+- **`Memory`** — short-term (`InMemoryMemory` / `WindowedMemory`), scoped per session by a
+  **`ConversationStore`** (`InMemoryConversationStore`) so one agent serves many sessions without
+  interleaving; **`EpisodicStore`** for long-term, cross-session learning (in-memory, file-persistent,
+  or semantic/embedding-based).
 - **`AgentObserver`** — lifecycle events; `LoggingObserver`, `TokenAccountingObserver`,
   `RecordingObserver` (+ `ReplayModelPort` for deterministic replay), `OtelAgentObserver`.
 - **`Planner` / `Reflector` / `SkillSelector` / `SkillSynthesizer`** — LLM-driven helpers, each

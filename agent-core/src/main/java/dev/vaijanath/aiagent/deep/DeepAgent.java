@@ -3,6 +3,7 @@ package dev.vaijanath.aiagent.deep;
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
+import dev.vaijanath.aiagent.agent.RequestContext;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
@@ -55,6 +56,7 @@ public final class DeepAgent implements Agent {
     @Override
     public AgentResponse run(AgentRequest request) {
         String task = request.input();
+        RequestContext ctx = request.context();
         Plan plan = planner.plan(task);
         if (plan.isEmpty()) {
             log.warn("planner produced no steps; synthesizing directly");
@@ -64,21 +66,22 @@ public final class DeepAgent implements Agent {
         log.info("deep agent: {} subtask(s), parallel={}", plan.steps().size(), parallel);
 
         if (parallel) {
-            runParallel(plan);
+            runParallel(plan, ctx);
         } else {
-            runSequential(plan);
+            runSequential(plan, ctx);
         }
 
         workspace.write("plan.md", plan.render()); // statuses are now resolved
         return AgentResponse.completed(synthesize(task, plan.steps()));
     }
 
-    private void runParallel(Plan plan) {
+    private void runParallel(Plan plan, RequestContext ctx) {
         try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<AgentResponse>> futures = new ArrayList<>();
             for (PlanStep step : plan.steps()) {
                 step.status(PlanStep.Status.RUNNING);
-                futures.add(pool.submit(() -> workerFactory.get().run(new AgentRequest(step.description()))));
+                futures.add(pool.submit(() ->
+                        workerFactory.get().run(new AgentRequest(step.description(), ctx.childSession()))));
             }
             for (int i = 0; i < plan.steps().size(); i++) {
                 PlanStep step = plan.steps().get(i);
@@ -93,11 +96,12 @@ public final class DeepAgent implements Agent {
         }
     }
 
-    private void runSequential(Plan plan) {
+    private void runSequential(Plan plan, RequestContext ctx) {
         for (PlanStep step : plan.steps()) {
             step.status(PlanStep.Status.RUNNING);
             try {
-                complete(step, workerFactory.get().run(new AgentRequest(step.description())).output());
+                complete(step, workerFactory.get()
+                        .run(new AgentRequest(step.description(), ctx.childSession())).output());
             } catch (RuntimeException e) {
                 fail(step, e);
             }
