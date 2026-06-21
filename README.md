@@ -101,6 +101,7 @@ runs *on top* of them.
   proving the runtime is vendor-neutral.
 - **`agent-adk`** — wraps a Google ADK agent as an `Agent` (agent-as-component): ADK is a full
   framework, so it's consumed one level up — the same seam later admits Embabel / Koog.
+- **`agent-mcp`** — exposes a Model Context Protocol server's tools as `Tool`s (`McpTools.from(client)`).
 - **`agent-observability-otel`** — optional OpenTelemetry tracing adapter (`OtelAgentObserver`);
   keeps the OTel SDK out of `agent-core`.
 - **`examples`** — runnable agents (`HelloAgent`, `SafeAgent`) showing the loop, tools, guardrails,
