@@ -28,4 +28,14 @@ public final class OllamaModelPorts {
                 .build();
         return new LangChain4jStreamingModelPort(model, "ollama-stream:" + modelName);
     }
+
+    /** Structured output (typed JSON, no parsing) over a local Ollama model. */
+    public static dev.vaijanath.aiagent.model.StructuredOutput ollamaStructured(String baseUrl, String modelName) {
+        OllamaChatModel model = OllamaChatModel.builder()
+                .baseUrl(baseUrl)
+                .modelName(modelName)
+                .timeout(Duration.ofMinutes(2))
+                .build();
+        return new LangChain4jStructuredOutput(model);
+    }
 }
