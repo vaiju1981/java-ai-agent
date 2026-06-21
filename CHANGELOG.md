@@ -63,9 +63,12 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   timeout, and `DeepAgent` propagating tenant/identity to sub-agents. A `downstream-smoke` module
   compiles against each adapter's public entry points using only transitively-exposed types, so a
   regression of an adapter dependency from `api` to `implementation` breaks the build.
-- **Bounded conversation store** — `InMemoryConversationStore` evicts least-recently-used sessions
-  beyond a cap (default 10,000), so a long-running service no longer leaks memory as ephemeral
-  sessions accumulate. Re-requesting an evicted session simply starts fresh.
+- **Bounded, atomically-leased conversation store** — `InMemoryConversationStore` evicts
+  least-recently-used sessions beyond a cap (default 10,000), so a long-running service no longer
+  leaks memory as ephemeral sessions accumulate. Access is via `withMemory(tenant, session, action)`,
+  which **pins** the entry for the duration so an in-flight session can't be evicted mid-turn and
+  concurrent same-session requests serialize on one memory (no split sessions). The key is a record,
+  so ids may contain any characters.
 - **Skill governance sealed and thread-safe** — `SkillRegistry` is now synchronized, and
   `SkillQuarantine` owns its registry and exposes only a read-only `SkillCatalog` (selectors and
   `SkillfulAgent` take `SkillCatalog`), so a skill can no longer be activated by calling `register()`

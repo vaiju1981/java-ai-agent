@@ -116,12 +116,10 @@ public final class DefaultAgent implements Agent {
             return finish(AgentResponse.blocked(in.content(), in.reason()));
         }
 
-        // 2. Serialize work on this session so its memory stays consistent; different sessions
-        //    (different users/tenants) use different memory objects and run concurrently.
-        Memory memory = conversations.get(ctx.tenant(), ctx.sessionId());
-        synchronized (memory) {
-            return converse(ctx, in.content(), memory);
-        }
+        // 2. Run with the session's memory held, so the entry can't be evicted mid-turn and
+        //    concurrent requests for the same session serialize; different sessions run concurrently.
+        return conversations.withMemory(
+                ctx.tenant(), ctx.sessionId(), memory -> converse(ctx, in.content(), memory));
     }
 
     /** The model/tool loop for one turn, holding the session's memory lock. */

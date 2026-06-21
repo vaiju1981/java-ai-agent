@@ -1,25 +1,39 @@
 package dev.vaijanath.aiagent.memory;
 
-import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
  * Keeps one {@link Memory} per {@code (tenant, sessionId)} pair, bounded by an LRU cap so a
- * long-running service cannot leak memory as ephemeral sessions accumulate: once the cap is reached,
- * the least-recently-used session is evicted (a later request for it simply starts fresh). For
- * durable multi-turn conversations, use stable session ids and a store sized for the working set, or
- * supply a persistent {@link ConversationStore}.
+ * long-running service cannot leak memory as ephemeral sessions accumulate. An entry is <b>pinned</b>
+ * while {@link #withMemory} runs, so an in-flight session is never evicted out from under a caller;
+ * once the cap is exceeded, the least-recently-used <em>unpinned</em> entry is evicted (a later
+ * request for it simply starts fresh). The key is a record, so ids may contain any characters.
  */
 public final class InMemoryConversationStore implements ConversationStore {
 
-    /** A NUL separator cannot appear in ids, so distinct (tenant, session) pairs never collide. */
-    private static final String SEP = String.valueOf((char) 0);
-
     private static final int DEFAULT_MAX_SESSIONS = 10_000;
 
-    private final Map<String, Memory> byKey;
+    private record Key(String tenant, String sessionId) {}
+
+    private static final class Entry {
+        final Memory memory;
+        int pins;
+        long lastAccess;
+
+        Entry(Memory memory) {
+            this.memory = memory;
+        }
+    }
+
+    private final Map<Key, Entry> entries = new ConcurrentHashMap<>();
+    private final AtomicLong clock = new AtomicLong();
     private final Supplier<Memory> factory;
+    private final int maxSessions;
 
     public InMemoryConversationStore() {
         this(InMemoryMemory::new, DEFAULT_MAX_SESSIONS);
@@ -31,17 +45,44 @@ public final class InMemoryConversationStore implements ConversationStore {
 
     public InMemoryConversationStore(Supplier<Memory> factory, int maxSessions) {
         this.factory = factory;
-        int cap = Math.max(1, maxSessions);
-        this.byKey = new LinkedHashMap<>(16, 0.75f, true) {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String, Memory> eldest) {
-                return size() > cap;
-            }
-        };
+        this.maxSessions = Math.max(1, maxSessions);
     }
 
     @Override
-    public synchronized Memory get(String tenant, String sessionId) {
-        return byKey.computeIfAbsent(tenant + SEP + sessionId, k -> factory.get());
+    public <R> R withMemory(String tenant, String sessionId, Function<Memory, R> action) {
+        Key key = new Key(tenant, sessionId);
+        // Atomically get-or-create and pin, so concurrent calls for the same key share one Entry.
+        Entry entry = entries.compute(key, (k, cur) -> {
+            Entry e = (cur != null) ? cur : new Entry(factory.get());
+            e.pins++;
+            e.lastAccess = clock.incrementAndGet();
+            return e;
+        });
+        try {
+            synchronized (entry.memory) {
+                return action.apply(entry.memory);
+            }
+        } finally {
+            entries.compute(key, (k, cur) -> {
+                if (cur != null) {
+                    cur.pins--;
+                }
+                return cur;
+            });
+            evictIfNeeded();
+        }
+    }
+
+    /** Evicts the least-recently-used unpinned entry if over the cap; pinned (in-flight) entries stay. */
+    private void evictIfNeeded() {
+        if (entries.size() <= maxSessions) {
+            return;
+        }
+        entries.entrySet().stream()
+                .filter(e -> e.getValue().pins == 0)
+                .min(Comparator.comparingLong(e -> e.getValue().lastAccess))
+                .ifPresent(victim ->
+                        // Re-check pins atomically: a concurrent withMemory may have re-pinned it.
+                        entries.computeIfPresent(victim.getKey(), (k, cur) -> cur.pins == 0 ? null : cur));
     }
 }
