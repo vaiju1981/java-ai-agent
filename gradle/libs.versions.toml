@@ -13,6 +13,8 @@ sqlite = "3.46.1.0"
 # LangChain4j is our first reference integration (the L0 substrate adapter).
 # Managed via its BOM so all langchain4j-* modules stay version-aligned.
 langchain4j = "1.0.1"
+springboot = "4.0.6"
+postgresql = "42.7.11"
 
 [libraries]
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
@@ -48,3 +50,10 @@ langchain4j-mcp = { module = "dev.langchain4j:langchain4j-mcp", version.ref = "l
 
 # Demos: an embedded SQL database to show the agent querying large datasets via a tool.
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
+spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "springboot" }
+spring-boot-web = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
+spring-boot-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
+spring-boot-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
+flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
