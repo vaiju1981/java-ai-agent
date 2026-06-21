@@ -30,7 +30,7 @@ class SkillAcquiringAgentTest {
 
         new SkillAcquiringAgent(completes(), q, SYNTH).run(new AgentRequest("do a thing"));
 
-        assertTrue(q.pending("learned-skill").isPresent(), "a candidate should be quarantined");
+        assertTrue(q.pending("default", "learned-skill").isPresent(), "a candidate should be quarantined");
         assertTrue(q.active().get("learned-skill").isEmpty(), "it must NOT be active without approval");
     }
 
@@ -42,7 +42,7 @@ class SkillAcquiringAgentTest {
                 .run(new AgentRequest("do a thing"));
 
         assertTrue(q.active().get("learned-skill").isPresent(), "an approved skill should be active");
-        assertTrue(q.pending("learned-skill").isEmpty());
+        assertTrue(q.pending("default", "learned-skill").isEmpty());
     }
 
     @Test
@@ -52,7 +52,7 @@ class SkillAcquiringAgentTest {
 
         new SkillAcquiringAgent(completes(), q, SYNTH).run(new AgentRequest("do a thing", ctx));
 
-        SkillProvenance p = q.pending("learned-skill").orElseThrow().provenance();
+        SkillProvenance p = q.pending("acme", "learned-skill").orElseThrow().provenance();
         assertEquals("acme", p.tenant());
         assertEquals("model", p.author());
         assertEquals(1, p.version());
@@ -88,11 +88,21 @@ class SkillAcquiringAgentTest {
     @Test
     void rollbackRemovesAFirstVersionSkill() {
         SkillQuarantine q = quarantine();
-        q.submit(Skill.of("s", "d", "i"), "task", "model", "acme");
-        q.approve("s");
-        assertTrue(q.active().get("s").isPresent());
+        q.submit("acme", Skill.of("s", "d", "i"), "task", "model");
+        q.approve("acme", "s");
+        assertTrue(q.active("acme").get("s").isPresent());
 
-        assertTrue(q.rollback("s"));
-        assertTrue(q.active().get("s").isEmpty(), "rollback removes a v1 skill");
+        assertTrue(q.rollback("acme", "s"));
+        assertTrue(q.active("acme").get("s").isEmpty(), "rollback removes a v1 skill");
+    }
+
+    @Test
+    void skillsApprovedForOneTenantAreInvisibleToAnother() {
+        SkillQuarantine q = quarantine();
+        q.submit("tenant-a", Skill.of("shared-name", "d", "i"), "task", "model");
+        q.approve("tenant-a", "shared-name");
+
+        assertTrue(q.active("tenant-a").get("shared-name").isPresent());
+        assertTrue(q.active("tenant-b").get("shared-name").isEmpty(), "tenants must not share skills");
     }
 }

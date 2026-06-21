@@ -7,36 +7,98 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Governs acquired skills. A synthesized skill is <b>quarantined</b> (pending) with provenance and
- * does not affect behavior until it is explicitly {@link #approve approved}, at which point it is
- * promoted into the active {@link SkillRegistry}. Promotions are versioned, so a bad skill can be
- * {@link #rollback rolled back}. Nothing the model authors becomes active without passing through here.
+ * Governs acquired skills, <b>isolated per tenant</b>. A synthesized skill is quarantined (pending)
+ * with provenance and does not affect behavior until it is explicitly {@link #approve approved}, at
+ * which point it is promoted into that tenant's active registry. Promotions are versioned, so a bad
+ * skill can be {@link #rollback rolled back}. Nothing the model authors becomes active — for any
+ * tenant — without passing through here, and a skill approved for one tenant is invisible to another.
  *
  * <p>Thread-safe: all mutating operations are synchronized.
  */
 public final class SkillQuarantine {
 
-    private final SkillRegistry active;
-    private final SkillCatalog readOnlyView;
-    private final Map<String, PendingSkill> pending = new LinkedHashMap<>();
-    private final Map<String, Deque<Skill>> history = new HashMap<>();
-    private final Map<String, Integer> versions = new HashMap<>();
+    private record Key(String tenant, String name) {}
 
-    /** The quarantine owns its active registry so nothing can register a skill that skipped approval. */
-    public SkillQuarantine() {
-        this.active = new SkillRegistry();
-        this.readOnlyView = readOnly(active);
+    private final Map<String, SkillRegistry> activeByTenant = new ConcurrentHashMap<>();
+    private final Map<String, SkillCatalog> viewByTenant = new ConcurrentHashMap<>();
+    private final Map<Key, PendingSkill> pending = new LinkedHashMap<>();
+    private final Map<Key, Deque<Skill>> history = new HashMap<>();
+    private final Map<Key, Integer> versions = new HashMap<>();
+
+    /** The approved, active skills for {@code tenant} as a read-only catalog (no direct registration). */
+    public synchronized SkillCatalog active(String tenant) {
+        registry(tenant); // ensure it exists
+        return viewByTenant.computeIfAbsent(tenant, t -> readOnly(registry(t)));
     }
 
-    /**
-     * The approved, active skills as a read-only catalog. It is a wrapper, not the underlying
-     * registry, so a caller cannot cast it back to {@link SkillRegistry} and register directly —
-     * activation only happens through {@link #approve}.
-     */
+    /** Convenience for the {@code "default"} tenant. */
     public SkillCatalog active() {
-        return readOnlyView;
+        return active("default");
+    }
+
+    /** Quarantine a candidate skill for a tenant with provenance; it stays pending until approved. */
+    public synchronized PendingSkill submit(String tenant, Skill skill, String sourceTask, String author) {
+        Key key = new Key(tenant, skill.name());
+        int version = versions.getOrDefault(key, 0) + 1;
+        PendingSkill candidate =
+                new PendingSkill(skill, SkillProvenance.of(sourceTask, author, tenant, version));
+        pending.put(key, candidate);
+        return candidate;
+    }
+
+    /** All pending candidates across every tenant. */
+    public synchronized List<PendingSkill> pending() {
+        return List.copyOf(pending.values());
+    }
+
+    /** Pending candidates for one tenant. */
+    public synchronized List<PendingSkill> pending(String tenant) {
+        return pending.entrySet().stream()
+                .filter(e -> e.getKey().tenant().equals(tenant))
+                .map(Map.Entry::getValue)
+                .toList();
+    }
+
+    public synchronized Optional<PendingSkill> pending(String tenant, String name) {
+        return Optional.ofNullable(pending.get(new Key(tenant, name)));
+    }
+
+    /** Promote a tenant's pending skill into its active registry, keeping the prior version. */
+    public synchronized Optional<Skill> approve(String tenant, String name) {
+        Key key = new Key(tenant, name);
+        PendingSkill candidate = pending.remove(key);
+        if (candidate == null) {
+            return Optional.empty();
+        }
+        SkillRegistry registry = registry(tenant);
+        registry.get(name).ifPresent(prev -> history.computeIfAbsent(key, k -> new ArrayDeque<>()).push(prev));
+        registry.register(candidate.skill());
+        versions.put(key, candidate.provenance().version());
+        return Optional.of(candidate.skill());
+    }
+
+    /** Discard a tenant's pending skill without activating it. */
+    public synchronized boolean reject(String tenant, String name) {
+        return pending.remove(new Key(tenant, name)) != null;
+    }
+
+    /** Roll a tenant's active skill back to its previous version, or remove it if there was none. */
+    public synchronized boolean rollback(String tenant, String name) {
+        Key key = new Key(tenant, name);
+        Deque<Skill> prior = history.get(key);
+        SkillRegistry registry = registry(tenant);
+        if (prior != null && !prior.isEmpty()) {
+            registry.register(prior.pop());
+            return true;
+        }
+        return registry.remove(name);
+    }
+
+    private SkillRegistry registry(String tenant) {
+        return activeByTenant.computeIfAbsent(tenant, t -> new SkillRegistry());
     }
 
     private static SkillCatalog readOnly(SkillCatalog delegate) {
@@ -56,49 +118,5 @@ public final class SkillQuarantine {
                 return delegate.catalog();
             }
         };
-    }
-
-    /** Quarantine a candidate skill with provenance; it stays pending until approved. */
-    public synchronized PendingSkill submit(Skill skill, String sourceTask, String author, String tenant) {
-        int version = versions.getOrDefault(skill.name(), 0) + 1;
-        PendingSkill candidate =
-                new PendingSkill(skill, SkillProvenance.of(sourceTask, author, tenant, version));
-        pending.put(skill.name(), candidate);
-        return candidate;
-    }
-
-    public synchronized List<PendingSkill> pending() {
-        return List.copyOf(pending.values());
-    }
-
-    public synchronized Optional<PendingSkill> pending(String name) {
-        return Optional.ofNullable(pending.get(name));
-    }
-
-    /** Promote a pending skill into the active registry, keeping the prior version for rollback. */
-    public synchronized Optional<Skill> approve(String name) {
-        PendingSkill candidate = pending.remove(name);
-        if (candidate == null) {
-            return Optional.empty();
-        }
-        active.get(name).ifPresent(prev -> history.computeIfAbsent(name, k -> new ArrayDeque<>()).push(prev));
-        active.register(candidate.skill());
-        versions.put(name, candidate.provenance().version());
-        return Optional.of(candidate.skill());
-    }
-
-    /** Discard a pending skill without activating it. */
-    public synchronized boolean reject(String name) {
-        return pending.remove(name) != null;
-    }
-
-    /** Roll the active skill back to its previous version, or remove it if there was none. */
-    public synchronized boolean rollback(String name) {
-        Deque<Skill> prior = history.get(name);
-        if (prior != null && !prior.isEmpty()) {
-            active.register(prior.pop());
-            return true;
-        }
-        return active.remove(name);
     }
 }
