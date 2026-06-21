@@ -62,6 +62,7 @@ public final class DefaultAgent implements Agent {
     private final List<AgentObserver> observers;
     private final String systemPrompt;
     private final int maxSteps;
+    private final boolean streamRawTokens;
 
     private DefaultAgent(Builder b) {
         this.model = Objects.requireNonNull(b.model, "model");
@@ -75,6 +76,7 @@ public final class DefaultAgent implements Agent {
                         b.memoryFactory != null ? b.memoryFactory : InMemoryMemory::new);
         this.systemPrompt = b.systemPrompt;
         this.maxSteps = b.maxSteps;
+        this.streamRawTokens = b.streamRawTokens;
         Map<String, Tool> map = new LinkedHashMap<>();
         for (Tool tool : b.tools) {
             map.put(tool.name(), tool);
@@ -129,9 +131,12 @@ public final class DefaultAgent implements Agent {
             notify(o -> o.onModelCall(req));
             final ModelResponse resp;
             try {
-                // Stream when the model supports it, forwarding tokens to observers; otherwise
-                // ModelPorts.stream falls back to a single chat() call.
-                resp = ModelPorts.stream(model, req, this::emitToken);
+                // Raw tokens are pre-guardrail and therefore unsafe, so they are NOT streamed by
+                // default — the turn's result is delivered only after output guardrails run. A caller
+                // that explicitly accepts an unguarded live stream opts in with streamRawTokens(true).
+                resp = streamRawTokens
+                        ? ModelPorts.stream(model, req, this::emitToken)
+                        : model.chat(req);
             } catch (RuntimeException e) {
                 // Graceful failure: surface it, never crash out of run().
                 log.warn("model call failed; ending turn gracefully", e);
@@ -256,6 +261,7 @@ public final class DefaultAgent implements Agent {
         private ConversationStore conversationStore;
         private String systemPrompt;
         private int maxSteps = 8;
+        private boolean streamRawTokens = false;
 
         public Builder model(ModelPort model) {
             this.model = model;
@@ -308,6 +314,16 @@ public final class DefaultAgent implements Agent {
 
         public Builder maxSteps(int maxSteps) {
             this.maxSteps = maxSteps;
+            return this;
+        }
+
+        /**
+         * Stream raw, <b>pre-guardrail</b> tokens to observers via {@link AgentObserver#onToken}.
+         * Off by default: those tokens are unguarded and unsafe to surface directly to a user. The
+         * guarded result is always available from the returned {@link AgentResponse} and onTurnEnd.
+         */
+        public Builder streamRawTokens(boolean streamRawTokens) {
+            this.streamRawTokens = streamRawTokens;
             return this;
         }
 
