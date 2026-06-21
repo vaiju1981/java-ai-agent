@@ -7,8 +7,10 @@ description = "First reference L0 adapter: a ModelPort backed by LangChain4j (in
 dependencies {
     api(project(":agent-core"))
 
-    implementation(platform(libs.langchain4j.bom))
-    implementation(libs.langchain4j.core)
+    // Exposed on public entry points (ChatModel, StreamingChatModel, EmbeddingModel), so api.
+    api(platform(libs.langchain4j.bom))
+    api(libs.langchain4j.core)
+    // Used only internally to build Ollama-backed ports; not exposed.
     implementation(libs.langchain4j.ollama)
     // Parses MCP-style JSON parameter schemas into LangChain4j's schema types.
     implementation(libs.jackson.databind)

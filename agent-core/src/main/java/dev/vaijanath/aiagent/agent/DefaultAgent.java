@@ -93,6 +93,10 @@ public final class DefaultAgent implements Agent {
         // so an agent with dozens of tools still shows the model a focused, manageable set.
         List<Tool> activeTools = toolSelector.select(in.content(), List.copyOf(tools.values()));
         List<ToolSpec> toolSpecs = activeTools.stream().map(Tool::spec).toList();
+        Map<String, Tool> activeByName = new LinkedHashMap<>();
+        for (Tool t : activeTools) {
+            activeByName.put(t.name(), t);
+        }
         String finalText = null;
         for (int step = 0; step < maxSteps; step++) {
             ModelRequest req = new ModelRequest(memory.history(), toolSpecs);
@@ -115,7 +119,7 @@ public final class DefaultAgent implements Agent {
                 memory.add(Message.assistant(resp.text(), resp.toolCalls()));
                 for (ToolCall call : resp.toolCalls()) {
                     notify(o -> o.onToolCall(call));
-                    ToolResult result = invokeWithPolicy(call);
+                    ToolResult result = invokeWithPolicy(call, activeByName);
                     notify(o -> o.onToolResult(call.name(), result));
                     memory.add(Message.toolResult(call.id(), call.name(), result.content()));
                 }
@@ -162,17 +166,23 @@ public final class DefaultAgent implements Agent {
         return GuardrailDecision.allow(current);
     }
 
-    /** Authorizes a tool call, then runs it (or returns a denial the model can react to). */
-    private ToolResult invokeWithPolicy(ToolCall call) {
+    /**
+     * Enforces the selector, then authorizes, then runs the tool. A tool that was not presented this
+     * turn cannot be invoked — even if the model names it (hallucination or prompt injection) — and a
+     * denied call becomes a result the model can react to rather than an execution.
+     */
+    private ToolResult invokeWithPolicy(ToolCall call, Map<String, Tool> available) {
+        Tool tool = available.get(call.name());
+        if (tool == null) {
+            log.info("tool '{}' not available this turn", call.name());
+            return ToolResult.error("tool '" + call.name() + "' is not available");
+        }
         ToolDecision decision = toolApprover.authorize(call.name(), call.argumentsJson());
         if (!decision.allowed()) {
             log.info("tool '{}' denied: {}", call.name(), decision.reason());
             return ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason());
         }
-        Tool tool = tools.get(call.name());
-        return (tool == null)
-                ? ToolResult.error("unknown tool: " + call.name())
-                : safeInvoke(tool, call.argumentsJson());
+        return safeInvoke(tool, call.argumentsJson());
     }
 
     private ToolResult safeInvoke(Tool tool, String args) {

@@ -31,7 +31,8 @@ public final class SkillAcquiringAgent implements Agent {
     @Override
     public AgentResponse run(AgentRequest request) {
         AgentResponse response = workerFactory.get().run(request);
-        if (!response.blocked()) {
+        // Only learn from a genuine success — a blocked, errored, or step-exhausted turn teaches nothing.
+        if (response.isCompleted()) {
             Skill learned = synthesizer.synthesize(request.input(), response.output());
             if (learned != null && registry.get(learned.name()).isEmpty()) {
                 registry.register(learned);

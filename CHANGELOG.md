@@ -23,6 +23,19 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 - **Build & quality** — Gradle multi-module (Java 21 baseline, JDK 26); Spotless + JaCoCo gates;
   Maven publication config; GitHub Actions CI.
 
+### Hardening (trust-review remediation)
+
+- **Tool dispatch enforces the selector** — a tool not presented to the model this turn can no longer
+  be invoked, even if the model names it (hallucination or prompt injection).
+- **Skill acquisition is gated on genuine success** — blocked, errored, and step-exhausted turns no
+  longer teach a skill.
+- **`ResilientModelPort` holds no long-lived executor** — each attempt runs on a fresh virtual thread,
+  so there is nothing to leak or shut down.
+- **Adapter dependency scopes corrected** — types exposed on public entry points (LangChain4j /
+  Spring AI `ChatModel`, ADK `BaseAgent`/`Runner`, the MCP client, OTel `Tracer`) are now `api`, so
+  generated POMs declare them at `compile` and downstream code compiles against the public API
+  without hunting for transitive deps.
+
 ### Notes
 
 - Live ADK/MCP end-to-end need a configured ADK model / a running MCP server; their adapters are

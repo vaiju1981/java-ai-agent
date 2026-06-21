@@ -14,6 +14,7 @@ import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 /** Deterministically verifies the model -> tool -> model loop without a live LLM. */
@@ -92,6 +93,46 @@ class ToolCallingLoopTest {
                 .run(new AgentRequest("use a tool"));
 
         assertFalse(r.blocked());
-        assertTrue(r.output().contains("unknown tool"), "got: " + r.output());
+        assertTrue(r.output().contains("is not available"), "got: " + r.output());
+    }
+
+    /** A tool the selector did not present this turn must not execute, even if the model names it. */
+    @Test
+    void selectorExcludedToolIsNotInvoked() {
+        AtomicBoolean invoked = new AtomicBoolean(false);
+        Tool secret = new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec("secret", "do not call", "{\"type\":\"object\",\"properties\":{}}");
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                invoked.set(true);
+                return ToolResult.ok("ran");
+            }
+        };
+        ModelPort callsSecret = new ModelPort() {
+            private int calls = 0;
+
+            @Override
+            public ModelResponse chat(ModelRequest request) {
+                calls++;
+                if (calls == 1) {
+                    return new ModelResponse("", List.of(new ToolCall("c1", "secret", "{}")));
+                }
+                return ModelResponse.text("ok");
+            }
+        };
+
+        AgentResponse r = DefaultAgent.builder()
+                .model(callsSecret)
+                .tool(secret)
+                .toolSelector((task, tools) -> List.of()) // present nothing this turn
+                .build()
+                .run(new AgentRequest("go"));
+
+        assertFalse(invoked.get(), "a tool excluded by the selector must never execute");
+        assertEquals("completed", r.stopReason());
     }
 }

@@ -7,9 +7,10 @@ description = "MCP adapter: expose Model Context Protocol server tools as java-a
 dependencies {
     api(project(":agent-core"))
 
-    implementation(platform(libs.langchain4j.bom))
+    // McpTools.from(McpClient) exposes the langchain4j-mcp type, so api; core stays internal.
+    api(platform(libs.langchain4j.bom))
     implementation(libs.langchain4j.core)
-    implementation(libs.langchain4j.mcp)
+    api(libs.langchain4j.mcp)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

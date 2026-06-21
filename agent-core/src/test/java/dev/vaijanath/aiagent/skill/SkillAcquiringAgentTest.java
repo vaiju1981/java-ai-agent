@@ -33,4 +33,18 @@ class SkillAcquiringAgentTest {
 
         assertTrue(registry.get("should-not-appear").isEmpty(), "blocked turns must not teach skills");
     }
+
+    @Test
+    void doesNotLearnFromAStoppedOrErroredTurn() {
+        SkillRegistry registry = new SkillRegistry();
+        SkillSynthesizer synthesizer =
+                (task, solution) -> Skill.of("should-not-appear", "x", "y");
+        // Not blocked, but not a genuine completion (e.g. model_error / max_steps).
+        Supplier<Agent> worker = () -> request -> AgentResponse.stopped("partial", "model_error");
+
+        new SkillAcquiringAgent(worker, registry, synthesizer).run(new AgentRequest("flaky"));
+
+        assertTrue(registry.get("should-not-appear").isEmpty(),
+                "only a genuine completion should teach a skill");
+    }
 }

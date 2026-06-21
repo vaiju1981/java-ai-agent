@@ -20,4 +20,9 @@ public record AgentResponse(String output, boolean blocked, String stopReason) {
     public static AgentResponse stopped(String output, String reason) {
         return new AgentResponse(output, false, reason);
     }
+
+    /** True only for a genuine completion — not blocked, and not a stop (max_steps, model_error, …). */
+    public boolean isCompleted() {
+        return !blocked && "completed".equals(stopReason);
+    }
 }
