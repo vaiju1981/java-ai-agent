@@ -1,50 +1,90 @@
 package dev.vaijanath.aiagent.skill;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
+import dev.vaijanath.aiagent.agent.RequestContext;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 class SkillAcquiringAgentTest {
 
-    @Test
-    void registersASkillAfterSucceeding() {
-        SkillRegistry registry = new SkillRegistry();
-        SkillSynthesizer synthesizer =
-                (task, solution) -> Skill.of("learned-skill", "does the thing", "do it like the solution");
-        Supplier<Agent> worker = () -> request -> AgentResponse.completed("solved it");
+    private static final SkillSynthesizer SYNTH =
+            (task, solution) -> Skill.of("learned-skill", "does the thing", "do it like the solution");
 
-        new SkillAcquiringAgent(worker, registry, synthesizer).run(new AgentRequest("do a thing"));
+    private static SkillQuarantine quarantine() {
+        return new SkillQuarantine(new SkillRegistry());
+    }
 
-        assertTrue(registry.get("learned-skill").isPresent(), "a new skill should be acquired");
+    private static Supplier<Agent> completes() {
+        return () -> request -> AgentResponse.completed("solved it");
     }
 
     @Test
-    void doesNotLearnWhenBlocked() {
-        SkillRegistry registry = new SkillRegistry();
-        SkillSynthesizer synthesizer =
-                (task, solution) -> Skill.of("should-not-appear", "x", "y");
+    void successfulTurnQuarantinesButDoesNotActivateByDefault() {
+        SkillQuarantine q = quarantine();
+
+        new SkillAcquiringAgent(completes(), q, SYNTH).run(new AgentRequest("do a thing"));
+
+        assertTrue(q.pending("learned-skill").isPresent(), "a candidate should be quarantined");
+        assertTrue(q.active().get("learned-skill").isEmpty(), "it must NOT be active without approval");
+    }
+
+    @Test
+    void approvingAcquisitionActivatesIt() {
+        SkillQuarantine q = quarantine();
+
+        new SkillAcquiringAgent(completes(), q, SYNTH, SkillApprover.acceptingAll())
+                .run(new AgentRequest("do a thing"));
+
+        assertTrue(q.active().get("learned-skill").isPresent(), "an approved skill should be active");
+        assertTrue(q.pending("learned-skill").isEmpty());
+    }
+
+    @Test
+    void recordsProvenanceWithTenant() {
+        SkillQuarantine q = quarantine();
+        RequestContext ctx = new RequestContext("s", "bob", "acme", null, null, null);
+
+        new SkillAcquiringAgent(completes(), q, SYNTH).run(new AgentRequest("do a thing", ctx));
+
+        SkillProvenance p = q.pending("learned-skill").orElseThrow().provenance();
+        assertEquals("acme", p.tenant());
+        assertEquals("model", p.author());
+        assertEquals(1, p.version());
+    }
+
+    @Test
+    void blockedTurnTeachesNothing() {
+        SkillQuarantine q = quarantine();
         Supplier<Agent> worker = () -> request -> AgentResponse.blocked("nope", "blocked");
 
-        new SkillAcquiringAgent(worker, registry, synthesizer).run(new AgentRequest("bad"));
+        new SkillAcquiringAgent(worker, q, SYNTH).run(new AgentRequest("bad"));
 
-        assertTrue(registry.get("should-not-appear").isEmpty(), "blocked turns must not teach skills");
+        assertTrue(q.pending().isEmpty(), "blocked turns must not propose skills");
     }
 
     @Test
-    void doesNotLearnFromAStoppedOrErroredTurn() {
-        SkillRegistry registry = new SkillRegistry();
-        SkillSynthesizer synthesizer =
-                (task, solution) -> Skill.of("should-not-appear", "x", "y");
-        // Not blocked, but not a genuine completion (e.g. model_error / max_steps).
+    void stoppedOrErroredTurnTeachesNothing() {
+        SkillQuarantine q = quarantine();
         Supplier<Agent> worker = () -> request -> AgentResponse.stopped("partial", "model_error");
 
-        new SkillAcquiringAgent(worker, registry, synthesizer).run(new AgentRequest("flaky"));
+        new SkillAcquiringAgent(worker, q, SYNTH).run(new AgentRequest("flaky"));
 
-        assertTrue(registry.get("should-not-appear").isEmpty(),
-                "only a genuine completion should teach a skill");
+        assertTrue(q.pending().isEmpty());
+    }
+
+    @Test
+    void rollbackRemovesAFirstVersionSkill() {
+        SkillQuarantine q = quarantine();
+        q.submit(Skill.of("s", "d", "i"), "task", "model", "acme");
+        q.approve("s");
+        assertTrue(q.active().get("s").isPresent());
+
+        assertTrue(q.rollback("s"));
+        assertTrue(q.active().get("s").isEmpty(), "rollback removes a v1 skill");
     }
 }

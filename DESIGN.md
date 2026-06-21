@@ -31,8 +31,8 @@ tools) run on it.
 - **L1 — Runtime (owned):** the control loop, planning, sub-agent orchestration on **Loom virtual
   threads**, the deep-agent workspace.
 - **L2 — Cognition (owned):** conversation + episodic memory (in-memory / persistent / semantic),
-  skills (registry + progressive disclosure + acquisition), learning (reflection + cross-session
-  lessons).
+  skills (registry + progressive disclosure + governed acquisition: quarantine → approval → rollback),
+  learning (reflection + cross-session lessons).
 - **L3 — Trust & Ops (owned, the differentiator):** guardrails (kidguard), tool authorization +
   human-in-the-loop, observability (tokens, replay, OpenTelemetry), eval + budget enforcement.
 
@@ -88,6 +88,10 @@ tools) run on it.
   Distinct from `AgentObserver` (telemetry): audit answers "who did what, when, under which trace".
 - **`Planner` / `Reflector` / `SkillSelector` / `SkillSynthesizer`** — LLM-driven helpers, each
   preferring `StructuredOutput` with a free-text fallback.
+- **`SkillQuarantine` / `SkillApprover`** — governed learning: an acquired skill is quarantined with
+  provenance and versioned, and nothing the model authors becomes active without approval; a bad
+  promotion can be rolled back. (Cross-session *lessons* still flow through the episodic store; bringing
+  them under the same governance is a follow-up.)
 
 ## A turn, step by step
 

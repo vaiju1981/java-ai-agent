@@ -15,6 +15,11 @@ public final class SkillRegistry {
         return this;
     }
 
+    /** Removes a skill, returning true if it was present (used by {@link SkillQuarantine} rollback). */
+    public boolean remove(String name) {
+        return skills.remove(name) != null;
+    }
+
     public Optional<Skill> get(String name) {
         return Optional.ofNullable(skills.get(name));
     }
