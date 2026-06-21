@@ -1,0 +1,19 @@
+package dev.vaijanath.aiagent.tool;
+
+import java.util.Objects;
+
+/**
+ * An MCP-aligned tool description: a name, a description for the model, and a JSON Schema for the
+ * parameters. Keeping this MCP-shaped means tools can later be exposed to, or consumed from, any
+ * MCP-speaking substrate without translation.
+ */
+public record ToolSpec(String name, String description, String parametersJsonSchema) {
+
+    public ToolSpec {
+        Objects.requireNonNull(name, "name");
+        description = description == null ? "" : description;
+        parametersJsonSchema = (parametersJsonSchema == null || parametersJsonSchema.isBlank())
+                ? "{\"type\":\"object\",\"properties\":{}}"
+                : parametersJsonSchema;
+    }
+}
