@@ -15,6 +15,11 @@ public interface ToolArgumentValidator {
 
     Optional<String> validate(ToolSpec spec, String argumentsJson);
 
+    /** Validate the schema itself at runtime construction; production runtimes fail startup on error. */
+    default Optional<String> validateSchema(ToolSpec spec) {
+        return Optional.empty();
+    }
+
     /** Accepts every call — the default when no validator is configured. */
     static ToolArgumentValidator none() {
         return (spec, argumentsJson) -> Optional.empty();

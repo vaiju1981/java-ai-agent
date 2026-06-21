@@ -77,7 +77,8 @@ public final class RedactingObserver implements AgentObserver {
 
     @Override
     public void onError(String stage, Throwable error) {
-        delegate.onError(stage, error);
+        String type = error == null ? "unknown" : error.getClass().getSimpleName();
+        delegate.onError(stage, new RedactedObserverException(type));
     }
 
     private static Message redact(Message message) {
@@ -87,5 +88,12 @@ public final class RedactingObserver implements AgentObserver {
 
     private static List<ToolCall> redactCalls(List<ToolCall> calls) {
         return calls.stream().map(c -> new ToolCall(c.id(), c.name(), REDACTED)).toList();
+    }
+
+    /** Carries only an exception classification; message, stack and cause are intentionally absent. */
+    private static final class RedactedObserverException extends RuntimeException {
+        RedactedObserverException(String type) {
+            super("redacted " + type, null, false, false);
+        }
     }
 }

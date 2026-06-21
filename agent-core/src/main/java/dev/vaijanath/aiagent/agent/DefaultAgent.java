@@ -16,6 +16,7 @@ import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
+import dev.vaijanath.aiagent.tool.ContextualTool;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprover;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
@@ -23,6 +24,7 @@ import dev.vaijanath.aiagent.tool.ToolArgumentValidator;
 import dev.vaijanath.aiagent.tool.ToolCallContext;
 import dev.vaijanath.aiagent.tool.ToolDecision;
 import dev.vaijanath.aiagent.tool.ToolExecutor;
+import dev.vaijanath.aiagent.tool.ToolInvocation;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSelector;
 import dev.vaijanath.aiagent.tool.ToolSelectors;
@@ -79,6 +81,7 @@ public final class DefaultAgent implements Agent {
     private final Duration toolTimeout;
     private final int maxToolResultChars;
     private final boolean frameToolResults;
+    private final boolean turnAudit;
 
     private DefaultAgent(Builder b) {
         this.model = Objects.requireNonNull(b.model, "model");
@@ -100,6 +103,7 @@ public final class DefaultAgent implements Agent {
         this.toolTimeout = b.toolTimeout;
         this.maxToolResultChars = b.maxToolResultChars;
         this.frameToolResults = b.frameToolResults;
+        this.turnAudit = b.turnAudit;
         Map<String, Tool> map = new LinkedHashMap<>();
         for (Tool tool : b.tools) {
             map.put(tool.name(), tool);
@@ -115,11 +119,11 @@ public final class DefaultAgent implements Agent {
         //    PII-scrubbed) content — never the raw input.
         GuardrailDecision in = applyGuardrails(GuardrailStage.INPUT, request.input());
         notify(o -> o.onTurnStart(in.content()));
-        audit("turn.start", ctx, "input.len=" + request.input().length());
+        auditTurn("turn.start", ctx, "input.len=" + request.input().length());
         if (in.blocked()) {
             log.info("input blocked: {}", in.reason());
             audit("guardrail.block", ctx, "stage=INPUT reason=" + in.reason());
-            audit("turn.end", ctx, "blocked");
+            auditTurn("turn.end", ctx, "blocked");
             return finish(AgentResponse.blocked(in.content(), in.reason()));
         }
 
@@ -149,7 +153,7 @@ public final class DefaultAgent implements Agent {
         for (int step = 0; step < maxSteps; step++) {
             if (deadlineExceeded(ctx)) {
                 log.info("turn deadline exceeded for session {}", ctx.sessionId());
-                audit("turn.end", ctx, "deadline_exceeded");
+                auditTurn("turn.end", ctx, "deadline_exceeded");
                 return finish(AgentResponse.stopped(
                         "I ran out of time on this request.", "deadline_exceeded"));
             }
@@ -168,7 +172,7 @@ public final class DefaultAgent implements Agent {
                 log.warn("model call failed; ending turn gracefully", e);
                 notify(o -> o.onError("model", e));
                 audit("error", ctx, "model call failed");
-                audit("turn.end", ctx, "model_error");
+                auditTurn("turn.end", ctx, "model_error");
                 return finish(AgentResponse.stopped(
                         "I ran into a problem reaching the model. Please try again.", "model_error"));
             }
@@ -201,7 +205,7 @@ public final class DefaultAgent implements Agent {
 
         if (finalText == null) {
             log.warn("agent stopped after maxSteps={} without a final answer", maxSteps);
-            audit("turn.end", ctx, "max_steps");
+            auditTurn("turn.end", ctx, "max_steps");
             return finish(AgentResponse.stopped(
                     "I couldn't finish that within my step budget. Please try rephrasing.",
                     "max_steps"));
@@ -213,10 +217,10 @@ public final class DefaultAgent implements Agent {
         if (out.blocked()) {
             log.info("output blocked: {}", out.reason());
             audit("guardrail.block", ctx, "stage=OUTPUT reason=" + out.reason());
-            audit("turn.end", ctx, "blocked");
+            auditTurn("turn.end", ctx, "blocked");
             return finish(AgentResponse.blocked(out.content(), out.reason()));
         }
-        audit("turn.end", ctx, "completed");
+        auditTurn("turn.end", ctx, "completed");
         return finish(AgentResponse.completed(out.content()));
     }
 
@@ -231,6 +235,12 @@ public final class DefaultAgent implements Agent {
                     type, ctx.traceId(), ctx.sessionId(), ctx.principal(), ctx.tenant(), detail));
         } catch (RuntimeException e) {
             log.warn("audit sink threw; dropping '{}' event", type, e);
+        }
+    }
+
+    private void auditTurn(String type, RequestContext ctx, String detail) {
+        if (turnAudit) {
+            audit(type, ctx, detail);
         }
     }
 
@@ -265,9 +275,10 @@ public final class DefaultAgent implements Agent {
             audit("tool.denied", ctx, "tool=" + call.name() + " reason=not-available");
             return ToolResult.error("tool '" + call.name() + "' is not available");
         }
-        ToolDecision decision = toolApprover.authorize(new ToolCallContext(
+        ToolCallContext callContext = new ToolCallContext(
                 tool.spec(), call.argumentsJson(), ctx.principal(), ctx.tenant(),
-                ctx.traceId(), ctx.sessionId(), ctx.deadline()));
+                ctx.traceId(), ctx.sessionId(), ctx.deadline(), ctx.attributes().get("idempotencyKey"));
+        ToolDecision decision = toolApprover.authorize(callContext);
         if (!decision.allowed()) {
             log.info("tool '{}' denied: {}", call.name(), decision.reason());
             audit("tool.denied", ctx, "tool=" + call.name() + " reason=" + decision.reason());
@@ -280,17 +291,17 @@ public final class DefaultAgent implements Agent {
             return ToolResult.error("tool '" + call.name() + "' arguments invalid: " + invalid.get());
         }
         audit("tool.allowed", ctx, "tool=" + call.name() + " effect=" + tool.spec().effect());
-        ToolResult result = safeInvoke(tool, call.argumentsJson());
+        ToolResult result = safeInvoke(tool, call, callContext);
         audit("tool.result", ctx, "tool=" + call.name() + " error=" + result.error());
         return result;
     }
 
-    private ToolResult safeInvoke(Tool tool, String args) {
+    private ToolResult safeInvoke(Tool tool, ToolCall call, ToolCallContext context) {
         if (toolTimeout == null) {
-            return invokeDirect(tool, args);
+            return invokeDirect(tool, call, context);
         }
         // Bound the call on a virtual thread so a hung tool cannot stall the turn forever.
-        FutureTask<ToolResult> task = new FutureTask<>(() -> invokeDirect(tool, args));
+        FutureTask<ToolResult> task = new FutureTask<>(() -> invokeDirect(tool, call, context));
         Thread worker = Thread.ofVirtual().name("tool-" + tool.name()).start(task);
         try {
             return task.get(toolTimeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -308,9 +319,11 @@ public final class DefaultAgent implements Agent {
         }
     }
 
-    private ToolResult invokeDirect(Tool tool, String args) {
+    private ToolResult invokeDirect(Tool tool, ToolCall call, ToolCallContext context) {
         try {
-            return tool.invoke(args);
+            return tool instanceof ContextualTool contextual
+                    ? contextual.invoke(new ToolInvocation(call, context))
+                    : tool.invoke(call.argumentsJson());
         } catch (RuntimeException e) {
             // The exception detail goes to the log, never into the model's context.
             log.warn("tool '{}' threw", tool.name(), e);
@@ -371,6 +384,7 @@ public final class DefaultAgent implements Agent {
         private Duration toolTimeout;
         private int maxToolResultChars = 8192;
         private boolean frameToolResults = true;
+        private boolean turnAudit = true;
 
         public Builder model(ModelPort model) {
             this.model = model;
@@ -467,6 +481,12 @@ public final class DefaultAgent implements Agent {
         /** Frame tool results to the model as untrusted data (default true) to resist prompt injection. */
         public Builder frameToolResults(boolean frameToolResults) {
             this.frameToolResults = frameToolResults;
+            return this;
+        }
+
+        /** Disable inner turn lifecycle events when an outer governed seam owns them. */
+        public Builder turnAudit(boolean turnAudit) {
+            this.turnAudit = turnAudit;
             return this;
         }
 

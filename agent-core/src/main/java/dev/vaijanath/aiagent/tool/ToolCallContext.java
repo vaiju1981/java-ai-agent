@@ -1,5 +1,8 @@
 package dev.vaijanath.aiagent.tool;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
@@ -17,13 +20,26 @@ public record ToolCallContext(
         String tenant,
         String traceId,
         String sessionId,
-        Instant deadline) {
+        Instant deadline,
+        String clientIdempotencyKey) {
 
     public ToolCallContext {
         Objects.requireNonNull(spec, "spec");
         argumentsJson = argumentsJson == null ? "{}" : argumentsJson;
         principal = (principal == null || principal.isBlank()) ? "anonymous" : principal;
         tenant = (tenant == null || tenant.isBlank()) ? "default" : tenant;
+    }
+
+    /** Compatibility constructor for callers that do not supply a client idempotency key. */
+    public ToolCallContext(
+            ToolSpec spec,
+            String argumentsJson,
+            String principal,
+            String tenant,
+            String traceId,
+            String sessionId,
+            Instant deadline) {
+        this(spec, argumentsJson, principal, tenant, traceId, sessionId, deadline, null);
     }
 
     public String toolName() {
@@ -35,13 +51,23 @@ public record ToolCallContext(
     }
 
     /**
-     * A stable key for this logical call — the same tenant, session, tool, and arguments yield the
-     * same key. An effectful {@link ToolApprover} (or a tool) can use it to make an operation
-     * idempotent, e.g. deny or no-op a duplicate. It embeds the raw arguments, so treat it as sensitive.
+     * A stable opaque key for this logical call. When the application supplied a client idempotency
+     * key, retries remain stable across traces and service instances; otherwise the key is scoped to
+     * this trace/session. The SHA-256 digest does not expose the caller key or arguments.
      */
     public String idempotencyKey() {
-        // Length-prefixed parts so no value can collide with another through the delimiter.
-        return part(tenant) + part(sessionId) + part(spec.name()) + part(argumentsJson);
+        boolean hasClientKey = clientIdempotencyKey != null && !clientIdempotencyKey.isBlank();
+        String requestScope = hasClientKey
+                ? part(clientIdempotencyKey)
+                : part(sessionId) + part(traceId) + part(argumentsJson);
+        String material = part(tenant) + requestScope + part(spec.name());
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(material.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 
     private static String part(String value) {
