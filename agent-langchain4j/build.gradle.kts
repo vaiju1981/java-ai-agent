@@ -10,6 +10,8 @@ dependencies {
     implementation(platform(libs.langchain4j.bom))
     implementation(libs.langchain4j.core)
     implementation(libs.langchain4j.ollama)
+    // Parses MCP-style JSON parameter schemas into LangChain4j's schema types.
+    implementation(libs.jackson.databind)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

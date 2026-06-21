@@ -9,6 +9,7 @@ import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
+import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
@@ -79,13 +80,16 @@ public final class DefaultAgent implements Agent {
             ModelResponse resp = model.chat(new ModelRequest(memory.history(), toolSpecs));
 
             if (resp.hasToolCalls()) {
-                resp.toolCalls().forEach(call -> {
+                // Record the assistant's tool-call request so the conversation replays faithfully.
+                memory.add(Message.assistant(resp.text(), resp.toolCalls()));
+                for (ToolCall call : resp.toolCalls()) {
                     Tool tool = tools.get(call.name());
                     ToolResult result = (tool == null)
                             ? ToolResult.error("unknown tool: " + call.name())
                             : safeInvoke(tool, call.argumentsJson());
-                    memory.add(Message.tool(result.content()));
-                });
+                    log.debug("tool '{}' -> {}", call.name(), result.error() ? "error" : "ok");
+                    memory.add(Message.toolResult(call.id(), call.name(), result.content()));
+                }
                 continue; // let the model react to the tool results
             }
 
