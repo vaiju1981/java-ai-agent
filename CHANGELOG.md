@@ -25,6 +25,13 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 
 ### Hardening (trust-review remediation)
 
+- **Trust governs the universal `Agent` seam** — new `PolicyEnforcingAgent` / `Trust.govern(agent,
+  guardrails…)` enforces input/output guardrails and the request deadline around *any* agent, so
+  composed and black-box agents (`DeepAgent`, `AdkAgent`) are governed too, not just `DefaultAgent`.
+- **Capability-based tool authorization** (breaking SPI) — tools declare a `ToolEffect`
+  (`READ_ONLY`/`EFFECTFUL`, default effectful); `ToolApprover` now receives a `ToolCallContext`
+  (spec/effect, arguments, principal, tenant) instead of `(name, json)`; `ToolApprovers.denyEffectful()`
+  runs read-only tools and denies effectful ones by default.
 - **Stateless runtime with a request context** — `AgentRequest` now carries a `RequestContext`
   (session, principal, tenant, trace, deadline). `DefaultAgent` holds no per-conversation state;
   memory is scoped per session via `ConversationStore`, so one instance serves many concurrent

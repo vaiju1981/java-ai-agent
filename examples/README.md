@@ -33,7 +33,7 @@ still run, but the real behavior (tool orchestration, skill selection, self-corr
 | 6 | `ResearchAssistant` | **deep agent** — plans a CTO briefing into sections, writes each with a concurrent sub-agent (virtual threads), and synthesizes; prints the plan, the per-section **workspace artifacts**, and the final briefing |
 | 7 | `LearningAgentExample` | **learning from real mistakes** — a deterministic verifier rejects banned words; the model slips, the agent records the lesson, retries, and self-corrects (watch the INFO log show each attempt) |
 | 8 | `MemoryAcrossSessions` | **cross-session memory** — learnings are persisted to a file with `FileEpisodicStore`; run it twice and the second (separate) process already knows the lesson |
-| 9 | `PermissionedAgent` | **tool authorization** — an allow-list (or human approval) gates tool calls; a sensitive tool is denied while a safe one runs |
+| 9 | `PermissionedAgent` | **capability-based tool authorization** — `denyEffectful` runs the read-only tool and denies the effectful one by default (no allow-list needed); swap in an allow-list or human approval |
 | 10 | `EvalExample` | **eval harness** — runs an agent against a suite of cases and reports a pass rate |
 | 11 | `StreamingChat` | **streaming** — prints the model's reply token-by-token as it's generated |
 

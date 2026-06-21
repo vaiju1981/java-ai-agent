@@ -14,9 +14,11 @@ verified live against a local model.
   virtual threads → synthesize); **streaming**.
 - **Substrate** — LangChain4j and Spring AI as `ModelPort`s (both with **tool-calling**); Google ADK
   wrapped as an `Agent`; MCP servers' tools as `Tool`s.
-- **Trust & ops** — kidguard guardrails (crisis · PII · local **Llama Guard**, fails *closed*); tool
-  **authorization + human-in-the-loop**; observability (token accounting, deterministic replay,
-  **OpenTelemetry**); an **eval harness** + token-**budget** enforcement.
+- **Trust & ops** — governance at the universal `Agent` seam (`Trust.govern`) so guardrails and the
+  deadline apply to any agent (incl. composed/black-box); kidguard guardrails (crisis · PII · local
+  **Llama Guard**, fails *closed*); **capability-based tool authorization** (`denyEffectful`:
+  read-only runs, effectful denied) + human-in-the-loop; observability (token accounting,
+  deterministic replay, **OpenTelemetry**); an **eval harness** + token-**budget** enforcement.
 - **Cognition** — episodic memory that is in-memory, **persistent (cross-session)**, or **semantic**;
   skills with progressive disclosure + **acquisition**; a reflective agent that **learns from its
   mistakes** and applies lessons in later sessions.

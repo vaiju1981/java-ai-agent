@@ -9,5 +9,5 @@ package dev.vaijanath.aiagent.tool;
  */
 public interface ToolApprover {
 
-    ToolDecision authorize(String toolName, String argumentsJson);
+    ToolDecision authorize(ToolCallContext call);
 }
