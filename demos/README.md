@@ -32,3 +32,15 @@ chooses the right tool per question.
 
 Sample (verified live): classifies "Blue Bottle Coffee" → Dining; flags Entertainment as over budget
 in March; identifies Travel as the biggest category and suggests where to cut back.
+
+## LogAnalystDemo — scale, a different dataset
+
+A site-reliability analyst over **~10,000 synthetic request logs** in SQLite (level, endpoint,
+status, latency). Same SQL-tool scaling story as the data analyst, different shape.
+
+```bash
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.LogAnalystDemo
+```
+
+Sample (verified live): overall error rate (3.91%), the five highest-latency endpoints, and the
+endpoint producing the most ERRORs — each from one generated `SELECT` over all 10,000 rows.
