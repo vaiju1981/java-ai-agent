@@ -74,9 +74,10 @@ tools) run on it.
 - **`Guardrail`** — `check(stage, content) → allow / transform / block`; `Guardrails.kidguard(...)`
   is the ordered crisis → PII → Llama Guard pipeline.
 - **`PolicyEnforcingAgent` / `Trust.govern(agent, …)`** — wraps any `Agent` so input/output guardrails
-  and the request deadline are enforced at the universal seam, governing composed and black-box agents
-  (`DeepAgent`, `AdkAgent`) uniformly. Trust is a wrapper over the seam, not per-implementation
-  configuration.
+  and a **hard** request deadline are enforced at the universal seam (the delegate runs bounded by the
+  remaining time and is cancelled on expiry; output guardrails run even on a self-blocked result),
+  governing composed and black-box agents (`DeepAgent`, `AdkAgent`) uniformly. Trust is a wrapper over
+  the seam, not per-implementation configuration.
 - **`Memory`** — short-term (`InMemoryMemory` / `WindowedMemory`), scoped per session by a
   **`ConversationStore`** (`InMemoryConversationStore`) so one agent serves many sessions without
   interleaving; **`EpisodicStore`** for long-term, cross-session learning (in-memory, file-persistent,

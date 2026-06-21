@@ -28,6 +28,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 - **Trust governs the universal `Agent` seam** — new `PolicyEnforcingAgent` / `Trust.govern(agent,
   guardrails…)` enforces input/output guardrails and the request deadline around *any* agent, so
   composed and black-box agents (`DeepAgent`, `AdkAgent`) are governed too, not just `DefaultAgent`.
+- **Hard deadline and unbypassable output policy** — `PolicyEnforcingAgent` runs the delegate
+  bounded by the remaining deadline (cancelling on expiry) and re-checks before delivering, so a
+  blocking or late delegate cannot return a result past the deadline; output guardrails now run even
+  when the delegate marks its result blocked, so a black-box agent cannot dodge the policy by
+  self-labelling unsafe output as "blocked".
 - **Deny-effectful is the runtime default** — `DefaultAgent` (and `SkillfulAgent`, which now exposes
   a `toolApprover`) deny effectful tools unless allow-listed; opt into `ToolApprovers.allowAll()`
   explicitly for dev/test. Read-only demo, example, and built-in tools are classified `READ_ONLY` so
