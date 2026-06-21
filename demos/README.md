@@ -44,3 +44,15 @@ status, latency). Same SQL-tool scaling story as the data analyst, different sha
 
 Sample (verified live): overall error rate (3.91%), the five highest-latency endpoints, and the
 endpoint producing the most ERRORs — each from one generated `SELECT` over all 10,000 rows.
+
+## SupportTriageDemo — structured classification
+
+Triages a batch of synthetic support tickets into structured `{priority, category, team}` using
+**structured output** (JSON bound straight to a record — no parsing), then prints a summary tally.
+
+```bash
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.SupportTriageDemo
+```
+
+Sample (verified live): "Urgent: data appears deleted" → urgent / Bug / Engineering; "Refund still
+not received" → high / Billing / Payments — with category and priority counts at the end.
