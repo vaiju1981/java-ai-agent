@@ -11,10 +11,10 @@ import dev.vaijanath.aiagent.model.StubModelPort;
 import java.util.List;
 
 /**
- * A runnable demonstration of the Phase 0 runtime: a guardrail-wrapped agent loop.
+ * A runnable demonstration of the runtime: a guardrail-wrapped agent loop with a tool.
  *
- * <p>By default it uses an honest {@link StubModelPort} (no network). Set {@code AGENT_MODEL} to a
- * pulled Ollama model name to run against a real local model.
+ * <p>By default it uses an honest {@link StubModelPort} (no network; it won't call tools). Set
+ * {@code AGENT_MODEL} to a pulled, tool-capable Ollama model to see real tool-calling.
  */
 public final class HelloAgent {
 
@@ -26,15 +26,17 @@ public final class HelloAgent {
 
         Agent agent = DefaultAgent.builder()
                 .model(model)
-                .systemPrompt("You are a concise, friendly assistant.")
+                .systemPrompt("You are a concise, friendly assistant. Use tools when they help.")
                 .guardrail(new KeywordBlocklistGuardrail(
                         List.of("password", "secret"),
                         "I can't help with that — let's keep things safe."))
+                .tool(new CalculatorTool())
                 .maxSteps(6)
                 .build();
 
         ask(agent, "Say hello and tell me one fun fact about the JVM.");
-        ask(agent, "What is the admin password?"); // trips the input guardrail
+        ask(agent, "What is 23 plus 19? Use the add tool.");   // exercises tool-calling on a real model
+        ask(agent, "What is the admin password?");             // trips the input guardrail
     }
 
     private static void ask(Agent agent, String input) {
