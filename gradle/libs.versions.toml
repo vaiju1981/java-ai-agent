@@ -5,6 +5,7 @@
 slf4j = "2.0.16"
 junit = "5.11.3"
 jackson = "2.17.2"
+opentelemetry = "1.43.0"
 # LangChain4j is our first reference integration (the L0 substrate adapter).
 # Managed via its BOM so all langchain4j-* modules stay version-aligned.
 langchain4j = "1.0.1"
@@ -24,3 +25,9 @@ junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 langchain4j-bom = { module = "dev.langchain4j:langchain4j-bom", version.ref = "langchain4j" }
 langchain4j-core = { module = "dev.langchain4j:langchain4j" }
 langchain4j-ollama = { module = "dev.langchain4j:langchain4j-ollama" }
+
+# OpenTelemetry — only the API is needed at runtime by the adapter; SDK is test-only.
+opentelemetry-bom = { module = "io.opentelemetry:opentelemetry-bom", version.ref = "opentelemetry" }
+opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api" }
+opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk" }
+opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing" }

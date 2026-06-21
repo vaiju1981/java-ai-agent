@@ -9,5 +9,6 @@ dependencyResolutionManagement {
 include(
     "agent-core",
     "agent-langchain4j",
+    "agent-observability-otel",
     "examples",
 )

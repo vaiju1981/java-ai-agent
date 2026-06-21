@@ -10,6 +10,7 @@ import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
+import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
@@ -18,18 +19,19 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The Phase 0 L1 runtime: a guardrail-wrapped agent loop.
+ * The L1 runtime: a guardrail-wrapped, observable agent loop.
  *
  * <pre>
  *   input guardrails -&gt; ( model call -&gt; optional tool calls )* -&gt; output guardrails
  * </pre>
  *
- * <p>Tool execution is wired but only fires when a {@link ModelPort} returns tool calls (the
- * text-only Phase 0 ports never do); the structure is in place for Phase 1.
+ * <p>Every step emits {@link AgentObserver} events (for tracing, metering, recording). Observer
+ * callbacks are isolated: a throwing observer is logged and ignored, never breaking the run.
  */
 public final class DefaultAgent implements Agent {
 
@@ -39,6 +41,7 @@ public final class DefaultAgent implements Agent {
     private final List<Guardrail> guardrails;
     private final Map<String, Tool> tools;
     private final Memory memory;
+    private final List<AgentObserver> observers;
     private final String systemPrompt;
     private final int maxSteps;
 
@@ -47,6 +50,7 @@ public final class DefaultAgent implements Agent {
     private DefaultAgent(Builder b) {
         this.model = Objects.requireNonNull(b.model, "model");
         this.guardrails = List.copyOf(b.guardrails);
+        this.observers = List.copyOf(b.observers);
         this.memory = b.memory != null ? b.memory : new InMemoryMemory();
         this.systemPrompt = b.systemPrompt;
         this.maxSteps = b.maxSteps;
@@ -59,11 +63,13 @@ public final class DefaultAgent implements Agent {
 
     @Override
     public AgentResponse run(AgentRequest request) {
+        notify(o -> o.onTurnStart(request.input()));
+
         // 1. Input guardrails — block before anything reaches the model.
         GuardrailDecision in = applyGuardrails(GuardrailStage.INPUT, request.input());
         if (in.blocked()) {
             log.info("input blocked: {}", in.reason());
-            return AgentResponse.blocked(in.content(), in.reason());
+            return finish(AgentResponse.blocked(in.content(), in.reason()));
         }
 
         // 2. Seed the conversation.
@@ -77,17 +83,20 @@ public final class DefaultAgent implements Agent {
         List<ToolSpec> toolSpecs = tools.values().stream().map(Tool::spec).toList();
         String finalText = null;
         for (int step = 0; step < maxSteps; step++) {
-            ModelResponse resp = model.chat(new ModelRequest(memory.history(), toolSpecs));
+            ModelRequest req = new ModelRequest(memory.history(), toolSpecs);
+            notify(o -> o.onModelCall(req));
+            ModelResponse resp = model.chat(req);
+            notify(o -> o.onModelResponse(resp));
 
             if (resp.hasToolCalls()) {
-                // Record the assistant's tool-call request so the conversation replays faithfully.
                 memory.add(Message.assistant(resp.text(), resp.toolCalls()));
                 for (ToolCall call : resp.toolCalls()) {
+                    notify(o -> o.onToolCall(call));
                     Tool tool = tools.get(call.name());
                     ToolResult result = (tool == null)
                             ? ToolResult.error("unknown tool: " + call.name())
                             : safeInvoke(tool, call.argumentsJson());
-                    log.debug("tool '{}' -> {}", call.name(), result.error() ? "error" : "ok");
+                    notify(o -> o.onToolResult(call.name(), result));
                     memory.add(Message.toolResult(call.id(), call.name(), result.content()));
                 }
                 continue; // let the model react to the tool results
@@ -99,9 +108,9 @@ public final class DefaultAgent implements Agent {
 
         if (finalText == null) {
             log.warn("agent stopped after maxSteps={} without a final answer", maxSteps);
-            return AgentResponse.stopped(
+            return finish(AgentResponse.stopped(
                     "I couldn't finish that within my step budget. Please try rephrasing.",
-                    "max_steps");
+                    "max_steps"));
         }
 
         // 4. Output guardrails — nothing unsafe reaches the user.
@@ -109,9 +118,14 @@ public final class DefaultAgent implements Agent {
         memory.add(Message.assistant(out.content()));
         if (out.blocked()) {
             log.info("output blocked: {}", out.reason());
-            return AgentResponse.blocked(out.content(), out.reason());
+            return finish(AgentResponse.blocked(out.content(), out.reason()));
         }
-        return AgentResponse.completed(out.content());
+        return finish(AgentResponse.completed(out.content()));
+    }
+
+    private AgentResponse finish(AgentResponse response) {
+        notify(o -> o.onTurnEnd(response));
+        return response;
     }
 
     /** Runs guardrails in order; the first block wins, transformations chain. */
@@ -119,6 +133,7 @@ public final class DefaultAgent implements Agent {
         String current = content;
         for (Guardrail g : guardrails) {
             GuardrailDecision d = g.check(stage, current);
+            notify(o -> o.onGuardrail(stage, g.name(), d));
             if (d.blocked()) {
                 return d;
             }
@@ -136,6 +151,17 @@ public final class DefaultAgent implements Agent {
         }
     }
 
+    /** Dispatches an event to every observer, isolating failures so they never break the run. */
+    private void notify(Consumer<AgentObserver> event) {
+        for (AgentObserver o : observers) {
+            try {
+                event.accept(o);
+            } catch (RuntimeException e) {
+                log.warn("observer {} threw; ignoring", o.getClass().getSimpleName(), e);
+            }
+        }
+    }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -145,6 +171,7 @@ public final class DefaultAgent implements Agent {
         private ModelPort model;
         private final List<Guardrail> guardrails = new ArrayList<>();
         private final List<Tool> tools = new ArrayList<>();
+        private final List<AgentObserver> observers = new ArrayList<>();
         private Memory memory;
         private String systemPrompt;
         private int maxSteps = 8;
@@ -161,6 +188,11 @@ public final class DefaultAgent implements Agent {
 
         public Builder tool(Tool tool) {
             this.tools.add(tool);
+            return this;
+        }
+
+        public Builder observer(AgentObserver observer) {
+            this.observers.add(observer);
             return this;
         }
 

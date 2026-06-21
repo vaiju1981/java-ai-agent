@@ -7,12 +7,13 @@
 > observability **built in**. It does **not** replace LangChain4j, Spring AI, or Google ADK —
 > it **uses them as dependencies** and adds the layer above them that none of them own.
 
-**Status: Phases 0–2 complete.** The core seams (`Agent`, `ModelPort`, `Tool`, `Guardrail`,
-`Memory`) and a runnable agent loop are in place and tested; agents can **call tools** through the
-substrate (verified live), and a **real, local safety layer** exists — a Llama Guard classifier and
-a PII scrubber. Following the discipline borrowed from Mitra: **real where cheap, stubbed where
-expensive, and the app never fakes success silently** — every stub returns an obvious placeholder,
-and the safety guard fails *closed*, never silently open.
+**Status: Phases 0–3 complete.** The core seams (`Agent`, `ModelPort`, `Tool`, `Guardrail`,
+`Memory`, `AgentObserver`) and a runnable agent loop are in place and tested; agents can **call
+tools** through the substrate (verified live), there is a **real, local safety layer** (a Llama
+Guard classifier + a PII scrubber), and an **observability layer** — token/cost accounting,
+deterministic record/replay, and OpenTelemetry tracing. Following the discipline borrowed from
+Mitra: **real where cheap, stubbed where expensive, and the app never fakes success silently** —
+every stub returns an obvious placeholder, and the safety guard fails *closed*, never silently open.
 
 ---
 
@@ -42,7 +43,10 @@ education tools) are intended to run on it — which forces it to be genuinely e
 - **`agent-core`** — the SPIs and the runtime. **Zero framework dependencies** (only SLF4J).
 - **`agent-langchain4j`** — the first reference L0 adapter: a `ModelPort` backed by LangChain4j
   (incl. local models via Ollama). ADK + Spring AI adapters follow the same seam.
-- **`examples`** — a runnable agent showing the guardrail-wrapped loop.
+- **`agent-observability-otel`** — optional OpenTelemetry tracing adapter (`OtelAgentObserver`);
+  keeps the OTel SDK out of `agent-core`.
+- **`examples`** — runnable agents (`HelloAgent`, `SafeAgent`) showing the loop, tools, guardrails,
+  and observability.
 
 ## Build & run
 
