@@ -154,6 +154,10 @@ runs *on top* of them.
 
 ## Demos
 
+For the deployment-shaped golden path—not a demo—see the
+[`production-reference`](production-reference/README.md) service. It wires the production runtime
+to PostgreSQL/Flyway, HikariCP, durable audit, bounded requests, health probes, and Ollama.
+
 The [`demos`](demos/README.md) module has six runnable, end-to-end demos — each backed by real data
 or the real trust layer, and verified live against a local model:
 
@@ -185,8 +189,8 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
 - **`agent-mcp`** — exposes a Model Context Protocol server's tools as `Tool`s (`McpTools.from(client)`).
 - **`agent-observability-otel`** — optional OpenTelemetry tracing adapter (`OtelAgentObserver`);
   keeps the OTel SDK out of `agent-core`.
-- **`agent-store-jdbc`** — a durable, queryable `ConversationStore` over any JDBC database
-  (SQLite/PostgreSQL/MySQL): messages persist to an `agent_messages` table that survives restarts and
+- **`agent-store-jdbc`** — a durable, queryable `ConversationStore` for SQLite and PostgreSQL:
+  complete turns persist transactionally to relational tables that survive restarts and
   supports SQL analytics; see [agent-store-jdbc/README.md](agent-store-jdbc/README.md).
 - **`agent-tools-jsonschema`** — a `ToolArgumentValidator` that validates tool arguments against their
   JSON Schema before the tool runs, so malformed calls are rejected without side effects.
@@ -194,6 +198,8 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
   capstone (which composes everything); see [examples/README.md](examples/README.md).
 - **`demos`** — six real-world, end-to-end demos (finance, data, logs, support, health, research),
   each verified live against a local model; see [demos/README.md](demos/README.md).
+- **`production-reference`** — a deployable Spring Boot/PostgreSQL golden path with migrations,
+  pooling, durable audit, safe runtime presets, health probes, and bounded multi-tenant requests.
 
 ## Extending it
 
@@ -202,7 +208,8 @@ Everything is an interface; implement the seam you need.
 - **A model provider** — implement `ModelPort.chat(ModelRequest) -> ModelResponse` (see
   `LangChain4jModelPort`, `SpringAiModelPort`). Wrap any port in `ResilientModelPort` for
   timeouts/retries.
-- **A tool** — implement `Tool` (`spec()` returns an MCP-aligned `ToolSpec`; `invoke(json)` runs it).
+- **A tool** — implement `Tool` for read-only utilities, or `ContextualTool` for effectful production
+  operations that need tenant, principal, deadline, trace, and an idempotency key.
 - **A guardrail** — implement `Guardrail.check(stage, content) -> GuardrailDecision` (allow /
   transform / block). Compose them; `Guardrails.kidguard(guardModel)` returns the ordered pipeline.
 - **A skill** — `Skill.of(name, description, instructions, tools)`, register it, and a
@@ -213,7 +220,7 @@ Everything is an interface; implement the seam you need.
   (e.g. `OllamaModelPorts.ollamaStructured(...)`); the model returns JSON bound straight to your type,
   so you never write a parser. `LlmPlanner(StructuredOutput)` uses this.
 - **An observer** — implement `AgentObserver` (trace/meter/record); failures are isolated.
-- **A tool policy** — implement `ToolApprover.authorize(name, args)` (use `ToolApprovers.allowList(...)`,
+- **A tool policy** — implement `ToolApprover.authorize(ToolCallContext)` (use `ToolApprovers.allowList(...)`,
   or `ConsoleToolApprover` for human-in-the-loop); wire it via `DefaultAgent.builder().toolApprover(...)`.
 - **Evaluate & cap cost** — `Evaluator.run(agent, cases)` reports a pass rate; wrap a `ModelPort` in
   `BudgetModelPort(port, new TokenBudget(n))` to enforce a token ceiling.

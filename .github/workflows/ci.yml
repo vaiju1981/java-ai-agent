@@ -14,6 +14,22 @@ jobs:
   build:
     name: build & test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: agent
+          POSTGRES_USER: agent
+          POSTGRES_PASSWORD: agent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    env:
+      POSTGRES_TEST_URL: jdbc:postgresql://localhost:5432/agent?user=agent&password=agent
     steps:
       - uses: actions/checkout@v4
 
