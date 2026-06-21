@@ -46,6 +46,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   context; tool exception detail is logged but no longer leaks into the model context. (Still open:
   JSON-schema argument validation, idempotency keys, explicit untrusted-result framing, per-tenant
   skill/lesson isolation, and hard cancellation of interruption-ignoring tools — a JVM limitation.)
+- **Off-request-path audit delivery** — `AsyncAuditSink` delivers events to a delegate sink on a
+  background thread, so a slow or hanging sink (e.g. an fsync) can't delay the request beyond its
+  deadline — the audit writes around the bounded turn no longer count against it. `record` is
+  non-blocking and drops under sustained backpressure; wrap a durable sink (e.g. `FileAuditSink`) to
+  keep durability, and `close()` to flush.
 - **Whole-turn deadline and exactly-once seam lifecycle** — `PolicyEnforcingAgent` bounds the entire
   turn — input guardrails, the delegate, and output guardrails — under the deadline, so even a hanging
   model-backed guardrail cannot exceed it. `turn.end` is recorded **exactly once** in a `finally`

@@ -32,9 +32,11 @@ import org.slf4j.LoggerFactory;
  * matching {@code turn.end} is emitted <b>exactly once</b> in a {@code finally} — on completion, a
  * block, the deadline, or an exception — and only by the caller, so a late worker cannot double-record.
  *
- * <p>Limitations: cancellation on deadline is cooperative (the JVM cannot force-stop a thread), and
- * this governs a delegate's inputs and outputs — it cannot intercept tool calls that happen
- * <em>inside</em> a black-box delegate (gate those with a {@code ToolApprover} where the tools run).
+ * <p>Limitations: cancellation on deadline is cooperative (the JVM cannot force-stop a thread); this
+ * governs a delegate's inputs and outputs — it cannot intercept tool calls that happen <em>inside</em>
+ * a black-box delegate (gate those with a {@code ToolApprover} where the tools run); and the
+ * {@code turn.start}/{@code turn.end} audit writes run outside the bounded operation, so a slow sink
+ * can delay the call — wrap the sink in {@code AsyncAuditSink} if the deadline must cover audit too.
  */
 public final class PolicyEnforcingAgent implements Agent {
 
