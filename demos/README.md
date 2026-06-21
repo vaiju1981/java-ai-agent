@@ -56,3 +56,17 @@ Triages a batch of synthetic support tickets into structured `{priority, categor
 
 Sample (verified live): "Urgent: data appears deleted" → urgent / Bug / Engineering; "Refund still
 not received" → high / Billing / Payments — with category and priority counts at the end.
+
+## SafeHealthDemo — the trust layer on sensitive data
+
+A health-literacy assistant: explains lab values using a curated `lab_reference` tool, behind
+kidguard guardrails (crisis + PII + Llama Guard), under a strict **explain-never-diagnose** rule.
+
+```bash
+ollama pull llama-guard3:1b
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.SafeHealthDemo
+```
+
+Sample (verified live): explains glucose 110 / LDL 160 against their reference ranges with a "discuss
+with your doctor" and no diagnosis; a distress message is **blocked by the crisis guardrail** with a
+supportive response before the model is ever called.
