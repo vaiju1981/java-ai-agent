@@ -4,8 +4,12 @@ Real-world demos showing what java-ai-agent is good for. They need a model:
 
 ```bash
 export AGENT_MODEL=gemma4:31b-cloud   # any pulled, tool-capable Ollama model
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.<Demo>
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.<group>.<Demo>
 ```
+
+Each demo lives in its own package — `finance`, `data`, `logs`, `support`, `health`, `research`
+(shared infra like the SQL tool and synthetic-data generators sits in the root `demos` package). The
+full main class for each demo is shown with its section below.
 
 ## DataAnalystDemo — explore, then query, at scale
 
@@ -18,7 +22,7 @@ Identifiers passed to the schema tools are validated, so an injected table/colum
 SQL.
 
 ```bash
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.DataAnalystDemo
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.data.DataAnalystDemo
 ```
 
 Sample (verified live, 6 tools): lists the `transactions` columns (`describe_table`), enumerates the
@@ -33,7 +37,7 @@ payment, tip, savings rate, ROI, …). All tools are presented at once — so th
 the agent picks the correct tool when there are many**.
 
 ```bash
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.PersonalFinanceDemo
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.finance.PersonalFinanceDemo
 ```
 
 Sample (verified live, 24 tools): categorizes Blue Bottle → Dining; flags Entertainment over budget;
@@ -49,7 +53,7 @@ A site-reliability analyst over **~10,000 synthetic request logs** in SQLite (le
 status, latency). Same SQL-tool scaling story as the data analyst, different shape.
 
 ```bash
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.LogAnalystDemo
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.logs.LogAnalystDemo
 ```
 
 Sample (verified live): overall error rate (3.91%), the five highest-latency endpoints, and the
@@ -61,7 +65,7 @@ Triages a batch of synthetic support tickets into structured `{priority, categor
 **structured output** (JSON bound straight to a record — no parsing), then prints a summary tally.
 
 ```bash
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.SupportTriageDemo
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.support.SupportTriageDemo
 ```
 
 Sample (verified live): "Urgent: data appears deleted" → urgent / Bug / Engineering; "Refund still
@@ -74,7 +78,7 @@ kidguard guardrails (crisis + PII + Llama Guard), under a strict **explain-never
 
 ```bash
 ollama pull llama-guard3:1b
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.SafeHealthDemo
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.health.SafeHealthDemo
 ```
 
 Sample (verified live): explains glucose 110 / LDL 160 against their reference ranges with a "discuss
@@ -87,7 +91,7 @@ Plans a topic into sections (via structured output), writes each with a **concur
 synthesizes a briefing — printing the plan, the per-section workspace drafts, and the final document.
 
 ```bash
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.ResearchBriefingDemo
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.research.ResearchBriefingDemo
 ```
 
 Sample (verified live): a balanced "Kotlin vs Java for a 2026 backend" briefing with a recommendation,

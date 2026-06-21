@@ -11,7 +11,7 @@ import java.time.LocalDate;
 import java.util.Random;
 
 /** Builds a synthetic SQLite database of transactions, so demos can query a realistically large set. */
-final class SyntheticData {
+public final class SyntheticData {
 
     private SyntheticData() {}
 
@@ -27,7 +27,7 @@ final class SyntheticData {
     };
 
     /** Creates a temp SQLite DB with {@code rows} transactions and returns its JDBC URL. */
-    static String createTransactionsDb(int rows) throws Exception {
+    public static String createTransactionsDb(int rows) throws Exception {
         Path file = Files.createTempFile("jaa-demo-", ".sqlite");
         file.toFile().deleteOnExit();
         String url = "jdbc:sqlite:" + file;
@@ -61,7 +61,7 @@ final class SyntheticData {
         return url;
     }
 
-    static int count(String jdbcUrl, String table) throws Exception {
+    public static int count(String jdbcUrl, String table) throws Exception {
         try (Connection c = DriverManager.getConnection(jdbcUrl);
                 Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM " + table)) {

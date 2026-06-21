@@ -1,4 +1,4 @@
-package dev.vaijanath.aiagent.demos;
+package dev.vaijanath.aiagent.demos.finance;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

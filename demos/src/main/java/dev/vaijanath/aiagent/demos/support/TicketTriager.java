@@ -1,4 +1,4 @@
-package dev.vaijanath.aiagent.demos;
+package dev.vaijanath.aiagent.demos.support;
 
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelRequest;

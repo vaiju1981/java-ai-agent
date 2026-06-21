@@ -1,8 +1,8 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.data;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.vaijanath.aiagent.demos.SyntheticData;
 import dev.vaijanath.aiagent.tool.Tool;
 import java.util.List;
 import org.junit.jupiter.api.Test;

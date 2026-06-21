@@ -1,8 +1,8 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.finance;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.vaijanath.aiagent.demos.SyntheticData;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

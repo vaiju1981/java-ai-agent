@@ -1,9 +1,9 @@
-package dev.vaijanath.aiagent.demos;
+package dev.vaijanath.aiagent.demos.support;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import dev.vaijanath.aiagent.demos.TicketTriager.TriageResult;
+import dev.vaijanath.aiagent.demos.support.TicketTriager.TriageResult;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

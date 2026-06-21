@@ -1,4 +1,4 @@
-package dev.vaijanath.aiagent.demos;
+package dev.vaijanath.aiagent.demos.health;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

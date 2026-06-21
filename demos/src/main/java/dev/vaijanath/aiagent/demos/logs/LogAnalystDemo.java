@@ -1,8 +1,9 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.logs;
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.DefaultAgent;
+import dev.vaijanath.aiagent.demos.Demos;
+import dev.vaijanath.aiagent.demos.SqlTool;
 import dev.vaijanath.aiagent.model.ModelPort;
 
 /**

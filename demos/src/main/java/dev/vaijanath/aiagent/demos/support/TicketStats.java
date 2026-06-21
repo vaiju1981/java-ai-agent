@@ -1,6 +1,6 @@
-package dev.vaijanath.aiagent.demos;
+package dev.vaijanath.aiagent.demos.support;
 
-import dev.vaijanath.aiagent.demos.TicketTriager.TriageResult;
+import dev.vaijanath.aiagent.demos.support.TicketTriager.TriageResult;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;

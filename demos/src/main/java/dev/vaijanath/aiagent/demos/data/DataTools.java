@@ -1,7 +1,7 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.data;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.vaijanath.aiagent.demos.SqlTool;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;

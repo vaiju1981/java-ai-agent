@@ -1,8 +1,8 @@
-package dev.vaijanath.aiagent.demos;
-
+package dev.vaijanath.aiagent.demos.logs;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.vaijanath.aiagent.demos.SqlTool;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import org.junit.jupiter.api.Test;
 
