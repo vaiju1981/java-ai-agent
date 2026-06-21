@@ -20,9 +20,26 @@ class DataToolsTest {
 
         assertTrue(byName(tk, "list_tables").invoke("{}").content().contains("transactions"));
         assertTrue(byName(tk, "describe_table").invoke("{\"table\":\"transactions\"}").content().contains("amount"));
-        assertEquals("50", byName(tk, "row_count").invoke("{\"table\":\"transactions\"}").content());
+        assertEquals(String.valueOf(SyntheticData.count(db, "transactions")),
+                byName(tk, "row_count").invoke("{\"table\":\"transactions\"}").content());
         assertTrue(byName(tk, "distinct_values")
                 .invoke("{\"table\":\"transactions\",\"column\":\"category\"}").content().contains("Travel"));
+    }
+
+    @Test
+    void aggregatesByGroup() throws Exception {
+        String db = SyntheticData.createTransactionsDb(200);
+        Tool aggregate = byName(DataTools.toolkit(db), "aggregate");
+
+        String sum = aggregate.invoke(
+                "{\"table\":\"transactions\",\"group_by\":\"category\",\"op\":\"sum\",\"value\":\"amount\"}").content();
+        assertTrue(sum.contains("category"), sum);
+        assertTrue(sum.contains("Travel"), sum);
+
+        String bad = aggregate.invoke(
+                "{\"table\":\"transactions\",\"group_by\":\"category\",\"op\":\"median\",\"value\":\"amount\"}")
+                .content();
+        assertTrue(bad.contains("unsupported"), bad);
     }
 
     @Test
