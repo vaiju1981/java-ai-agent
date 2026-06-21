@@ -64,10 +64,13 @@ gateway, education tools) run on it, proving it is end-to-end and trustworthy, n
 
 ## Roadmap
 
-- **Phase 0 (now):** core seams + runnable guardrail-wrapped loop + LangChain4j model adapter +
-  stub model + tests. ✅ target of this commit.
+- **Phase 0:** core seams + runnable guardrail-wrapped loop + LangChain4j model adapter +
+  stub model + tests. ✅ done.
 - **Phase 1:** tool-calling through `ModelPort` (MCP-aligned); real tool execution in the loop.
-- **Phase 2:** the `kidguard` safety pipeline as the reference `Guardrail` (dogfood Mitra's safety).
+  ✅ done — verified live (gemma invoked a tool through the LangChain4j↔Ollama adapter).
+- **Phase 2:** the safety layer as reference `Guardrail`s — `LlamaGuardGuardrail` (local
+  `llama-guard3:1b` via a `ModelPort`, fails closed) + `PiiScrubGuardrail`. ✅ done — verified live
+  (S1 content blocked at input). Next: crisis detection + blocklist to complete the `kidguard` suite.
 - **Phase 3:** OpenTelemetry tracing + cost accounting + deterministic replay.
 - **Phase 4:** planning + sub-agents (Loom structured concurrency) + deep-agent workspace.
 - **Phase 5:** skills (manifest + registry) and long-term/episodic memory.

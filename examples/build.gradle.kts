@@ -12,5 +12,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("dev.vaijanath.aiagent.examples.HelloAgent")
+    // Override with -PmainClass=...SafeAgent to run a different example.
+    mainClass.set(providers.gradleProperty("mainClass")
+        .orElse("dev.vaijanath.aiagent.examples.HelloAgent"))
 }
