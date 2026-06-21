@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vaijanath.aiagent.audit.AuditEvent;
@@ -138,6 +139,20 @@ class PolicyEnforcingAgentTest {
 
         List<String> types = audit.events().stream().map(AuditEvent::type).toList();
         assertTrue(types.contains("turn.start"), types.toString());
-        assertTrue(types.contains("turn.end"), types.toString());
+        assertEquals(1, types.stream().filter("turn.end"::equals).count(), types.toString());
+    }
+
+    @Test
+    void recordsExactlyOneTurnEndEvenWhenTheDelegateThrows() {
+        InMemoryAuditSink audit = new InMemoryAuditSink();
+        Agent boom = request -> {
+            throw new RuntimeException("delegate boom");
+        };
+        Agent governed = Trust.govern(boom, audit, List.of());
+
+        assertThrows(RuntimeException.class, () -> governed.run(new AgentRequest("hi")));
+
+        long ends = audit.events().stream().filter(e -> e.type().equals("turn.end")).count();
+        assertEquals(1, ends, "a throwing delegate must still close the lifecycle exactly once");
     }
 }
