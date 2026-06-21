@@ -3,15 +3,10 @@ package dev.vaijanath.aiagent.langchain4j;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.ToolExecutionResultMessage;
-import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.TokenUsage;
-import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
@@ -24,11 +19,8 @@ import java.util.Objects;
 
 /**
  * The first reference L0 adapter: a {@link ModelPort} backed by any LangChain4j {@link ChatModel}
- * (OpenAI, Ollama/local, etc.), with tool-calling support.
- *
- * <p>The agent's neutral types are translated to/from LangChain4j's: tool specs go out as
- * {@link ToolSpecification}s, the model's tool requests come back as {@link ToolCall}s, and tool
- * results are replayed as {@link ToolExecutionResultMessage}s.
+ * (OpenAI, Ollama/local, etc.), with tool-calling. Message conversion is shared via
+ * {@link LangChain4jMessages}.
  */
 public final class LangChain4jModelPort implements ModelPort {
 
@@ -46,12 +38,8 @@ public final class LangChain4jModelPort implements ModelPort {
 
     @Override
     public ModelResponse chat(ModelRequest request) {
-        List<ChatMessage> messages = new ArrayList<>();
-        for (Message m : request.messages()) {
-            messages.add(toLangChain4j(m));
-        }
-
-        ChatRequest.Builder builder = ChatRequest.builder().messages(messages);
+        ChatRequest.Builder builder = ChatRequest.builder()
+                .messages(LangChain4jMessages.toLangChain4j(request.messages()));
         if (!request.tools().isEmpty()) {
             builder.toolSpecifications(toToolSpecifications(request.tools()));
         }
@@ -67,18 +55,8 @@ public final class LangChain4jModelPort implements ModelPort {
             }
             return new ModelResponse(ai.text(), calls, usage);
         }
-
         String text = ai.text();
         return new ModelResponse(text == null ? "" : text, List.of(), usage);
-    }
-
-    private static Usage toUsage(TokenUsage tokenUsage) {
-        if (tokenUsage == null) {
-            return Usage.UNKNOWN;
-        }
-        Integer in = tokenUsage.inputTokenCount();
-        Integer out = tokenUsage.outputTokenCount();
-        return new Usage(in == null ? 0 : in, out == null ? 0 : out);
     }
 
     private static List<ToolSpecification> toToolSpecifications(List<ToolSpec> specs) {
@@ -93,27 +71,13 @@ public final class LangChain4jModelPort implements ModelPort {
         return out;
     }
 
-    private static ChatMessage toLangChain4j(Message m) {
-        return switch (m.role()) {
-            case SYSTEM -> SystemMessage.from(m.content());
-            case USER -> UserMessage.from(m.content());
-            case ASSISTANT -> m.hasToolCalls()
-                    ? AiMessage.from(toExecutionRequests(m.toolCalls()))
-                    : AiMessage.from(m.content());
-            case TOOL -> ToolExecutionResultMessage.from(m.toolCallId(), m.toolName(), m.content());
-        };
-    }
-
-    private static List<ToolExecutionRequest> toExecutionRequests(List<ToolCall> calls) {
-        List<ToolExecutionRequest> out = new ArrayList<>();
-        for (ToolCall c : calls) {
-            out.add(ToolExecutionRequest.builder()
-                    .id(c.id())
-                    .name(c.name())
-                    .arguments(c.argumentsJson())
-                    .build());
+    private static Usage toUsage(TokenUsage tokenUsage) {
+        if (tokenUsage == null) {
+            return Usage.UNKNOWN;
         }
-        return out;
+        Integer in = tokenUsage.inputTokenCount();
+        Integer out = tokenUsage.outputTokenCount();
+        return new Usage(in == null ? 0 : in, out == null ? 0 : out);
     }
 
     @Override

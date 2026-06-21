@@ -1,20 +1,15 @@
 package dev.vaijanath.aiagent.langchain4j;
 
-import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.output.TokenUsage;
-import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.StreamingModelPort;
 import dev.vaijanath.aiagent.model.Usage;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
@@ -42,10 +37,7 @@ public final class LangChain4jStreamingModelPort implements StreamingModelPort {
 
     @Override
     public ModelResponse chatStream(ModelRequest request, Consumer<String> onToken) {
-        List<ChatMessage> messages = new ArrayList<>();
-        for (Message m : request.messages()) {
-            messages.add(toLangChain4j(m));
-        }
+        List<ChatMessage> messages = LangChain4jMessages.toLangChain4j(request.messages());
 
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<ChatResponse> complete = new AtomicReference<>();
@@ -90,15 +82,6 @@ public final class LangChain4jStreamingModelPort implements StreamingModelPort {
                 : accumulated.toString();
         Usage usage = (response != null) ? toUsage(response.tokenUsage()) : Usage.UNKNOWN;
         return new ModelResponse(text == null ? accumulated.toString() : text, List.of(), usage);
-    }
-
-    private static ChatMessage toLangChain4j(Message m) {
-        return switch (m.role()) {
-            case SYSTEM -> SystemMessage.from(m.content());
-            case ASSISTANT -> AiMessage.from(m.content());
-            case TOOL -> UserMessage.from("[tool result] " + m.content());
-            default -> UserMessage.from(m.content());
-        };
     }
 
     private static Usage toUsage(TokenUsage tokenUsage) {
