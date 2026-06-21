@@ -14,6 +14,11 @@ import dev.vaijanath.aiagent.tool.ToolResult;
  *
  * <p>Observers must not affect correctness: the runtime isolates each callback, so a throwing
  * observer is logged and ignored, never breaking the run.
+ *
+ * <p>Content caveat: {@link #onTurnStart} receives post-input-guardrail (e.g. scrubbed) input, but
+ * {@link #onModelResponse} and {@link #onToolResult} carry <b>raw, pre-output-guardrail</b> content
+ * (tool results are size-capped). Anything that persists these events — e.g. a recorder — holds
+ * potentially sensitive data and should be protected accordingly.
  */
 public interface AgentObserver {
 

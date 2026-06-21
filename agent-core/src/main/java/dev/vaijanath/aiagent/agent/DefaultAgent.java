@@ -175,12 +175,14 @@ public final class DefaultAgent implements Agent {
                     notify(o -> o.onToolCall(call));
                     // A configured executor (e.g. ReplayToolExecutor) overrides real execution;
                     // otherwise authorize and invoke the real tool.
-                    ToolResult result = (toolExecutor != null)
+                    ToolResult raw = (toolExecutor != null)
                             ? toolExecutor.execute(call.name(), call.argumentsJson())
                             : invokeWithPolicy(call, activeByName, ctx);
+                    // Cap once so observers/recorders and the model all see the same bounded result.
+                    ToolResult result =
+                            new ToolResult(capped(raw.content(), maxToolResultChars), raw.error());
                     notify(o -> o.onToolResult(call.name(), result));
-                    memory.add(Message.toolResult(
-                            call.id(), call.name(), capped(result.content(), maxToolResultChars)));
+                    memory.add(Message.toolResult(call.id(), call.name(), result.content()));
                 }
                 continue; // let the model react to the tool results
             }

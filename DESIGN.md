@@ -90,8 +90,10 @@ tools) run on it.
   (which holds the request context), not by best-effort observers: each event carries an id,
   timestamp, traceId, session, principal, and tenant. `FileAuditSink` appends and fsyncs per event
   (sanitized fields, never throws into the caller). Distinct from `AgentObserver` (best-effort
-  telemetry, which only ever sees post-guardrail content): audit answers "who did what, when, under
-  which trace".
+  telemetry): audit answers "who did what, when, under which trace". Note that observers see the
+  post-input-guardrail input, but `onModelResponse` and `onToolResult` carry raw, pre-output-guardrail
+  content (tool results are size-capped) — so a recorder holds sensitive data and should be treated
+  accordingly.
 - **`Planner` / `Reflector` / `SkillSelector` / `SkillSynthesizer`** — LLM-driven helpers, each
   preferring `StructuredOutput` with a free-text fallback.
 - **`SkillQuarantine` / `SkillApprover`** — governed learning: an acquired skill is quarantined with

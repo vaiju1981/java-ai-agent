@@ -14,6 +14,7 @@ import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.ToolCall;
+import dev.vaijanath.aiagent.observe.RecordingObserver;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
 import dev.vaijanath.aiagent.tool.ToolEffect;
@@ -161,14 +162,18 @@ class AdversarialTest {
     @Test
     void oversizedToolResultIsCapped() {
         String huge = "x".repeat(50_000);
+        RecordingObserver recorder = new RecordingObserver();
         AgentResponse r = DefaultAgent.builder()
                 .model(callsThenEchoes("flood"))
                 .tool(readOnly("flood", huge))
+                .observer(recorder)
                 .build()
                 .run(new AgentRequest("flood me"));
 
         assertTrue(r.output().contains("truncated"), "a huge tool result must be capped");
         assertTrue(r.output().length() < huge.length(), "output should be far smaller than the raw result");
+        assertTrue(recorder.toolResults().get(0).content().length() < huge.length(),
+                "observers/recorders must see the capped result, not the raw one");
     }
 
     @Test
