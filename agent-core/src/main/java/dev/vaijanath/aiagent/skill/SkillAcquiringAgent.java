@@ -9,23 +9,32 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * An agent that <b>evolves</b>: after successfully handling a task it distills a reusable
- * {@link Skill} and registers it, so its capabilities grow from experience (a lightweight,
- * inspectable form of self-improvement — every acquired skill is an explicit registry entry).
+ * An agent that can <b>propose</b> new skills from experience — but never silently changes its own
+ * behavior. After a genuinely successful turn it synthesizes a candidate skill and submits it to a
+ * {@link SkillQuarantine} with provenance (source task, author, tenant). The candidate stays pending
+ * until a {@link SkillApprover} approves it (default: {@link SkillApprover#manual()}); only then does
+ * it enter the active registry. Blocked, errored, and step-exhausted turns teach nothing.
  */
 public final class SkillAcquiringAgent implements Agent {
 
     private static final Logger log = LoggerFactory.getLogger(SkillAcquiringAgent.class);
 
     private final Supplier<Agent> workerFactory;
-    private final SkillRegistry registry;
+    private final SkillQuarantine quarantine;
     private final SkillSynthesizer synthesizer;
+    private final SkillApprover approver;
 
-    public SkillAcquiringAgent(Supplier<Agent> workerFactory, SkillRegistry registry,
-            SkillSynthesizer synthesizer) {
+    public SkillAcquiringAgent(
+            Supplier<Agent> workerFactory, SkillQuarantine quarantine, SkillSynthesizer synthesizer) {
+        this(workerFactory, quarantine, synthesizer, SkillApprover.manual());
+    }
+
+    public SkillAcquiringAgent(Supplier<Agent> workerFactory, SkillQuarantine quarantine,
+            SkillSynthesizer synthesizer, SkillApprover approver) {
         this.workerFactory = Objects.requireNonNull(workerFactory, "workerFactory");
-        this.registry = Objects.requireNonNull(registry, "registry");
+        this.quarantine = Objects.requireNonNull(quarantine, "quarantine");
         this.synthesizer = Objects.requireNonNull(synthesizer, "synthesizer");
+        this.approver = Objects.requireNonNull(approver, "approver");
     }
 
     @Override
@@ -34,9 +43,18 @@ public final class SkillAcquiringAgent implements Agent {
         // Only learn from a genuine success — a blocked, errored, or step-exhausted turn teaches nothing.
         if (response.isCompleted()) {
             Skill learned = synthesizer.synthesize(request.input(), response.output());
-            if (learned != null && registry.get(learned.name()).isEmpty()) {
-                registry.register(learned);
-                log.info("acquired new skill: '{}'", learned.name());
+            if (learned != null
+                    && quarantine.pending(learned.name()).isEmpty()
+                    && quarantine.active().get(learned.name()).isEmpty()) {
+                PendingSkill candidate = quarantine.submit(
+                        learned, request.input(), "model", request.context().tenant());
+                if (approver.approve(candidate)) {
+                    quarantine.approve(learned.name());
+                    log.info("acquired and approved skill '{}' (v{})",
+                            learned.name(), candidate.provenance().version());
+                } else {
+                    log.info("quarantined skill '{}' pending approval", learned.name());
+                }
             }
         }
         return response;

@@ -28,6 +28,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 - **Trust governs the universal `Agent` seam** — new `PolicyEnforcingAgent` / `Trust.govern(agent,
   guardrails…)` enforces input/output guardrails and the request deadline around *any* agent, so
   composed and black-box agents (`DeepAgent`, `AdkAgent`) are governed too, not just `DefaultAgent`.
+- **Governed skill acquisition** — a synthesized skill is quarantined with provenance (source task,
+  author, tenant, version) and stays pending until a `SkillApprover` approves it; only then does it
+  enter the active registry. `SkillAcquiringAgent` no longer activates skills directly (default
+  approver is manual — nothing auto-activates), and promotions are versioned and reversible via
+  `SkillQuarantine.rollback`.
 - **Durable audit trail** — an `AuditEvent` (id, timestamp, traceId, session, principal, tenant,
   type, detail) emitted by the runtime for the turn lifecycle, tool-authorization decisions, and
   guardrail blocks; an `AuditSink` with `InMemoryAuditSink` and a flushed-per-event `FileAuditSink`.
