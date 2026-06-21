@@ -12,6 +12,9 @@ import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.Tool;
+import dev.vaijanath.aiagent.tool.ToolApprover;
+import dev.vaijanath.aiagent.tool.ToolApprovers;
+import dev.vaijanath.aiagent.tool.ToolDecision;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.ArrayList;
@@ -40,6 +43,7 @@ public final class DefaultAgent implements Agent {
     private final ModelPort model;
     private final List<Guardrail> guardrails;
     private final Map<String, Tool> tools;
+    private final ToolApprover toolApprover;
     private final Memory memory;
     private final List<AgentObserver> observers;
     private final String systemPrompt;
@@ -51,6 +55,7 @@ public final class DefaultAgent implements Agent {
         this.model = Objects.requireNonNull(b.model, "model");
         this.guardrails = List.copyOf(b.guardrails);
         this.observers = List.copyOf(b.observers);
+        this.toolApprover = b.toolApprover != null ? b.toolApprover : ToolApprovers.allowAll();
         this.memory = b.memory != null ? b.memory : new InMemoryMemory();
         this.systemPrompt = b.systemPrompt;
         this.maxSteps = b.maxSteps;
@@ -101,10 +106,7 @@ public final class DefaultAgent implements Agent {
                 memory.add(Message.assistant(resp.text(), resp.toolCalls()));
                 for (ToolCall call : resp.toolCalls()) {
                     notify(o -> o.onToolCall(call));
-                    Tool tool = tools.get(call.name());
-                    ToolResult result = (tool == null)
-                            ? ToolResult.error("unknown tool: " + call.name())
-                            : safeInvoke(tool, call.argumentsJson());
+                    ToolResult result = invokeWithPolicy(call);
                     notify(o -> o.onToolResult(call.name(), result));
                     memory.add(Message.toolResult(call.id(), call.name(), result.content()));
                 }
@@ -151,6 +153,19 @@ public final class DefaultAgent implements Agent {
         return GuardrailDecision.allow(current);
     }
 
+    /** Authorizes a tool call, then runs it (or returns a denial the model can react to). */
+    private ToolResult invokeWithPolicy(ToolCall call) {
+        ToolDecision decision = toolApprover.authorize(call.name(), call.argumentsJson());
+        if (!decision.allowed()) {
+            log.info("tool '{}' denied: {}", call.name(), decision.reason());
+            return ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason());
+        }
+        Tool tool = tools.get(call.name());
+        return (tool == null)
+                ? ToolResult.error("unknown tool: " + call.name())
+                : safeInvoke(tool, call.argumentsJson());
+    }
+
     private ToolResult safeInvoke(Tool tool, String args) {
         try {
             return tool.invoke(args);
@@ -181,6 +196,7 @@ public final class DefaultAgent implements Agent {
         private final List<Guardrail> guardrails = new ArrayList<>();
         private final List<Tool> tools = new ArrayList<>();
         private final List<AgentObserver> observers = new ArrayList<>();
+        private ToolApprover toolApprover;
         private Memory memory;
         private String systemPrompt;
         private int maxSteps = 8;
@@ -202,6 +218,12 @@ public final class DefaultAgent implements Agent {
 
         public Builder observer(AgentObserver observer) {
             this.observers.add(observer);
+            return this;
+        }
+
+        /** Gate tool execution behind a policy (allow-list, human approval, …). Default: allow all. */
+        public Builder toolApprover(ToolApprover toolApprover) {
+            this.toolApprover = toolApprover;
             return this;
         }
 
