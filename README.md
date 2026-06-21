@@ -7,19 +7,24 @@
 > observability **built in**. It does **not** replace LangChain4j, Spring AI, or Google ADK —
 > it **uses them as dependencies** and adds the layer above them that none of them own.
 
-**Status: Phases 0–6 complete, plus a hardening pass.** In place and tested: the core seams and a runnable agent loop;
-**tool-calling** through the substrate (verified live); a **real, local safety layer** (Llama Guard
-+ PII scrub); an **observability layer** (token/cost accounting, deterministic record/replay,
-OpenTelemetry tracing); **deep agents** (planning, sub-agents fanned out concurrently on **virtual
-threads**, shared workspace); and **skills + memory + learning** — a skill system with progressive
-disclosure, episodic memory, and a reflective agent that **learns from its mistakes** (records
-lessons and applies them on retry and across future runs). Following the discipline borrowed from
-Mitra: **real where cheap, stubbed where expensive, and the app never fakes success silently** —
-every stub returns an obvious placeholder, the safety guard fails *closed*, and learned lessons are
-explicit recorded episodes, never silent drift. Substrate adapters cover **LangChain4j**
-(tool-calling), **Spring AI**, and **Google ADK**; the model layer is hardened with per-call
-timeouts + retries (`ResilientModelPort`), bounded context (`WindowedMemory`), and graceful
-model-failure handling.
+**Status:** a working, tested framework — `./gradlew build` is green and most capabilities are
+verified live against a local model.
+
+- **Runtime** — a guardrail-wrapped agent loop; **deep agents** (plan → parallel sub-agents on
+  virtual threads → synthesize); **streaming**.
+- **Substrate** — LangChain4j and Spring AI as `ModelPort`s (both with **tool-calling**); Google ADK
+  wrapped as an `Agent`; MCP servers' tools as `Tool`s.
+- **Trust & ops** — kidguard guardrails (crisis · PII · local **Llama Guard**, fails *closed*); tool
+  **authorization + human-in-the-loop**; observability (token accounting, deterministic replay,
+  **OpenTelemetry**); an **eval harness** + token-**budget** enforcement.
+- **Cognition** — episodic memory that is in-memory, **persistent (cross-session)**, or **semantic**;
+  skills with progressive disclosure + **acquisition**; a reflective agent that **learns from its
+  mistakes** and applies lessons in later sessions.
+- **Reliability** — per-call timeouts + retries, bounded context, graceful model-failure handling;
+  **structured output** (schema-bound JSON, no fragile parsers).
+
+Discipline borrowed from Mitra: real where cheap, stubbed where expensive, never fake success; trust
+is a default; **`agent-core` has zero framework dependencies**.
 
 ---
 
@@ -104,8 +109,8 @@ runs *on top* of them.
 - **`agent-mcp`** — exposes a Model Context Protocol server's tools as `Tool`s (`McpTools.from(client)`).
 - **`agent-observability-otel`** — optional OpenTelemetry tracing adapter (`OtelAgentObserver`);
   keeps the OTel SDK out of `agent-core`.
-- **`examples`** — runnable agents (`HelloAgent`, `SafeAgent`) showing the loop, tools, guardrails,
-  and observability.
+- **`examples`** — a graduated set of runnable agents, from `MinimalAgent` to the `StudyBuddy`
+  capstone (which composes everything); see [examples/README.md](examples/README.md).
 
 ## Extending it
 
@@ -170,11 +175,13 @@ AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
   -PmainClass=dev.vaijanath.aiagent.examples.DeepResearchAgent
 ```
 
-## Roadmap
+## Status & roadmap
 
-See [DESIGN.md](DESIGN.md) for the full plan. Near-term: tool-calling through the `ModelPort`,
-the `kidguard` safety pipeline as the reference `Guardrail`, OpenTelemetry tracing, and the
-`Agent`-as-component adapter for Google ADK.
+Current capabilities are listed at the top; project history is in git. Remaining work needs external
+systems or accounts, not design changes: live **ADK** / **MCP** end-to-end (a configured ADK model /
+a running MCP server), richer MCP parameter schemas, and the **Maven Central** release (publication
+config is done and verified locally — see [PUBLISHING.md](PUBLISHING.md)). Architecture and rationale
+are in [DESIGN.md](DESIGN.md).
 
 ## License
 
