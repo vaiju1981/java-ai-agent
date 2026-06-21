@@ -42,18 +42,19 @@ public final class SkillAcquiringAgent implements Agent {
         AgentResponse response = workerFactory.get().run(request);
         // Only learn from a genuine success — a blocked, errored, or step-exhausted turn teaches nothing.
         if (response.isCompleted()) {
+            String tenant = request.context().tenant();
             Skill learned = synthesizer.synthesize(request.input(), response.output());
             if (learned != null
-                    && quarantine.pending(learned.name()).isEmpty()
-                    && quarantine.active().get(learned.name()).isEmpty()) {
-                PendingSkill candidate = quarantine.submit(
-                        learned, request.input(), "model", request.context().tenant());
+                    && quarantine.pending(tenant, learned.name()).isEmpty()
+                    && quarantine.active(tenant).get(learned.name()).isEmpty()) {
+                PendingSkill candidate = quarantine.submit(tenant, learned, request.input(), "model");
                 if (approver.approve(candidate)) {
-                    quarantine.approve(learned.name());
-                    log.info("acquired and approved skill '{}' (v{})",
-                            learned.name(), candidate.provenance().version());
+                    quarantine.approve(tenant, learned.name());
+                    log.info("acquired and approved skill '{}' (v{}) for tenant '{}'",
+                            learned.name(), candidate.provenance().version(), tenant);
                 } else {
-                    log.info("quarantined skill '{}' pending approval", learned.name());
+                    log.info("quarantined skill '{}' for tenant '{}' pending approval",
+                            learned.name(), tenant);
                 }
             }
         }

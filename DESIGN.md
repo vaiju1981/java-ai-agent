@@ -103,9 +103,9 @@ tools) run on it.
 - **`SkillQuarantine` / `SkillApprover`** — governed learning: an acquired skill is quarantined with
   provenance and versioned, and nothing the model authors becomes active without approval; a bad
   promotion can be rolled back. The active skills are exposed only as a read-only `SkillCatalog`, so a
-  skill cannot be activated by registering it directly, and `SkillRegistry` is thread-safe.
-  (Cross-session *lessons* still flow through the episodic store, and per-tenant skill isolation is a
-  follow-up — provenance records the tenant today; both are noted in the README/CHANGELOG.)
+  skill cannot be activated by registering it directly, and `SkillRegistry` is thread-safe. Both
+  acquired skills (the quarantine) and cross-session lessons (the episodic store) are **isolated per
+  tenant**, so neither crosses a tenant boundary.
 
 ## A turn, step by step
 
