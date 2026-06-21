@@ -96,8 +96,10 @@ tools) run on it.
   preferring `StructuredOutput` with a free-text fallback.
 - **`SkillQuarantine` / `SkillApprover`** — governed learning: an acquired skill is quarantined with
   provenance and versioned, and nothing the model authors becomes active without approval; a bad
-  promotion can be rolled back. (Cross-session *lessons* still flow through the episodic store; bringing
-  them under the same governance is a follow-up.)
+  promotion can be rolled back. The active skills are exposed only as a read-only `SkillCatalog`, so a
+  skill cannot be activated by registering it directly, and `SkillRegistry` is thread-safe.
+  (Cross-session *lessons* still flow through the episodic store, and per-tenant skill isolation is a
+  follow-up — provenance records the tenant today; both are noted in the README/CHANGELOG.)
 
 ## A turn, step by step
 

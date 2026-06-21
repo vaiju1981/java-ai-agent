@@ -27,7 +27,7 @@ public final class SkillfulAgent implements Agent {
 
     private final ModelPort model;
     private final String basePrompt;
-    private final SkillRegistry registry;
+    private final SkillCatalog registry;
     private final SkillSelector selector;
     private final List<Tool> baseTools;
     private final List<Guardrail> guardrails;
@@ -79,7 +79,7 @@ public final class SkillfulAgent implements Agent {
     public static final class Builder {
         private ModelPort model;
         private String basePrompt;
-        private SkillRegistry registry;
+        private SkillCatalog registry;
         private SkillSelector selector;
         private final List<Tool> baseTools = new ArrayList<>();
         private final List<Guardrail> guardrails = new ArrayList<>();
@@ -97,7 +97,7 @@ public final class SkillfulAgent implements Agent {
             return this;
         }
 
-        public Builder registry(SkillRegistry registry) {
+        public Builder registry(SkillCatalog registry) {
             this.registry = registry;
             return this;
         }

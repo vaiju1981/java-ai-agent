@@ -23,12 +23,13 @@ public final class SkillQuarantine {
     private final Map<String, Deque<Skill>> history = new HashMap<>();
     private final Map<String, Integer> versions = new HashMap<>();
 
-    public SkillQuarantine(SkillRegistry active) {
-        this.active = active;
+    /** The quarantine owns its active registry so nothing can register a skill that skipped approval. */
+    public SkillQuarantine() {
+        this.active = new SkillRegistry();
     }
 
-    /** The catalog of approved, active skills (what agents actually use). */
-    public SkillRegistry active() {
+    /** The approved, active skills as a read-only catalog — no direct registration possible. */
+    public SkillCatalog active() {
         return active;
     }
 

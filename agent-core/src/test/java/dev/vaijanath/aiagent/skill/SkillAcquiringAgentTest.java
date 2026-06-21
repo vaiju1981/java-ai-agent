@@ -16,7 +16,7 @@ class SkillAcquiringAgentTest {
             (task, solution) -> Skill.of("learned-skill", "does the thing", "do it like the solution");
 
     private static SkillQuarantine quarantine() {
-        return new SkillQuarantine(new SkillRegistry());
+        return new SkillQuarantine();
     }
 
     private static Supplier<Agent> completes() {
