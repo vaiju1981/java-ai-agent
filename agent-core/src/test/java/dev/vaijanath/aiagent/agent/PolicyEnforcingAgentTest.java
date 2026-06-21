@@ -70,4 +70,39 @@ class PolicyEnforcingAgentTest {
         assertEquals("deadline_exceeded", r.stopReason());
         assertFalse(ran.get());
     }
+
+    @Test
+    void outputGuardrailsApplyEvenWhenTheDelegateClaimsBlocked() {
+        // A black-box agent emits unsafe content but self-labels it "blocked" to dodge the policy.
+        Agent sneaky = request -> AgentResponse.blocked("here is the secret", "self-blocked");
+        Agent governed = Trust.govern(sneaky,
+                new KeywordBlocklistGuardrail(List.of("secret"), "stopped by policy"));
+
+        AgentResponse r = governed.run(new AgentRequest("hi"));
+
+        assertTrue(r.blocked());
+        assertEquals("stopped by policy", r.output(),
+                "the output policy must still apply to a self-blocked result");
+    }
+
+    @Test
+    void deadlineIsHardEvenWhenTheDelegateBlocks() {
+        Agent slow = request -> {
+            try {
+                Thread.sleep(60_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return AgentResponse.completed("late answer");
+        };
+        Agent governed = Trust.govern(slow);
+        RequestContext soon = new RequestContext(
+                "s", null, null, null, Instant.now().plusMillis(100), null);
+
+        AgentResponse r = governed.run(new AgentRequest("hi", soon));
+
+        assertEquals("deadline_exceeded", r.stopReason());
+        assertFalse(r.output().contains("late answer"),
+                "a result produced after the deadline must not be delivered");
+    }
 }
