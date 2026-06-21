@@ -7,13 +7,14 @@
 > observability **built in**. It does **not** replace LangChain4j, Spring AI, or Google ADK —
 > it **uses them as dependencies** and adds the layer above them that none of them own.
 
-**Status: Phases 0–3 complete.** The core seams (`Agent`, `ModelPort`, `Tool`, `Guardrail`,
-`Memory`, `AgentObserver`) and a runnable agent loop are in place and tested; agents can **call
-tools** through the substrate (verified live), there is a **real, local safety layer** (a Llama
-Guard classifier + a PII scrubber), and an **observability layer** — token/cost accounting,
-deterministic record/replay, and OpenTelemetry tracing. Following the discipline borrowed from
-Mitra: **real where cheap, stubbed where expensive, and the app never fakes success silently** —
-every stub returns an obvious placeholder, and the safety guard fails *closed*, never silently open.
+**Status: Phases 0–4 complete.** In place and tested: the core seams (`Agent`, `ModelPort`,
+`Tool`, `Guardrail`, `Memory`, `AgentObserver`) and a runnable agent loop; **tool-calling** through
+the substrate (verified live); a **real, local safety layer** (a Llama Guard classifier + a PII
+scrubber); an **observability layer** (token/cost accounting, deterministic record/replay,
+OpenTelemetry tracing); and **deep agents** — planning, sub-agents fanned out concurrently on
+**virtual threads** (Loom), and a shared workspace. Following the discipline borrowed from Mitra:
+**real where cheap, stubbed where expensive, and the app never fakes success silently** — every stub
+returns an obvious placeholder, and the safety guard fails *closed*, never silently open.
 
 ---
 
@@ -73,6 +74,14 @@ export OLLAMA_BASE_URL=http://localhost:11434   # optional, this is the default
 ollama pull llama-guard3:1b
 AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
   -PmainClass=dev.vaijanath.aiagent.examples.SafeAgent
+```
+
+**Deep agent demo** (`DeepResearchAgent`) — plans a task, runs a sub-agent per subtask concurrently
+on virtual threads, then synthesizes:
+
+```bash
+AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
+  -PmainClass=dev.vaijanath.aiagent.examples.DeepResearchAgent
 ```
 
 ## Roadmap
