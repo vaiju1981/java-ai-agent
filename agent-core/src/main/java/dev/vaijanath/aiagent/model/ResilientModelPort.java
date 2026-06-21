@@ -2,9 +2,7 @@ package dev.vaijanath.aiagent.model;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
@@ -25,7 +23,6 @@ public final class ResilientModelPort implements ModelPort {
     private final int maxAttempts;
     private final Duration timeout;
     private final long backoffMillis;
-    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     public ResilientModelPort(ModelPort delegate) {
         this(delegate, 3, Duration.ofSeconds(60), 500);
@@ -42,11 +39,14 @@ public final class ResilientModelPort implements ModelPort {
     public ModelResponse chat(ModelRequest request) {
         RuntimeException last = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            Future<ModelResponse> future = executor.submit(() -> delegate.chat(request));
+            // One fresh virtual thread per attempt — nothing long-lived to leak or shut down.
+            FutureTask<ModelResponse> task = new FutureTask<>(() -> delegate.chat(request));
+            Thread worker = Thread.ofVirtual().name("resilient-model").start(task);
             try {
-                return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+                return task.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             } catch (TimeoutException e) {
-                future.cancel(true);
+                task.cancel(true);
+                worker.interrupt();
                 last = new RuntimeException("model call timed out after " + timeout, e);
             } catch (ExecutionException e) {
                 last = (e.getCause() instanceof RuntimeException re) ? re : new RuntimeException(e.getCause());

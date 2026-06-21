@@ -7,8 +7,9 @@ description = "OpenTelemetry tracing adapter — maps AgentObserver events to sp
 dependencies {
     api(project(":agent-core"))
 
-    implementation(platform(libs.opentelemetry.bom))
-    implementation(libs.opentelemetry.api)
+    // OtelAgentObserver's public constructor takes an OpenTelemetry Tracer, so api.
+    api(platform(libs.opentelemetry.bom))
+    api(libs.opentelemetry.api)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

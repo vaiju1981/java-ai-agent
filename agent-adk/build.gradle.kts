@@ -7,7 +7,8 @@ description = "Google ADK adapter: wrap an ADK agent as an Agent (agent-as-compo
 dependencies {
     api(project(":agent-core"))
 
-    implementation(libs.google.adk)
+    // AdkAgent's public constructors take ADK types (BaseAgent, Runner), so api.
+    api(libs.google.adk)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
