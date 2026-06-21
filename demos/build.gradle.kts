@@ -10,6 +10,10 @@ dependencies {
     implementation(libs.sqlite.jdbc)
     implementation(libs.jackson.databind)
     runtimeOnly(libs.slf4j.simple)
+
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.launcher)
 }
 
 application {
