@@ -31,7 +31,11 @@ public interface AgentObserver {
 
     default void onTurnEnd(AgentResponse response) {}
 
-    /** A streamed output chunk from the model (when the model supports streaming). */
+    /**
+     * A raw, <b>pre-guardrail</b> output chunk streamed from the model — unsafe to surface directly,
+     * since output guardrails have not run yet. Emitted only when the agent is built with
+     * {@code streamRawTokens(true)}; the guarded result always arrives via {@link #onTurnEnd}.
+     */
     default void onToken(String token) {}
 
     /** A recoverable failure during a turn (e.g. the model call threw). The turn ends gracefully. */

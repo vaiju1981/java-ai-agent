@@ -98,7 +98,7 @@ sequenceDiagram
     A->>G: input guardrails
     G-->>A: allow / transform / block
     loop until a final answer (≤ maxSteps)
-        A->>M: chat(history, tools) — streams tokens to observers
+        A->>M: chat(history, tools)  (raw token stream is opt-in; off by default)
         M-->>A: text, or tool calls
         opt tool calls
             A->>T: authorize, then invoke
