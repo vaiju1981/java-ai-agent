@@ -58,6 +58,36 @@ class AsyncAuditSinkTest {
         }
     }
 
+    @Test
+    void rejectsRecordsAfterClose() {
+        InMemoryAuditSink delegate = new InMemoryAuditSink();
+        AsyncAuditSink async = new AsyncAuditSink(delegate);
+        async.close();
+
+        async.record(event());
+
+        assertEquals(0, delegate.events().size());
+        assertEquals(1, async.droppedCount());
+    }
+
+    @Test
+    void countsDelegateFailuresAndKeepsDraining() {
+        InMemoryAuditSink delivered = new InMemoryAuditSink();
+        AuditSink flaky = e -> {
+            if ("bad".equals(e.detail())) {
+                throw new IllegalStateException("sink unavailable");
+            }
+            delivered.record(e);
+        };
+        AsyncAuditSink async = new AsyncAuditSink(flaky);
+        async.record(AuditEvent.now("turn.end", "trace", "session", "principal", "tenant", "bad"));
+        async.record(event());
+        async.close();
+
+        assertEquals(1, async.deliveryFailureCount());
+        assertEquals(1, delivered.events().size());
+    }
+
     private static void sleep(long millis) {
         try {
             Thread.sleep(millis);

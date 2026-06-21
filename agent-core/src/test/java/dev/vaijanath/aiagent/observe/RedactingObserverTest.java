@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.observe;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.Usage;
@@ -43,5 +44,23 @@ class RedactingObserverTest {
         assertEquals("[redacted]", seenToolResult[0].content(), "tool result content must be redacted");
         assertEquals(true, seenToolResult[0].error(), "the error flag must survive");
         assertFalse(sawToken[0], "raw tokens must be dropped");
+    }
+
+    @Test
+    void errorDoesNotLeakMessageCauseOrStackTrace() {
+        Throwable[] seen = new Throwable[1];
+        AgentObserver capture = new AgentObserver() {
+            @Override
+            public void onError(String stage, Throwable error) {
+                seen[0] = error;
+            }
+        };
+
+        new RedactingObserver(capture)
+                .onError("model", new IllegalStateException("password=very-secret"));
+
+        assertEquals("redacted IllegalStateException", seen[0].getMessage());
+        assertNull(seen[0].getCause());
+        assertEquals(0, seen[0].getStackTrace().length);
     }
 }

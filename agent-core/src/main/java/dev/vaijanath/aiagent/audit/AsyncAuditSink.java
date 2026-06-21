@@ -34,6 +34,7 @@ public final class AsyncAuditSink implements AuditSink, AutoCloseable {
     private final Thread worker;
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final AtomicLong dropped = new AtomicLong();
+    private final AtomicLong deliveryFailures = new AtomicLong();
 
     public AsyncAuditSink(AuditSink delegate) {
         this(delegate, DEFAULT_CAPACITY);
@@ -46,7 +47,12 @@ public final class AsyncAuditSink implements AuditSink, AutoCloseable {
     }
 
     @Override
-    public void record(AuditEvent event) {
+    public synchronized void record(AuditEvent event) {
+        if (!running.get()) {
+            dropped.incrementAndGet();
+            log.warn("audit sink is closed; dropping '{}' event", event.type());
+            return;
+        }
         if (!queue.offer(event)) {
             long n = dropped.incrementAndGet();
             if (n == 1 || n % 1000 == 0) {
@@ -58,6 +64,11 @@ public final class AsyncAuditSink implements AuditSink, AutoCloseable {
     /** Number of events dropped because the buffer was full. */
     public long droppedCount() {
         return dropped.get();
+    }
+
+    /** Number of events the delegate rejected by throwing. */
+    public long deliveryFailureCount() {
+        return deliveryFailures.get();
     }
 
     private void drain() {
@@ -82,18 +93,41 @@ public final class AsyncAuditSink implements AuditSink, AutoCloseable {
         try {
             delegate.record(event);
         } catch (RuntimeException e) {
+            deliveryFailures.incrementAndGet();
             log.warn("audit delegate threw; dropping '{}' event", event.type(), e);
         }
     }
 
     /** Stops accepting work and waits (bounded) for the buffer to drain to the delegate. */
     @Override
-    public void close() {
-        running.set(false);
+    public synchronized void close() {
+        if (!running.compareAndSet(true, false)) {
+            return;
+        }
         try {
             worker.join(DRAIN_TIMEOUT);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+        if (worker.isAlive()) {
+            worker.interrupt();
+            try {
+                worker.join(Duration.ofSeconds(1));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        if (worker.isAlive()) {
+            log.warn("audit worker did not stop; delegate remains open to avoid a close/write race");
+            return;
+        }
+        if (delegate instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception e) {
+                deliveryFailures.incrementAndGet();
+                log.warn("failed to close audit delegate", e);
+            }
         }
     }
 }
