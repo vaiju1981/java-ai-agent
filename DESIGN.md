@@ -80,9 +80,10 @@ tools) run on it.
   governing composed and black-box agents (`DeepAgent`, `AdkAgent`) uniformly. Trust is a wrapper over
   the seam, not per-implementation configuration.
 - **`Memory`** — short-term (`InMemoryMemory` / `WindowedMemory`), scoped per session by a
-  **`ConversationStore`** (`InMemoryConversationStore`) so one agent serves many sessions without
-  interleaving; **`EpisodicStore`** for long-term, cross-session learning (in-memory, file-persistent,
-  or semantic/embedding-based).
+  **`ConversationStore`** (`InMemoryConversationStore`: LRU-bounded, accessed via `withMemory` which
+  pins the in-flight entry so same-session calls serialize and nothing is evicted mid-turn) so one
+  agent serves many tenants/sessions without interleaving; **`EpisodicStore`** for long-term,
+  cross-session learning (in-memory, file-persistent, or semantic/embedding-based).
 - **`AgentObserver`** — lifecycle events; `LoggingObserver`, `TokenAccountingObserver`,
   `RecordingObserver` (+ `ReplayModelPort` and `ReplayToolExecutor` for deterministic,
   side-effect-free replay), `OtelAgentObserver`.
