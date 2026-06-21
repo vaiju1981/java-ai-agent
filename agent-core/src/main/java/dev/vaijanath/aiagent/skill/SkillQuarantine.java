@@ -19,6 +19,7 @@ import java.util.Optional;
 public final class SkillQuarantine {
 
     private final SkillRegistry active;
+    private final SkillCatalog readOnlyView;
     private final Map<String, PendingSkill> pending = new LinkedHashMap<>();
     private final Map<String, Deque<Skill>> history = new HashMap<>();
     private final Map<String, Integer> versions = new HashMap<>();
@@ -26,11 +27,35 @@ public final class SkillQuarantine {
     /** The quarantine owns its active registry so nothing can register a skill that skipped approval. */
     public SkillQuarantine() {
         this.active = new SkillRegistry();
+        this.readOnlyView = readOnly(active);
     }
 
-    /** The approved, active skills as a read-only catalog — no direct registration possible. */
+    /**
+     * The approved, active skills as a read-only catalog. It is a wrapper, not the underlying
+     * registry, so a caller cannot cast it back to {@link SkillRegistry} and register directly —
+     * activation only happens through {@link #approve}.
+     */
     public SkillCatalog active() {
-        return active;
+        return readOnlyView;
+    }
+
+    private static SkillCatalog readOnly(SkillCatalog delegate) {
+        return new SkillCatalog() {
+            @Override
+            public Optional<Skill> get(String name) {
+                return delegate.get(name);
+            }
+
+            @Override
+            public List<Skill> all() {
+                return delegate.all();
+            }
+
+            @Override
+            public String catalog() {
+                return delegate.catalog();
+            }
+        };
     }
 
     /** Quarantine a candidate skill with provenance; it stays pending until approved. */

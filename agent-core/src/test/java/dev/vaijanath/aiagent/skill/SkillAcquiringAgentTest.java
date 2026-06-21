@@ -1,6 +1,7 @@
 package dev.vaijanath.aiagent.skill;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vaijanath.aiagent.agent.Agent;
@@ -75,6 +76,13 @@ class SkillAcquiringAgentTest {
         new SkillAcquiringAgent(worker, q, SYNTH).run(new AgentRequest("flaky"));
 
         assertTrue(q.pending().isEmpty());
+    }
+
+    @Test
+    void activeCatalogCannotBeCastBackToTheRegistry() {
+        SkillCatalog catalog = quarantine().active();
+        assertFalse(catalog instanceof SkillRegistry,
+                "the read-only view must not be the mutable registry, or approval can be bypassed");
     }
 
     @Test
