@@ -45,7 +45,9 @@ education tools) are intended to run on it — which forces it to be genuinely e
 
 - **`agent-core`** — the SPIs and the runtime. **Zero framework dependencies** (only SLF4J).
 - **`agent-langchain4j`** — the first reference L0 adapter: a `ModelPort` backed by LangChain4j
-  (incl. local models via Ollama). ADK + Spring AI adapters follow the same seam.
+  (incl. local models via Ollama), with tool-calling.
+- **`agent-spring-ai`** — a second L0 adapter: a `ModelPort` backed by any Spring AI `ChatModel`,
+  proving the runtime is vendor-neutral.
 - **`agent-observability-otel`** — optional OpenTelemetry tracing adapter (`OtelAgentObserver`);
   keeps the OTel SDK out of `agent-core`.
 - **`examples`** — runnable agents (`HelloAgent`, `SafeAgent`) showing the loop, tools, guardrails,

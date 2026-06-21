@@ -6,6 +6,7 @@ slf4j = "2.0.16"
 junit = "5.11.3"
 jackson = "2.17.2"
 opentelemetry = "1.43.0"
+springai = "1.0.0"
 # LangChain4j is our first reference integration (the L0 substrate adapter).
 # Managed via its BOM so all langchain4j-* modules stay version-aligned.
 langchain4j = "1.0.1"
@@ -31,3 +32,7 @@ opentelemetry-bom = { module = "io.opentelemetry:opentelemetry-bom", version.ref
 opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api" }
 opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk" }
 opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing" }
+
+# Spring AI — a second L0 substrate adapter.
+spring-ai-bom = { module = "org.springframework.ai:spring-ai-bom", version.ref = "springai" }
+spring-ai-client-chat = { module = "org.springframework.ai:spring-ai-client-chat" }
