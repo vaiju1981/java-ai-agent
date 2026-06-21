@@ -26,12 +26,17 @@ import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSelector;
 import dev.vaijanath.aiagent.tool.ToolSelectors;
 import dev.vaijanath.aiagent.tool.ToolSpec;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -68,6 +73,7 @@ public final class DefaultAgent implements Agent {
     private final String systemPrompt;
     private final int maxSteps;
     private final boolean streamRawTokens;
+    private final Duration toolTimeout;
 
     private DefaultAgent(Builder b) {
         this.model = Objects.requireNonNull(b.model, "model");
@@ -84,6 +90,7 @@ public final class DefaultAgent implements Agent {
         this.systemPrompt = b.systemPrompt;
         this.maxSteps = b.maxSteps;
         this.streamRawTokens = b.streamRawTokens;
+        this.toolTimeout = b.toolTimeout;
         Map<String, Tool> map = new LinkedHashMap<>();
         for (Tool tool : b.tools) {
             map.put(tool.name(), tool);
@@ -248,6 +255,28 @@ public final class DefaultAgent implements Agent {
     }
 
     private ToolResult safeInvoke(Tool tool, String args) {
+        if (toolTimeout == null) {
+            return invokeDirect(tool, args);
+        }
+        // Bound the call on a virtual thread so a hung tool cannot stall the turn forever.
+        FutureTask<ToolResult> task = new FutureTask<>(() -> invokeDirect(tool, args));
+        Thread worker = Thread.ofVirtual().name("tool-" + tool.name()).start(task);
+        try {
+            return task.get(toolTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            task.cancel(true);
+            worker.interrupt();
+            log.warn("tool '{}' timed out after {}", tool.name(), toolTimeout);
+            return ToolResult.error("tool '" + tool.name() + "' timed out after " + toolTimeout);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ToolResult.error("tool '" + tool.name() + "' was interrupted");
+        } catch (ExecutionException e) {
+            return ToolResult.error("tool '" + tool.name() + "' failed: " + e.getCause());
+        }
+    }
+
+    private ToolResult invokeDirect(Tool tool, String args) {
         try {
             return tool.invoke(args);
         } catch (RuntimeException e) {
@@ -290,6 +319,7 @@ public final class DefaultAgent implements Agent {
         private String systemPrompt;
         private int maxSteps = 8;
         private boolean streamRawTokens = false;
+        private Duration toolTimeout;
 
         public Builder model(ModelPort model) {
             this.model = model;
@@ -358,6 +388,12 @@ public final class DefaultAgent implements Agent {
 
         public Builder maxSteps(int maxSteps) {
             this.maxSteps = maxSteps;
+            return this;
+        }
+
+        /** Bound each tool call; on timeout the call returns an error instead of hanging the turn. */
+        public Builder toolTimeout(Duration toolTimeout) {
+            this.toolTimeout = toolTimeout;
             return this;
         }
 

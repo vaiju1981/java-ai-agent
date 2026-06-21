@@ -22,8 +22,9 @@ verified live against a local model.
 - **Cognition** — episodic memory that is in-memory, **persistent (cross-session)**, or **semantic**;
   skills with progressive disclosure + **acquisition**; a reflective agent that **learns from its
   mistakes** and applies lessons in later sessions.
-- **Reliability** — per-call timeouts + retries, bounded context, graceful model-failure handling;
-  **structured output** (schema-bound JSON, no fragile parsers).
+- **Reliability** — per-call model timeouts + retries and a **per-tool-call timeout**, bounded
+  context, graceful model-failure handling, **side-effect-free replay**; **structured output**
+  (schema-bound JSON, no fragile parsers).
 
 Discipline borrowed from Mitra: real where cheap, stubbed where expensive, never fake success; trust
 is a default; **`agent-core` has zero framework dependencies**.

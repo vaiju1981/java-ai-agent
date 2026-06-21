@@ -28,6 +28,13 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 - **Trust governs the universal `Agent` seam** — new `PolicyEnforcingAgent` / `Trust.govern(agent,
   guardrails…)` enforces input/output guardrails and the request deadline around *any* agent, so
   composed and black-box agents (`DeepAgent`, `AdkAgent`) are governed too, not just `DefaultAgent`.
+- **Tool-call timeout** — `DefaultAgent.builder().toolTimeout(Duration)` bounds each tool call on a
+  virtual thread, so a hung tool returns an error instead of stalling the turn.
+- **Adversarial + concurrency tests** — cross-session leakage under 64 concurrent sessions, a
+  prompt-injected tool result that cannot escalate to an effectful tool, hung tools bounded by the
+  timeout, and `DeepAgent` propagating tenant/identity to sub-agents. A `downstream-smoke` module
+  compiles against each adapter's public entry points using only transitively-exposed types, so a
+  regression of an adapter dependency from `api` to `implementation` breaks the build.
 - **Governed skill acquisition** — a synthesized skill is quarantined with provenance (source task,
   author, tenant, version) and stays pending until a `SkillApprover` approves it; only then does it
   enter the active registry. `SkillAcquiringAgent` no longer activates skills directly (default

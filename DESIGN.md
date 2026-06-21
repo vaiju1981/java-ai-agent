@@ -124,6 +124,9 @@ sequenceDiagram
 - **Build:** Gradle (Kotlin DSL) + version catalog. **Java 21 baseline** (built on a newer JDK via
   `--release 21`); **no preview APIs in the public API.**
 - **Concurrency:** virtual threads (GA in 21). `StructuredTaskScope` only once it is non-preview.
+- **Bounded calls:** the model call (`ResilientModelPort`) and each tool call
+  (`DefaultAgent.toolTimeout`) run on virtual threads with timeouts, so a hung dependency degrades
+  gracefully instead of stalling a turn.
 - **`agent-core` has zero framework dependencies** (SLF4J only) — every substrate is optional.
 - **Modules:** `agent-core` + adapters (`agent-langchain4j`, `agent-spring-ai`, `agent-adk`,
   `agent-mcp`, `agent-observability-otel`) + `examples`.
