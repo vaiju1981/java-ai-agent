@@ -74,6 +74,22 @@ class DefaultAgentTest {
     }
 
     @Test
+    void sameSessionIdAcrossTenantsIsIsolated() {
+        ModelPort countsUserTurns = request -> ModelResponse.text(Long.toString(
+                request.messages().stream().filter(m -> m.role() == Role.USER).count()));
+        Agent agent = DefaultAgent.builder().model(countsUserTurns).build();
+
+        RequestContext tenantA = new RequestContext("shared", null, "tenant-a", null, null, null);
+        RequestContext tenantB = new RequestContext("shared", null, "tenant-b", null, null, null);
+
+        assertEquals("1", agent.run(new AgentRequest("a1", tenantA)).output());
+        assertEquals("1", agent.run(new AgentRequest("b1", tenantB)).output(),
+                "the same sessionId under a different tenant must not share memory");
+        assertEquals("2", agent.run(new AgentRequest("a2", tenantA)).output(),
+                "the same (tenant, session) continues the conversation");
+    }
+
+    @Test
     void stopsWhenTheDeadlineHasPassed() {
         Agent agent = DefaultAgent.builder().model(new StubModelPort()).build();
         RequestContext past = new RequestContext(

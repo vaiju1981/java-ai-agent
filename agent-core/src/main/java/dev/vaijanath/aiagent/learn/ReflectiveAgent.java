@@ -53,7 +53,8 @@ public final class ReflectiveAgent implements Agent {
             String input = lessons.isEmpty()
                     ? task
                     : task + "\n\nLessons to apply (from earlier attempts):\n" + lessons;
-            last = workerFactory.get().run(new AgentRequest(input));
+            // Carry the caller's identity/tenant/trace/deadline into each retry (fresh session).
+            last = workerFactory.get().run(new AgentRequest(input, request.context().childSession()));
 
             Reflection reflection = reflector.reflect(task, last.output());
             if (reflection.satisfactory()) {

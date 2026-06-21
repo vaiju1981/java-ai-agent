@@ -3,10 +3,13 @@ package dev.vaijanath.aiagent.memory;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-/** Keeps one {@link Memory} per session id in a concurrent map, created on first use. */
+/** Keeps one {@link Memory} per {@code (tenant, sessionId)} pair in a concurrent map, created on first use. */
 public final class InMemoryConversationStore implements ConversationStore {
 
-    private final ConcurrentHashMap<String, Memory> bySession = new ConcurrentHashMap<>();
+    /** A NUL separator cannot appear in ids, so distinct (tenant, session) pairs never collide. */
+    private static final String SEP = String.valueOf((char) 0);
+
+    private final ConcurrentHashMap<String, Memory> byKey = new ConcurrentHashMap<>();
     private final Supplier<Memory> factory;
 
     public InMemoryConversationStore() {
@@ -18,7 +21,7 @@ public final class InMemoryConversationStore implements ConversationStore {
     }
 
     @Override
-    public Memory get(String sessionId) {
-        return bySession.computeIfAbsent(sessionId, k -> factory.get());
+    public Memory get(String tenant, String sessionId) {
+        return byKey.computeIfAbsent(tenant + SEP + sessionId, k -> factory.get());
     }
 }

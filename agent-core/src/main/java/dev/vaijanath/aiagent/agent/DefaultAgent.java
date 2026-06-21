@@ -114,7 +114,7 @@ public final class DefaultAgent implements Agent {
 
         // 2. Serialize work on this session so its memory stays consistent; different sessions
         //    (different users/tenants) use different memory objects and run concurrently.
-        Memory memory = conversations.get(ctx.sessionId());
+        Memory memory = conversations.get(ctx.tenant(), ctx.sessionId());
         synchronized (memory) {
             return converse(ctx, in.content(), memory);
         }
