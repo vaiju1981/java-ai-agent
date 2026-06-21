@@ -15,4 +15,5 @@ include(
     "agent-observability-otel",
     "examples",
     "demos",
+    "downstream-smoke",
 )
