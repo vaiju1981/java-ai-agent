@@ -87,6 +87,10 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   which **pins** the entry for the duration so an in-flight session can't be evicted mid-turn and
   concurrent same-session requests serialize on one memory (no split sessions). The key is a record,
   so ids may contain any characters.
+- **Per-tenant episodic lessons** — `Episode` carries a tenant and `EpisodicStore.recall(tenant,
+  query, limit)` is scoped to it, so a lesson learned for one tenant is never recalled for another;
+  `ReflectiveAgent` records and recalls under the request's tenant. (A back-compat `recall(query,
+  limit)` and 4-arg `Episode` default to the `"default"` tenant; the file store reads legacy rows.)
 - **Skill governance sealed and thread-safe** — `SkillRegistry` is now synchronized, and
   `SkillQuarantine` owns its registry and exposes only a read-only `SkillCatalog` (selectors and
   `SkillfulAgent` take `SkillCatalog`), so a skill can no longer be activated by calling `register()`

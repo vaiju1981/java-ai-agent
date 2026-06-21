@@ -64,21 +64,25 @@ public final class FileEpisodicStore implements EpisodicStore {
     }
 
     @Override
-    public List<Episode> recall(String query, int limit) {
-        return Episodes.recall(List.copyOf(episodes), query, limit);
+    public List<Episode> recall(String tenant, String query, int limit) {
+        return Episodes.recall(List.copyOf(episodes), tenant, query, limit);
     }
 
     private static String encode(Episode e) {
-        return String.join("\t",
+        return String.join("\t", b64(e.tenant()),
                 b64(e.task()), b64(e.outcome()), Boolean.toString(e.success()), b64(e.lesson()));
     }
 
     private static Episode decode(String line) {
         String[] parts = line.split("\t", -1);
-        if (parts.length != 4) {
-            return null;
+        if (parts.length == 5) {
+            return new Episode(unb64(parts[0]), unb64(parts[1]), unb64(parts[2]),
+                    Boolean.parseBoolean(parts[3]), unb64(parts[4]));
         }
-        return new Episode(unb64(parts[0]), unb64(parts[1]), Boolean.parseBoolean(parts[2]), unb64(parts[3]));
+        if (parts.length == 4) { // legacy rows written before tenants — treat as the default tenant
+            return new Episode(unb64(parts[0]), unb64(parts[1]), Boolean.parseBoolean(parts[2]), unb64(parts[3]));
+        }
+        return null;
     }
 
     private static String b64(String s) {

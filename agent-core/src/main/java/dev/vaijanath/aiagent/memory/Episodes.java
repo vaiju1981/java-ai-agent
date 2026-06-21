@@ -13,12 +13,13 @@ final class Episodes {
 
     private Episodes() {}
 
-    static List<Episode> recall(List<Episode> all, String query, int limit) {
+    static List<Episode> recall(List<Episode> all, String tenant, String query, int limit) {
         Set<String> q = tokens(query);
         if (q.isEmpty()) {
             return List.of();
         }
         return all.stream()
+                .filter(e -> e.tenant().equals(tenant))
                 .map(e -> Map.entry(e, overlap(q, tokens(e.task() + " " + e.lesson()))))
                 .filter(entry -> entry.getValue() > 0)
                 .sorted(Comparator.comparingInt(Map.Entry<Episode, Integer>::getValue).reversed())

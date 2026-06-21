@@ -84,7 +84,8 @@ tools) run on it.
   **`ConversationStore`** (`InMemoryConversationStore`: LRU-bounded, accessed via `withMemory` which
   pins the in-flight entry so same-session calls serialize and nothing is evicted mid-turn) so one
   agent serves many tenants/sessions without interleaving; **`EpisodicStore`** for long-term,
-  cross-session learning (in-memory, file-persistent, or semantic/embedding-based).
+  cross-session learning with **tenant-scoped recall** (in-memory, file-persistent, or
+  semantic/embedding-based).
 - **`AgentObserver`** — lifecycle events; `LoggingObserver`, `TokenAccountingObserver`,
   `RecordingObserver` (+ `ReplayModelPort` and `ReplayToolExecutor` for deterministic,
   side-effect-free replay), `OtelAgentObserver`.
