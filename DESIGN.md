@@ -96,8 +96,9 @@ tools) run on it.
   off the request path so a slow sink can't blow a deadline. Distinct from `AgentObserver` (best-effort
   telemetry): audit answers "who did what, when, under which trace". Note that observers see the
   post-input-guardrail input, but `onModelResponse` and `onToolResult` carry raw, pre-output-guardrail
-  content (tool results are size-capped) — so a recorder holds sensitive data and should be treated
-  accordingly.
+  content (tool results are size-capped) — so a recorder holds sensitive data; wrap an observer in
+  `RedactingObserver` to forward events to a telemetry backend with content stripped but metering
+  metadata kept.
 - **`Planner` / `Reflector` / `SkillSelector` / `SkillSynthesizer`** — LLM-driven helpers, each
   preferring `StructuredOutput` with a free-text fallback.
 - **`SkillQuarantine` / `SkillApprover`** — governed learning: an acquired skill is quarantined with

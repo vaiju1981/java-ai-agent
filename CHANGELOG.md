@@ -53,6 +53,11 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
   untrusted data by default (resists prompt injection; opt out with `frameToolResults(false)`), and
   `ToolCallContext.idempotencyKey()` provides a stable key (tenant + session + tool + arguments) that
   an effectful `ToolApprover` or tool can use to make a repeated operation idempotent.
+- **Telemetry content redaction** — `RedactingObserver` wraps any observer and forwards events with
+  content fields blanked (`"[redacted]"`) while preserving metering metadata (token usage, roles,
+  tool/guardrail names, ids, outcome flags); raw streamed tokens are dropped. This lets a
+  metrics/tracing backend avoid carrying message content, tool arguments, or model output — which
+  `onModelResponse`/`onToolResult` otherwise expose raw (pre-output-guardrail) by design.
 - **Off-request-path audit delivery** — `AsyncAuditSink` delivers events to a delegate sink on a
   background thread, so a slow or hanging sink (e.g. an fsync) can't delay the request beyond its
   deadline — the audit writes around the bounded turn no longer count against it. `record` is
