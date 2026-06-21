@@ -75,6 +75,8 @@ Everything is an interface; implement the seam you need.
   or `ConsoleToolApprover` for human-in-the-loop); wire it via `DefaultAgent.builder().toolApprover(...)`.
 - **Evaluate & cap cost** — `Evaluator.run(agent, cases)` reports a pass rate; wrap a `ModelPort` in
   `BudgetModelPort(port, new TokenBudget(n))` to enforce a token ceiling.
+- **Stream tokens** — `ModelPorts.stream(port, request, System.out::print)`; a `StreamingModelPort`
+  (e.g. `OllamaModelPorts.ollamaStreaming(...)`) forwards tokens live, others fall back to a single chunk.
 - **An agent** — implement `Agent.run(AgentRequest) -> AgentResponse`. Because everything is an
   `Agent`, your implementation can be a sub-agent of a `DeepAgent` or the worker of a
   `ReflectiveAgent` with no extra wiring.
