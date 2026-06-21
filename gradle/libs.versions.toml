@@ -1,0 +1,22 @@
+# Version catalog — single source of truth for dependency versions.
+# Bump versions here; modules reference them via the generated `libs.*` accessors.
+
+[versions]
+slf4j = "2.0.16"
+junit = "5.11.3"
+# LangChain4j is our first reference integration (the L0 substrate adapter).
+# Managed via its BOM so all langchain4j-* modules stay version-aligned.
+langchain4j = "1.0.1"
+
+[libraries]
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+# Use libs.langchain4j.bom as a platform; the others inherit their version from it.
+langchain4j-bom = { module = "dev.langchain4j:langchain4j-bom", version.ref = "langchain4j" }
+langchain4j-core = { module = "dev.langchain4j:langchain4j" }
+langchain4j-ollama = { module = "dev.langchain4j:langchain4j-ollama" }
