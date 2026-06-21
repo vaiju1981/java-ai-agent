@@ -2,57 +2,59 @@ package dev.vaijanath.aiagent.examples;
 
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
-import dev.vaijanath.aiagent.agent.AgentResponse;
+import dev.vaijanath.aiagent.agent.DefaultAgent;
 import dev.vaijanath.aiagent.learn.Reflection;
 import dev.vaijanath.aiagent.learn.Reflector;
 import dev.vaijanath.aiagent.learn.ReflectiveAgent;
 import dev.vaijanath.aiagent.memory.EpisodicStore;
 import dev.vaijanath.aiagent.memory.InMemoryEpisodicStore;
+import dev.vaijanath.aiagent.model.ModelPort;
+import dev.vaijanath.aiagent.model.StubModelPort;
 import java.util.function.Supplier;
 
 /**
- * Rung 6 — an agent that <b>learns from its mistakes</b>.
- *
- * <p>This is deterministic and offline so the behavior is unmistakable: a worker that gets the
- * answer wrong until the correct fact is in front of it, and a reviewer that knows better. The
- * {@link ReflectiveAgent} self-corrects within a run (records the lesson, retries with it) and —
- * sharing one {@link EpisodicStore} — applies that lesson on a later run without any retry.
- *
- * <p>To make it autonomous with a real LLM, swap {@code WORKER} for a {@code DefaultAgent} backed by
- * a model and {@code REVIEWER} for an {@code LlmReflector}.
+ * Real learning from real mistakes. A <b>real model</b> is asked for a tagline, but a hidden
+ * requirement — it must include the app's name, "Mitra" — is revealed only by the reviewer's
+ * feedback. The model can't satisfy it on the first try (it doesn't know the name), so you reliably
+ * see the loop: a first attempt is rejected, the {@link ReflectiveAgent} records the lesson, and the
+ * retry applies it. The INFO log shows the rejected attempt; the lesson is a stored {@code Episode}.
+ * Run with {@code AGENT_MODEL}.
  */
 public final class LearningAgentExample {
 
-    // Gets it wrong ("Sydney") until the correct fact ("Canberra") appears in the input.
-    private static final Supplier<Agent> WORKER = () -> request ->
-            request.input().contains("Canberra")
-                    ? AgentResponse.completed("The capital of Australia is Canberra.")
-                    : AgentResponse.completed("The capital of Australia is Sydney.");
-
-    // A reviewer that recognizes the mistake and teaches the lesson.
-    private static final Reflector REVIEWER = (task, answer) ->
-            answer.contains("Canberra")
-                    ? Reflection.ok()
-                    : Reflection.issue("The capital of Australia is Canberra, not Sydney.");
+    private static final String APP_NAME = "Mitra";
 
     public static void main(String[] args) {
+        ModelPort model = Examples.modelFromEnv();
+        System.out.println("== LearningAgentExample ==  model: " + model.name());
+        if (model instanceof StubModelPort) {
+            System.out.println("(NOTE: set AGENT_MODEL to a real Ollama model to see genuine self-correction.)");
+        }
+        System.out.println();
+
+        // Hidden requirement, surfaced only as feedback: the tagline must name the app.
+        Reflector reviewer = (task, answer) -> answer.contains(APP_NAME)
+                ? Reflection.ok()
+                : Reflection.issue("The tagline must include our app's name, which is '" + APP_NAME + "'.");
+
         EpisodicStore memory = new InMemoryEpisodicStore();
-
-        System.out.println("== Learning from mistakes ==\n");
-
-        System.out.println("--- Run 1: no prior experience, allowed to retry ---");
-        Agent run1 = ReflectiveAgent.builder()
-                .worker(WORKER).reflector(REVIEWER).memory(memory).maxAttempts(2)
+        Supplier<Agent> worker = () -> DefaultAgent.builder()
+                .model(model)
+                .systemPrompt("You are a marketing copywriter. Reply with only the tagline.")
                 .build();
-        System.out.println("answer: " + run1.run(new AgentRequest("What is the capital of Australia?")).output());
-        System.out.println("lessons now remembered:");
-        memory.recall("capital of Australia", 5).forEach(e -> System.out.println("  • " + e.lesson()));
-
-        System.out.println("\n--- Run 2: same memory, NO retries allowed ---");
-        Agent run2 = ReflectiveAgent.builder()
-                .worker(WORKER).reflector(REVIEWER).memory(memory).maxAttempts(1)
+        Agent agent = ReflectiveAgent.builder()
+                .worker(worker).reflector(reviewer).memory(memory).maxAttempts(3)
                 .build();
-        System.out.println("answer: " + run2.run(new AgentRequest("Remind me — the capital of Australia?")).output());
-        System.out.println("\n(Run 2 was right on the FIRST attempt: it recalled Run 1's lesson.)");
+
+        String task = "Write a short, catchy one-line tagline for our new app.";
+        System.out.println("> " + task);
+        System.out.println("  (hidden review rule: the tagline must mention the app name '" + APP_NAME + "')\n");
+
+        String answer = agent.run(new AgentRequest(task)).output();
+
+        System.out.println("final tagline: " + answer);
+        System.out.println("mentions the app name: " + answer.contains(APP_NAME));
+        System.out.println("\nlessons the agent learned (recorded episodes):");
+        memory.recall(task, 5).forEach(e -> System.out.println("  • " + e.lesson()));
     }
 }
