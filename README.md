@@ -185,6 +185,9 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
 - **`agent-mcp`** — exposes a Model Context Protocol server's tools as `Tool`s (`McpTools.from(client)`).
 - **`agent-observability-otel`** — optional OpenTelemetry tracing adapter (`OtelAgentObserver`);
   keeps the OTel SDK out of `agent-core`.
+- **`agent-store-jdbc`** — a durable, queryable `ConversationStore` over any JDBC database
+  (SQLite/PostgreSQL/MySQL): messages persist to an `agent_messages` table that survives restarts and
+  supports SQL analytics; see [agent-store-jdbc/README.md](agent-store-jdbc/README.md).
 - **`examples`** — a graduated set of runnable agents, from `MinimalAgent` to the `StudyBuddy`
   capstone (which composes everything); see [examples/README.md](examples/README.md).
 - **`demos`** — six real-world, end-to-end demos (finance, data, logs, support, health, research),
