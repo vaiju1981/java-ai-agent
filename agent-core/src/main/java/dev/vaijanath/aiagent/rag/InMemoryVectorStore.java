@@ -13,7 +13,23 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class InMemoryVectorStore implements Retriever {
 
-    private record Entry(String tenant, String id, String text, Map<String, String> metadata, float[] vector) {}
+    // A plain class rather than a record: the float[] vector would make a record's generated
+    // equals/hashCode use array identity (we never compare entries, but the seam stays clean).
+    private static final class Entry {
+        final String tenant;
+        final String id;
+        final String text;
+        final Map<String, String> metadata;
+        final float[] vector;
+
+        Entry(String tenant, String id, String text, Map<String, String> metadata, float[] vector) {
+            this.tenant = tenant;
+            this.id = id;
+            this.text = text;
+            this.metadata = metadata;
+            this.vector = vector;
+        }
+    }
 
     private final Embedder embedder;
     private final List<Entry> entries = new CopyOnWriteArrayList<>();
@@ -41,8 +57,8 @@ public final class InMemoryVectorStore implements Retriever {
         }
         float[] q = embedder.embed(query);
         return entries.stream()
-                .filter(e -> e.tenant().equals(tenant))
-                .map(e -> new RetrievedChunk(e.id(), e.text(), cosine(q, e.vector()), e.metadata()))
+                .filter(e -> e.tenant.equals(tenant))
+                .map(e -> new RetrievedChunk(e.id, e.text, cosine(q, e.vector), e.metadata))
                 .filter(c -> c.score() > 0.0)
                 .sorted(Comparator.comparingDouble(RetrievedChunk::score).reversed())
                 .limit(limit)
