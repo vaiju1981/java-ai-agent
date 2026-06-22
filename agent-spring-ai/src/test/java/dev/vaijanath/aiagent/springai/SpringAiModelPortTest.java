@@ -8,7 +8,6 @@ import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -41,8 +40,10 @@ class SpringAiModelPortTest {
 
     @Test
     void parsesToolCallsBackFromSpringAi() {
-        AssistantMessage withToolCall = new AssistantMessage("", Map.of(),
-                List.of(new AssistantMessage.ToolCall("c1", "function", "calc", "{\"a\":1}")));
+        AssistantMessage withToolCall = AssistantMessage.builder()
+                .content("")
+                .toolCalls(List.of(new AssistantMessage.ToolCall("c1", "function", "calc", "{\"a\":1}")))
+                .build();
         ChatModel fake = new ChatModel() {
             @Override
             public ChatResponse call(Prompt prompt) {
