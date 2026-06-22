@@ -15,10 +15,34 @@ plugins {
 
 allprojects {
     group = "io.github.vaiju1981"
-    version = "0.1.0-SNAPSHOT"
+    // Releases set RELEASE_VERSION (derived from the git tag) in CI; everything else is a snapshot.
+    version = System.getenv("RELEASE_VERSION")?.takeIf(String::isNotBlank) ?: "0.1.0-SNAPSHOT"
 
     repositories {
         mavenCentral()
+    }
+}
+
+// Code quality runs via SonarCloud's automatic analysis (GitHub App), so no Gradle Sonar wiring here.
+
+// Combine every library module's Javadoc into one site for GitHub Pages.
+tasks.register<Copy>("aggregateJavadoc") {
+    description = "Aggregates each module's Javadoc into build/docs/javadoc (for GitHub Pages)."
+    group = "documentation"
+    val modules = listOf(
+        "agent-core", "agent-langchain4j", "agent-spring-ai", "agent-adk", "agent-mcp",
+        "agent-observability-otel", "agent-store-jdbc", "agent-tools-jsonschema")
+    modules.forEach { name ->
+        dependsOn(":$name:javadoc")
+        from(project(":$name").layout.buildDirectory.dir("docs/javadoc")) { into(name) }
+    }
+    into(layout.buildDirectory.dir("docs/javadoc"))
+    doLast {
+        layout.buildDirectory.file("docs/javadoc/index.html").get().asFile.writeText(
+            "<!doctype html><html><head><meta charset=\"utf-8\"><title>java-ai-agent Javadoc</title>"
+                + "</head><body><h1>java-ai-agent Javadoc</h1><ul>"
+                + modules.joinToString("") { "<li><a href=\"$it/index.html\">$it</a></li>" }
+                + "</ul></body></html>")
     }
 }
 
@@ -138,6 +162,18 @@ subprojects {
                         password = project.findProperty("centralPassword") as String?
                     }
                 }
+            }
+        }
+
+        // Sign artifacts when a GPG key is provided (the CI release job); snapshot and local builds
+        // have no key and skip signing, so they still build without one.
+        apply(plugin = "signing")
+        extensions.configure<org.gradle.plugins.signing.SigningExtension> {
+            val signingKey = System.getenv("SIGNING_KEY")
+            val signingPassword = System.getenv("SIGNING_PASSWORD")
+            if (!signingKey.isNullOrBlank()) {
+                useInMemoryPgpKeys(signingKey, signingPassword)
+                sign(extensions.getByType<PublishingExtension>().publications["maven"])
             }
         }
     }

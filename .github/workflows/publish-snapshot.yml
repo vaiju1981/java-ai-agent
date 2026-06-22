@@ -1,0 +1,37 @@
+name: Publish snapshot
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Publish -SNAPSHOT to Maven Central
+    runs-on: ubuntu-latest
+    env:
+      # Sonatype Central Portal user token (username + token halves).
+      ORG_GRADLE_PROJECT_centralUsername: ${{ secrets.CENTRAL_USERNAME }}
+      ORG_GRADLE_PROJECT_centralPassword: ${{ secrets.CENTRAL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Only publishes when the Central credentials are configured.
+      - name: Publish snapshots
+        if: ${{ env.ORG_GRADLE_PROJECT_centralUsername != '' }}
+        run: ./gradlew publish --no-daemon --stacktrace
