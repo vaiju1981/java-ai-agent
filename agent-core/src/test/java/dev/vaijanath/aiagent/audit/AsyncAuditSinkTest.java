@@ -3,6 +3,8 @@ package dev.vaijanath.aiagent.audit;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.Test;
 
@@ -56,6 +58,37 @@ class AsyncAuditSinkTest {
             block.countDown();
             async.close();
         }
+    }
+
+    @Test
+    void drainsEventsFromManyConcurrentProducers() throws InterruptedException {
+        InMemoryAuditSink delegate = new InMemoryAuditSink();
+        int producers = 16;
+        int perProducer = 100;
+        CountDownLatch go = new CountDownLatch(1);
+        try (AsyncAuditSink async = new AsyncAuditSink(delegate, producers * perProducer)) {
+            List<Thread> threads = new ArrayList<>();
+            for (int i = 0; i < producers; i++) {
+                Thread t = Thread.ofVirtual().start(() -> {
+                    try {
+                        go.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                    for (int j = 0; j < perProducer; j++) {
+                        async.record(event());
+                    }
+                });
+                threads.add(t);
+            }
+            go.countDown(); // release all producers at once
+            for (Thread t : threads) {
+                t.join();
+            }
+        } // close() drains
+        assertEquals(producers * perProducer, delegate.events().size(),
+                "every event from every concurrent producer must be drained");
     }
 
     @Test
