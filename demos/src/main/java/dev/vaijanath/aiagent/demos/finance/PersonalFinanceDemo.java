@@ -1,11 +1,10 @@
 package dev.vaijanath.aiagent.demos.finance;
-import dev.vaijanath.aiagent.agent.Agent;
-import dev.vaijanath.aiagent.agent.AgentRequest;
-import dev.vaijanath.aiagent.agent.DefaultAgent;
 import dev.vaijanath.aiagent.demos.Demos;
+import dev.vaijanath.aiagent.demos.Governed;
 import dev.vaijanath.aiagent.demos.SyntheticData;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.tool.Tool;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -37,15 +36,11 @@ public final class PersonalFinanceDemo {
             System.out.println("(set AGENT_MODEL to a tool-capable Ollama model to see real answers)\n");
         }
 
-        DefaultAgent.Builder builder = DefaultAgent.builder()
-                .model(model)
-                .systemPrompt("You are a personal-finance assistant with many tools. For each "
+        Governed.Result governed = Governed.agent(model, toolkit,
+                "You are a personal-finance assistant with many tools. For each "
                         + "question, pick the single most appropriate tool and call it. Use 'sql' for "
                         + "questions about the user's actual transactions (table 'transactions': "
-                        + "id, txn_date, merchant, category, amount). Be concise.")
-                .maxSteps(8);
-        toolkit.forEach(builder::tool);
-        Agent agent = builder.build();
+                        + "id, txn_date, merchant, category, amount). Be concise.");
 
         String[] questions = {
             "What spending category does 'Blue Bottle Coffee' belong to?",
@@ -58,7 +53,11 @@ public final class PersonalFinanceDemo {
         };
         for (String q : questions) {
             System.out.println("> " + q);
-            System.out.println(agent.run(new AgentRequest(q)).output() + "\n");
+            var request = Governed.request("acme-fin", "member-1", "finance-session", q,
+                    Duration.ofSeconds(60));
+            System.out.println(governed.agent().run(request).output() + "\n");
         }
+
+        Governed.printTrustReport(governed.audit(), governed.tokens());
     }
 }
