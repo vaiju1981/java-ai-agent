@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        image: pgvector/pgvector:pg17   # PostgreSQL 17 + the pgvector extension (for PgVectorRetriever)
         env:
           POSTGRES_DB: agent
           POSTGRES_USER: agent
