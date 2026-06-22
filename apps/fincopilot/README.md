@@ -3,17 +3,19 @@
 The v0.2.0 flagship application — a **grounded finance copilot** for individuals and small businesses,
 built on `java-ai-agent`. See [docs/V0.2.0-PLAN.md](../../docs/V0.2.0-PLAN.md) for the full plan.
 
-> **Status: M0 (walking skeleton), in progress.** Backend chat + Docker stack are in place. Consumer
-> auth and the React UI are the next M0 increments; the Analyst (M1) and grounded Advisor (M2) follow.
+> **Status: M0 (walking skeleton) — complete.** Login → streaming chat → `docker compose up`. The
+> Analyst (M1) and grounded Advisor (M2) follow.
 
-## What works today
+## What works today (M0)
 
+- **Consumer auth** — `POST /api/auth/{signup,login,logout}`: BCrypt-hashed accounts + opaque
+  server-side sessions. The chat API requires a `Bearer` session token.
 - A governed agent on the **Ollama** substrate (one model, `gemma4:31b-cloud` by default), with crisis
-  + PII guardrails and durable conversation persistence (Postgres).
-- A session-based chat surface:
+  + PII guardrails and durable conversation persistence (Postgres), behind auth:
   - `POST /api/chat/turn` — synchronous; returns the guarded `AgentResponse`.
   - `POST /api/chat/stream` — Server-Sent Events: `tool` / `tool_result` events, then a single guarded
     `final` event. (Raw model tokens are never streamed — output guardrails run on the final answer.)
+- A **React SPA** (`web/`) — sign-up/login then a streaming chat UI — served by nginx.
 
 ## Run it
 
@@ -24,11 +26,19 @@ in to Ollama cloud).
 ```bash
 cd apps/fincopilot
 docker compose up --build
-# then, in another shell:
+# then open the UI and sign up:
+open http://localhost:3000
+
+# ...or drive the API directly (auth required):
+TOKEN=$(curl -s http://localhost:8080/api/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"demo@example.com","password":"password123"}' | sed 's/.*"token":"\([^"]*\)".*/\1/')
 curl -sN http://localhost:8080/api/chat/stream \
-  -H 'X-Principal-Id: demo-user' -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"sessionId":"s1","input":"What can you help me with?"}'
 ```
+
+The SPA (`web/`, port 3000) proxies `/api` to the backend; develop it with `cd web && npm install && npm run dev`.
 
 The Postgres service uses the `pgvector/pgvector:pg17` image (so the M2 RAG retriever needs no swap).
 Ollama runs on the host by default (`OLLAMA_BASE_URL=http://host.docker.internal:11434`).
