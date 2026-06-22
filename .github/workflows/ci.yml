@@ -36,7 +36,7 @@ jobs:
       POSTGRES_TEST_URL: jdbc:postgresql://localhost:5432/agent?user=agent&password=agent
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # full history (Codecov + SonarCloud blame)
 
