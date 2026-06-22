@@ -1,6 +1,7 @@
 package dev.vaijanath.aiagent.reference;
 
 import java.time.Duration;
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("agent")
@@ -11,7 +12,14 @@ public record AgentProperties(
         Duration requestTimeout,
         Duration modelTimeout,
         Duration toolTimeout,
-        String auditFile) {
+        String auditFile,
+        // Content safety: a Llama Guard model enables the full crisis -> PII -> Llama Guard pipeline;
+        // blank keeps the model-free crisis + PII scrub guardrails only.
+        String guardModel,
+        // Edge protection (the reference assumes a trusted gateway, but enforces a baseline itself).
+        List<String> apiKeys,
+        int rateLimitPerMinute,
+        long maxRequestBytes) {
 
     public AgentProperties {
         ollamaBaseUrl = defaultIfBlank(ollamaBaseUrl, "http://localhost:11434");
@@ -21,6 +29,15 @@ public record AgentProperties(
         modelTimeout = positiveOr(modelTimeout, Duration.ofSeconds(60));
         toolTimeout = positiveOr(toolTimeout, Duration.ofSeconds(15));
         auditFile = defaultIfBlank(auditFile, "var/audit/agent-events.log");
+        guardModel = guardModel == null ? "" : guardModel.strip();
+        apiKeys = apiKeys == null ? List.of() : apiKeys.stream().filter(k -> !k.isBlank()).toList();
+        rateLimitPerMinute = Math.max(0, rateLimitPerMinute); // 0 = disabled
+        maxRequestBytes = maxRequestBytes > 0 ? maxRequestBytes : 64 * 1024;
+    }
+
+    /** True when a Llama Guard model is configured, enabling the full safety pipeline. */
+    public boolean hasGuardModel() {
+        return !guardModel.isBlank();
     }
 
     private static String defaultIfBlank(String value, String fallback) {

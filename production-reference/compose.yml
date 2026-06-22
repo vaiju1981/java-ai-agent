@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: agent
       POSTGRES_USER: agent
-      POSTGRES_PASSWORD: agent
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-agent}
     ports:
       - "5432:5432"
     healthcheck:
@@ -14,6 +14,35 @@ services:
       retries: 20
     volumes:
       - agent-postgres:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: ..
+      dockerfile: production-reference/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/agent
+      DATABASE_USER: agent
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-agent}
+      # Ollama runs on the host by default; override for a containerized/remote model.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+      # Comma-separated API keys; empty leaves the endpoint unauthenticated (a warning is logged).
+      AGENT_API_KEYS: ${AGENT_API_KEYS:-}
+      AGENT_GUARD_MODEL: ${AGENT_GUARD_MODEL:-}
+    ports:
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
 
 volumes:
   agent-postgres:

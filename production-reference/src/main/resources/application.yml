@@ -4,10 +4,15 @@ spring:
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/agent}
     username: ${DATABASE_USER:agent}
+    # Local-dev default only; configurationWarnings logs a warning if left at 'agent'. Override in prod.
     password: ${DATABASE_PASSWORD:agent}
     hikari:
       maximum-pool-size: ${DATABASE_POOL_SIZE:10}
       connection-timeout: 5000
+      max-lifetime: 600000
+      validation-timeout: 2000
+      # Logs a stack trace if a borrowed connection isn't returned in time — cheap insurance.
+      leak-detection-threshold: 10000
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -20,6 +25,11 @@ server:
   error:
     include-message: never
 
+logging:
+  pattern:
+    # Correlate request-scoped logs with the audit trail by trace id.
+    level: "%5p [trace=%X{traceId:-}]"
+
 management:
   endpoints:
     web:
@@ -29,12 +39,23 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    # Readiness also reflects model reachability, so a model outage drains the instance from the LB.
+    group:
+      readiness:
+        include: readinessState,db,model
 
 agent:
   ollama-base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
   model: ${OLLAMA_MODEL:llama3.2}
+  # Optional Llama Guard model; blank runs crisis + PII guardrails only (a startup warning is logged).
+  guard-model: ${AGENT_GUARD_MODEL:}
   history-turns: ${AGENT_HISTORY_TURNS:20}
   request-timeout: ${AGENT_REQUEST_TIMEOUT:90s}
   model-timeout: ${AGENT_MODEL_TIMEOUT:60s}
   tool-timeout: ${AGENT_TOOL_TIMEOUT:15s}
   audit-file: ${AGENT_AUDIT_FILE:var/audit/agent-events.log}
+  # Edge protection. api-keys is a comma-separated list (empty = unauthenticated, with a warning).
+  api-keys: ${AGENT_API_KEYS:}
+  rate-limit-per-minute: ${AGENT_RATE_LIMIT_PER_MINUTE:120}
+  max-request-bytes: ${AGENT_MAX_REQUEST_BYTES:65536}

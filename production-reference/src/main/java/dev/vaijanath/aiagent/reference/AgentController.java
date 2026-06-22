@@ -8,7 +8,9 @@ import dev.vaijanath.aiagent.store.jdbc.ConcurrentConversationException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,10 +34,10 @@ class AgentController {
     }
 
     @PostMapping("/turn")
-    AgentResponse turn(
-            @RequestBody TurnRequest body,
-            @RequestHeader("X-Tenant-Id") String tenant,
-            @RequestHeader("X-Principal-Id") String principal,
+    ResponseEntity<AgentResponse> turn(
+            @RequestBody(required = false) TurnRequest body,
+            @RequestHeader(value = "X-Tenant-Id", required = false) String tenant,
+            @RequestHeader(value = "X-Principal-Id", required = false) String principal,
             @RequestHeader(value = "X-Trace-Id", required = false) String traceId,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         String input = body == null ? null : body.input();
@@ -62,7 +64,26 @@ class AgentController {
                 idempotencyKey == null || idempotencyKey.isBlank()
                         ? Map.of()
                         : Map.of("idempotencyKey", idempotencyKey));
-        return agent.run(new AgentRequest(input, context));
+        MDC.put("traceId", trace);
+        try {
+            AgentResponse response = agent.run(new AgentRequest(input, context));
+            return ResponseEntity.status(statusFor(response)).body(response);
+        } finally {
+            MDC.remove("traceId");
+        }
+    }
+
+    /**
+     * Maps the turn outcome to an HTTP status: a model outage is 503 and a deadline is 504 (so load
+     * balancers and clients react correctly), while a completion, a step-budget stop, or a guardrail
+     * block all return 200 with a valid body the client inspects.
+     */
+    private static HttpStatus statusFor(AgentResponse response) {
+        return switch (response.stopReason()) {
+            case "deadline_exceeded" -> HttpStatus.GATEWAY_TIMEOUT;
+            case "model_error" -> HttpStatus.SERVICE_UNAVAILABLE;
+            default -> HttpStatus.OK;
+        };
     }
 
     private static void requireIdentifier(String value, String name) {
