@@ -2,7 +2,7 @@
 # Multi-stage build for the java-ai-agent production reference service.
 
 # --- build stage: compile and assemble the application distribution ---
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /src
 COPY . .
 # Cache the Gradle home across builds (BuildKit). installDist comes from the `application` plugin.
@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew --no-daemon :production-reference:installDist
 
 # --- runtime stage: a slim JRE running as a non-root user ---
-FROM eclipse-temurin:21-jre AS runtime
+FROM eclipse-temurin:25-jre AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
