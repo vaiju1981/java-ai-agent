@@ -10,7 +10,7 @@ import org.gradle.testing.jacoco.tasks.JacocoReport
 // Root build — shared configuration for every module.
 
 plugins {
-    id("com.diffplug.spotless") version "7.0.2"
+    id("com.diffplug.spotless") version "8.7.0"
 }
 
 allprojects {
