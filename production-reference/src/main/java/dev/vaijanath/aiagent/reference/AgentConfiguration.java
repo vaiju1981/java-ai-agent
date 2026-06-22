@@ -12,6 +12,7 @@ import dev.vaijanath.aiagent.langchain4j.OllamaModelPorts;
 import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ResilientModelPort;
+import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.store.jdbc.JdbcConversationStore;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -20,6 +21,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Function;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,6 +67,37 @@ class AgentConfiguration {
             AsyncAuditSink audit,
             MeterRegistry meterRegistry,
             AgentProperties properties) {
+        return baseBuilder(model, conversations, audit, meterRegistry, properties).build();
+    }
+
+    /**
+     * Builds a per-request agent that carries an extra {@link AgentObserver} alongside the standard
+     * configuration — used by the streaming endpoint to forward turn events to one SSE client without
+     * those events leaking across concurrent requests (the observer is bound to that turn's agent).
+     */
+    @Bean
+    Function<AgentObserver, Agent> streamingAgentFactory(
+            ModelPort model,
+            ConversationStore conversations,
+            AsyncAuditSink audit,
+            MeterRegistry meterRegistry,
+            AgentProperties properties) {
+        return observer ->
+                baseBuilder(model, conversations, audit, meterRegistry, properties).observer(observer).build();
+    }
+
+    /** Runs streaming turns off the request thread so the SSE response can be returned immediately. */
+    @Bean(destroyMethod = "close")
+    ExecutorService streamExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    private ProductionAgentRuntime.Builder baseBuilder(
+            ModelPort model,
+            ConversationStore conversations,
+            AsyncAuditSink audit,
+            MeterRegistry meterRegistry,
+            AgentProperties properties) {
         ProductionAgentRuntime.Builder builder = ProductionAgentRuntime.builder()
                 .model(model)
                 .conversationStore(conversations)
@@ -73,7 +108,7 @@ class AgentConfiguration {
                 .observer(new MeterRegistryAgentObserver(meterRegistry))
                 .systemPrompt("You are a concise, accurate production assistant. Never invent tool results.");
         contentGuardrails(properties).forEach(builder::guardrail);
-        return builder.build();
+        return builder;
     }
 
     /**

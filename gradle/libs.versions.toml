@@ -15,6 +15,7 @@ sqlite = "3.53.2.0"
 langchain4j = "1.16.3"
 springboot = "4.1.0"
 postgresql = "42.7.11"
+anthropic = "2.34.0"
 
 [libraries]
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
@@ -41,6 +42,9 @@ opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testi
 # Spring AI — a second L0 substrate adapter.
 spring-ai-bom = { module = "org.springframework.ai:spring-ai-bom", version.ref = "springai" }
 spring-ai-client-chat = { module = "org.springframework.ai:spring-ai-client-chat" }
+
+# Anthropic Java SDK — a direct, first-party L0 substrate adapter (no intermediary framework).
+anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
 
 # Google ADK — wrapped as an Agent-as-component (a full agent framework, consumed one level up).
 google-adk = { module = "com.google.adk:google-adk", version.ref = "googleadk" }
