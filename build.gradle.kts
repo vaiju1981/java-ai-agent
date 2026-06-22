@@ -164,5 +164,17 @@ subprojects {
                 }
             }
         }
+
+        // Sign artifacts when a GPG key is provided (the CI release job); snapshot and local builds
+        // have no key and skip signing, so they still build without one.
+        apply(plugin = "signing")
+        extensions.configure<org.gradle.plugins.signing.SigningExtension> {
+            val signingKey = System.getenv("SIGNING_KEY")
+            val signingPassword = System.getenv("SIGNING_PASSWORD")
+            if (!signingKey.isNullOrBlank()) {
+                useInMemoryPgpKeys(signingKey, signingPassword)
+                sign(extensions.getByType<PublishingExtension>().publications["maven"])
+            }
+        }
     }
 }
