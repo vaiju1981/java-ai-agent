@@ -12,6 +12,10 @@ jobs:
   analyze:
     name: Analyze (java)
     runs-on: ubuntu-latest
+    # The analysis runs fine, but uploading results needs GitHub code scanning enabled on the repo
+    # (Settings -> Code security -> Code scanning). Until then this is non-blocking; remove this line
+    # once code scanning is on, to make CodeQL a required, reporting check.
+    continue-on-error: true
     permissions:
       actions: read
       contents: read
