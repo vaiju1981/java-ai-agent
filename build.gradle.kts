@@ -11,14 +11,48 @@ import org.gradle.testing.jacoco.tasks.JacocoReport
 
 plugins {
     id("com.diffplug.spotless") version "7.0.2"
+    id("org.sonarqube") version "7.3.1.8318"
 }
 
 allprojects {
     group = "io.github.vaiju1981"
-    version = "0.1.0-SNAPSHOT"
+    // Releases set RELEASE_VERSION (derived from the git tag) in CI; everything else is a snapshot.
+    version = System.getenv("RELEASE_VERSION")?.takeIf(String::isNotBlank) ?: "0.1.0-SNAPSHOT"
 
     repositories {
         mavenCentral()
+    }
+}
+
+// Code quality dashboard. Host + token come from SONAR_HOST_URL / SONAR_TOKEN in CI; the project
+// and organization keys can be overridden with -Psonar.projectKey / -Psonar.organization.
+sonar {
+    properties {
+        property("sonar.projectKey",
+            providers.gradleProperty("sonar.projectKey").getOrElse("vaiju1981_java-ai-agent"))
+        property("sonar.organization",
+            providers.gradleProperty("sonar.organization").getOrElse("vaiju1981"))
+    }
+}
+
+// Combine every library module's Javadoc into one site for GitHub Pages.
+tasks.register<Copy>("aggregateJavadoc") {
+    description = "Aggregates each module's Javadoc into build/docs/javadoc (for GitHub Pages)."
+    group = "documentation"
+    val modules = listOf(
+        "agent-core", "agent-langchain4j", "agent-spring-ai", "agent-adk", "agent-mcp",
+        "agent-observability-otel", "agent-store-jdbc", "agent-tools-jsonschema")
+    modules.forEach { name ->
+        dependsOn(":$name:javadoc")
+        from(project(":$name").layout.buildDirectory.dir("docs/javadoc")) { into(name) }
+    }
+    into(layout.buildDirectory.dir("docs/javadoc"))
+    doLast {
+        layout.buildDirectory.file("docs/javadoc/index.html").get().asFile.writeText(
+            "<!doctype html><html><head><meta charset=\"utf-8\"><title>java-ai-agent Javadoc</title>"
+                + "</head><body><h1>java-ai-agent Javadoc</h1><ul>"
+                + modules.joinToString("") { "<li><a href=\"$it/index.html\">$it</a></li>" }
+                + "</ul></body></html>")
     }
 }
 
