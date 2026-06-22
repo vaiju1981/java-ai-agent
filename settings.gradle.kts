@@ -23,6 +23,7 @@ include(
     "agent-tools-jsonschema",
     "agent-tools-annotations",
     "agent-anthropic",
+    "agent-spring-boot-starter",
     "examples",
     "demos",
     "downstream-smoke",

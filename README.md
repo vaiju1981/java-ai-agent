@@ -45,6 +45,9 @@ education tools) are intended to run on it — which forces it to be genuinely e
 
 ## Architecture (see [DESIGN.md](DESIGN.md))
 
+> Looking for code? The **[Cookbook](docs/COOKBOOK.md)** has copy-pasteable recipes — tools, RAG,
+> structured output, multi-agent routing, streaming, and the Spring Boot starter.
+
 **Four layers** — the substrate you depend on, plus the runtime, cognition, and trust layers this
 project owns on top:
 

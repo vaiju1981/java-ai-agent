@@ -142,8 +142,11 @@ sequenceDiagram
   (`DefaultAgent.toolTimeout`) run on virtual threads with timeouts, so a hung dependency degrades
   gracefully instead of stalling a turn.
 - **`agent-core` has zero framework dependencies** (SLF4J only) — every substrate is optional.
-- **Modules:** `agent-core` + adapters (`agent-langchain4j`, `agent-spring-ai`, `agent-adk`,
-  `agent-mcp`, `agent-observability-otel`) + `examples`.
+- **Modules:** `agent-core` + substrate adapters (`agent-langchain4j`, `agent-spring-ai`,
+  `agent-anthropic` [direct official SDK], `agent-adk`, `agent-mcp`) + capability modules
+  (`agent-store-jdbc`, `agent-tools-jsonschema`, `agent-tools-annotations`,
+  `agent-observability-otel`, `agent-spring-boot-starter`) + `examples`, `demos`, and a deployable
+  `production-reference`.
 
 ## Known gaps (need external systems, not design changes)
 
@@ -151,5 +154,5 @@ sequenceDiagram
   adapters are built against the real APIs and unit-tested, but only compile/logic-verified here.
 - **MCP** parameter schemas are advertised permissively (the server validates args); richer schema
   propagation is a follow-up.
-- **Maven Central** release: the publication config is done and verified with `publishToMavenLocal`;
-  the upload needs the author's account + signing key — see [PUBLISHING.md](PUBLISHING.md).
+- **Maven Central**: published — `io.github.vaiju1981` artifacts are released (v0.1.0, v0.1.1) through
+  the signed Central Portal pipeline; see [PUBLISHING.md](PUBLISHING.md).

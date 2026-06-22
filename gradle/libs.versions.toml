@@ -60,6 +60,8 @@ spring-boot-actuator = { module = "org.springframework.boot:spring-boot-starter-
 spring-boot-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 spring-boot-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
 spring-boot-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+# Autoconfiguration for the Spring Boot starter (version managed by the Spring Boot BOM).
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure" }
 # Prometheus scrape endpoint for actuator metrics (version managed by the Spring Boot BOM).
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
