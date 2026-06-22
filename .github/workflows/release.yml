@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write   # create the GitHub Release
+  pages: write      # deploy Javadoc to GitHub Pages
+  id-token: write   # required by the Pages deployment
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version from the tag (v1.2.3 -> 1.2.3)
+        run: echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build release artifacts + aggregate Javadoc
+        run: ./gradlew build aggregateJavadoc --no-daemon --stacktrace
+
+      - name: Create GitHub Release (with artifacts)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jars=$(find . -path '*/build/libs/*.jar' | tr '\n' ' ')
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes $jars
+
+      - name: Upload Javadoc as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs/javadoc
+
+      - name: Deploy Javadoc to GitHub Pages
+        id: pages
+        uses: actions/deploy-pages@v4
+
+      # Maven Central RELEASE upload (signing + Central Portal) is added in a follow-up once the
+      # CENTRAL_* and SIGNING_* secrets are configured — release artifacts are built and signed here
+      # first, then published via the Central Portal.
