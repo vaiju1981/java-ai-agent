@@ -31,13 +31,10 @@ jobs:
     env:
       POSTGRES_TEST_URL: jdbc:postgresql://localhost:5432/agent?user=agent&password=agent
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      # SonarQube Cloud: https://sonarcloud.io  ·  self-hosted: your server URL.
-      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history for accurate Sonar blame / PR analysis
+          fetch-depth: 0   # full history (Codecov + SonarCloud blame)
 
       - name: Set up JDK 21 (the baseline consumers need)
         uses: actions/setup-java@v4
@@ -55,13 +52,11 @@ jobs:
 
       # Coverage + quality run only when their secrets are configured, so the build stays green
       # until you add them (and on forks that have no secrets).
+      # Runs only when CODECOV_TOKEN is configured, so the build stays green until then.
+      # (Code quality is handled by SonarCloud's automatic analysis via its GitHub App.)
       - name: Upload coverage to Codecov
         if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           # The per-module jacocoTestReport.xml files are discovered automatically.
-
-      - name: SonarQube analysis
-        if: ${{ env.SONAR_TOKEN != '' }}
-        run: ./gradlew sonar --no-daemon
