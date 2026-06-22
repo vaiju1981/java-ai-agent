@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standal
 
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentResponse;
+import dev.vaijanath.aiagent.fincopilot.auth.SessionAuthenticationFilter;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.ToolResult;
@@ -44,7 +45,7 @@ class ChatControllerTest {
 
     private static MockHttpServletRequestBuilder turn(String input) {
         return post("/api/chat/turn")
-                .header("X-Principal-Id", "user-1")
+                .requestAttr(SessionAuthenticationFilter.PRINCIPAL_ATTRIBUTE, "user-1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"sessionId\":\"s1\",\"input\":\"" + input + "\"}");
     }
@@ -64,7 +65,7 @@ class ChatControllerTest {
     @Test
     void streamEmitsToolEventsThenFinal() throws Exception {
         MvcResult started = mvc.perform(post("/api/chat/stream")
-                        .header("X-Principal-Id", "user-1")
+                        .requestAttr(SessionAuthenticationFilter.PRINCIPAL_ATTRIBUTE, "user-1")
                         .accept(MediaType.TEXT_EVENT_STREAM)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"sessionId\":\"s1\",\"input\":\"hello\"}"))

@@ -4,6 +4,7 @@ import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
 import dev.vaijanath.aiagent.agent.RequestContext;
+import dev.vaijanath.aiagent.fincopilot.auth.SessionAuthenticationFilter;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.springboot.web.AgentTurns;
 import dev.vaijanath.aiagent.store.jdbc.ConcurrentConversationException;
@@ -17,8 +18,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,9 +28,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 /**
  * The chat surface. The agent, streaming-agent factory, and executor are provided by the
  * agent-spring-boot-starter; the turn plumbing (validation, status mapping, sync + SSE execution) lives
- * in {@link AgentTurns}. This controller's only job is FinCopilot's request shaping: M0 takes the
- * principal from a header — real consumer auth replaces that in the auth slice — and scopes the
- * conversation to {@code sessionId}.
+ * in {@link AgentTurns}. The principal is the authenticated user id, set on the request by the
+ * {@link SessionAuthenticationFilter} (which guards {@code /api/chat/*}); the conversation is scoped to
+ * the caller-supplied {@code sessionId}.
  */
 @RestController
 @RequestMapping("/api/chat")
@@ -56,14 +57,14 @@ class ChatController {
     @PostMapping("/turn")
     ResponseEntity<AgentResponse> turn(
             @RequestBody(required = false) TurnRequest body,
-            @RequestHeader(value = "X-Principal-Id", required = false) String principal) {
+            @RequestAttribute(SessionAuthenticationFilter.PRINCIPAL_ATTRIBUTE) String principal) {
         return AgentTurns.run(agent, toRequest(body, principal));
     }
 
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     SseEmitter stream(
             @RequestBody(required = false) TurnRequest body,
-            @RequestHeader(value = "X-Principal-Id", required = false) String principal) {
+            @RequestAttribute(SessionAuthenticationFilter.PRINCIPAL_ATTRIBUTE) String principal) {
         return AgentTurns.stream(
                 streamingAgentFactory,
                 toRequest(body, principal),
@@ -74,12 +75,16 @@ class ChatController {
     private AgentRequest toRequest(TurnRequest body, String principal) {
         String input = body == null ? null : body.input();
         String session = body == null ? null : body.sessionId();
-        String who = principal == null || principal.isBlank() ? "anonymous" : principal;
-        AgentTurns.requireIdentifier(who, "principal");
+        AgentTurns.requireIdentifier(principal, "principal");
         AgentTurns.requireIdentifier(session, "sessionId");
         AgentTurns.requireInput(input, MAX_INPUT_CHARS);
         RequestContext context = new RequestContext(
-                session, who, who, UUID.randomUUID().toString(), Instant.now().plus(properties.requestTimeout()), Map.of());
+                session,
+                principal,
+                principal,
+                UUID.randomUUID().toString(),
+                Instant.now().plus(properties.requestTimeout()),
+                Map.of());
         return new AgentRequest(input, context);
     }
 
