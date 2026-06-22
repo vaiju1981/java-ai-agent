@@ -40,6 +40,19 @@ class ResilientModelPortTest {
     }
 
     @Test
+    void doesNotRetryNonRetryableErrors() {
+        AtomicInteger calls = new AtomicInteger();
+        ModelPort authFailure = request -> {
+            calls.incrementAndGet();
+            throw new NonRetryableModelException("401 unauthorized");
+        };
+        ModelPort resilient = new ResilientModelPort(authFailure, 5, Duration.ofSeconds(5), 1);
+
+        assertThrows(NonRetryableModelException.class, () -> resilient.chat(req()));
+        assertEquals(1, calls.get(), "a non-retryable error must fail fast, not consume retries");
+    }
+
+    @Test
     void timesOutSlowCalls() {
         ModelPort slow = request -> {
             try {

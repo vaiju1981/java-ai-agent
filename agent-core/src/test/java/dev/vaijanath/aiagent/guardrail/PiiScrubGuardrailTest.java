@@ -31,4 +31,17 @@ class PiiScrubGuardrailTest {
         assertTrue(d.allowed());
         assertEquals("What is 23 plus 19?", d.content());
     }
+
+    @Test
+    void scrubsLongAdversarialInputInLinearTime() {
+        // The previous greedy "[\\w.+-]+@..." pattern took ~1.8s on this 32k input (quadratic
+        // backtracking) — a ReDoS. The possessive pattern scans it in single-digit milliseconds.
+        String adversarial = "x@" + "a".repeat(32_000);
+        long start = System.nanoTime();
+        GuardrailDecision d = guardrail.check(GuardrailStage.INPUT, adversarial);
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+        assertTrue(d.allowed());
+        assertTrue(elapsedMs < 500, "PII scrub must be linear; took " + elapsedMs + "ms");
+    }
 }
