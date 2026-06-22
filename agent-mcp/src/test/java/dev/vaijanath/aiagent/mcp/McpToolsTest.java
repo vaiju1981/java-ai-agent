@@ -6,13 +6,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.invocation.InvocationContext;
 import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.mcp.client.McpGetPromptResult;
 import dev.langchain4j.mcp.client.McpPrompt;
 import dev.langchain4j.mcp.client.McpReadResourceResult;
 import dev.langchain4j.mcp.client.McpResource;
 import dev.langchain4j.mcp.client.McpResourceTemplate;
+import dev.langchain4j.mcp.client.McpRoot;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
+import dev.langchain4j.service.tool.ToolExecutionResult;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
@@ -39,8 +42,8 @@ class McpToolsTest {
         }
 
         @Override
-        public String executeTool(ToolExecutionRequest request) {
-            return executor.apply(request);
+        public ToolExecutionResult executeTool(ToolExecutionRequest request) {
+            return ToolExecutionResult.builder().resultText(executor.apply(request)).build();
         }
 
         @Override
@@ -59,6 +62,14 @@ class McpToolsTest {
         }
 
         @Override
+        public void subscribeToResource(String uri) {
+        }
+
+        @Override
+        public void unsubscribeFromResource(String uri) {
+        }
+
+        @Override
         public List<McpPrompt> listPrompts() {
             return List.of();
         }
@@ -70,6 +81,36 @@ class McpToolsTest {
 
         @Override
         public void checkHealth() {
+        }
+
+        @Override
+        public void setRoots(List<McpRoot> roots) {
+        }
+
+        // beta26 adds InvocationContext-carrying overloads; delegate to the no-arg forms.
+        @Override
+        public List<ToolSpecification> listTools(InvocationContext context) {
+            return listTools();
+        }
+
+        @Override
+        public ToolExecutionResult executeTool(ToolExecutionRequest request, InvocationContext context) {
+            return executeTool(request);
+        }
+
+        @Override
+        public List<McpResource> listResources(InvocationContext context) {
+            return listResources();
+        }
+
+        @Override
+        public List<McpResourceTemplate> listResourceTemplates(InvocationContext context) {
+            return listResourceTemplates();
+        }
+
+        @Override
+        public McpReadResourceResult readResource(String uri, InvocationContext context) {
+            return readResource(uri);
         }
 
         @Override

@@ -3,6 +3,7 @@ package dev.vaijanath.aiagent.mcp;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.mcp.client.McpClient;
+import dev.langchain4j.service.tool.ToolExecutionResult;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
@@ -47,9 +48,11 @@ public final class McpTools {
         public ToolResult invoke(String argumentsJson) {
             String args = (argumentsJson == null || argumentsJson.isBlank()) ? "{}" : argumentsJson;
             try {
-                String out = client.executeTool(
+                // langchain4j-mcp now returns a ToolExecutionResult (was a String); resultText() is the
+                // textual content. Transport/protocol failures still surface as exceptions below.
+                ToolExecutionResult result = client.executeTool(
                         ToolExecutionRequest.builder().name(mcpSpec.name()).arguments(args).build());
-                return ToolResult.ok(out);
+                return ToolResult.ok(result.resultText());
             } catch (RuntimeException e) {
                 // The remote error detail goes to the log, never into the model's context.
                 log.warn("MCP tool '{}' failed", mcpSpec.name(), e);
