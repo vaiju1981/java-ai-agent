@@ -7,6 +7,9 @@ description = "Real-world demos showing java-ai-agent's usefulness."
 dependencies {
     implementation(project(":agent-core"))
     implementation(project(":agent-langchain4j"))
+    // The production trust layer the demos now run through: governed runtime, validation, durable store.
+    implementation(project(":agent-tools-jsonschema"))
+    implementation(project(":agent-store-jdbc"))
     implementation(libs.sqlite.jdbc)
     implementation(libs.jackson.databind)
     runtimeOnly(libs.slf4j.simple)
