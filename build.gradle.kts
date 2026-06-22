@@ -11,7 +11,6 @@ import org.gradle.testing.jacoco.tasks.JacocoReport
 
 plugins {
     id("com.diffplug.spotless") version "7.0.2"
-    id("org.sonarqube") version "7.3.1.8318"
 }
 
 allprojects {
@@ -24,16 +23,7 @@ allprojects {
     }
 }
 
-// Code quality dashboard. Host + token come from SONAR_HOST_URL / SONAR_TOKEN in CI; the project
-// and organization keys can be overridden with -Psonar.projectKey / -Psonar.organization.
-sonar {
-    properties {
-        property("sonar.projectKey",
-            providers.gradleProperty("sonar.projectKey").getOrElse("vaiju1981_java-ai-agent"))
-        property("sonar.organization",
-            providers.gradleProperty("sonar.organization").getOrElse("vaiju1981"))
-    }
-}
+// Code quality runs via SonarCloud's automatic analysis (GitHub App), so no Gradle Sonar wiring here.
 
 // Combine every library module's Javadoc into one site for GitHub Pages.
 tasks.register<Copy>("aggregateJavadoc") {
