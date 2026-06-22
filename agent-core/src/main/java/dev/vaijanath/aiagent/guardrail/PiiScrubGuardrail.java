@@ -11,7 +11,10 @@ import java.util.regex.Pattern;
  */
 public final class PiiScrubGuardrail implements Guardrail {
 
-    private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+\\.[\\w.-]+");
+    // Possessive quantifiers and bounded labels: no backtracking, so a long non-matching run (e.g.
+    // 32 KB of "a") is scanned in linear — not quadratic — time. A greedy "+@" here is a ReDoS.
+    private static final Pattern EMAIL =
+            Pattern.compile("[\\w.+-]{1,64}+@[\\w-]{1,63}+(?:\\.[\\w-]{1,63}+)++");
     private static final Pattern SSN = Pattern.compile("\\b\\d{3}-\\d{2}-\\d{4}\\b");
     private static final Pattern PHONE =
             Pattern.compile("\\b(?:\\+?\\d{1,3}[\\s.-]?)?\\(?\\d{3}\\)?[\\s.-]?\\d{3}[\\s.-]?\\d{4}\\b");

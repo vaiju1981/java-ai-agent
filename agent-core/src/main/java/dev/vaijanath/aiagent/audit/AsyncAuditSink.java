@@ -47,7 +47,11 @@ public final class AsyncAuditSink implements AuditSink, AutoCloseable {
     }
 
     @Override
-    public synchronized void record(AuditEvent event) {
+    public void record(AuditEvent event) {
+        // Deliberately not synchronized: record() is on the request path and must never block — not
+        // even behind a concurrent close() that is joining the drain worker. All state it touches is
+        // lock-free (an AtomicBoolean and a BlockingQueue), so the worst a close() race can do is drop
+        // a late event, which is already within this sink's documented best-effort contract.
         if (!running.get()) {
             dropped.incrementAndGet();
             log.warn("audit sink is closed; dropping '{}' event", event.type());

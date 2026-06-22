@@ -12,9 +12,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -217,6 +219,53 @@ class JdbcConversationStoreTest {
                     "acme", "s" + i, JdbcConversationStoreTest::historyOf);
             assertEquals(List.of("message-" + i), history.stream().map(Message::content).toList());
         }
+    }
+
+    @Test
+    void losingTheCommitRaceSurfacesAsAConflictAndRollsBack(@TempDir Path dir) {
+        String url = url(dir);
+        JdbcConversationStore a = JdbcConversationStore.fromJdbcUrl(url);
+        JdbcConversationStore b = JdbcConversationStore.fromJdbcUrl(url); // a second service instance
+
+        // Both load the same session position before either commits — the cross-instance race.
+        JdbcMemory mA = a.load("acme", "s");
+        JdbcMemory mB = b.load("acme", "s");
+        mA.add(Message.user("from A"));
+        mB.add(Message.user("from B"));
+
+        mA.commit(); // wins the race
+        assertThrows(ConcurrentConversationException.class, mB::commit); // loses, rolls back whole turn
+
+        // The winner's turn is the only durable one; the loser left nothing partial behind.
+        List<Message> history = JdbcConversationStore.fromJdbcUrl(url)
+                .withMemory("acme", "s", JdbcConversationStoreTest::historyOf);
+        assertEquals(List.of("from A"), history.stream().map(Message::content).toList());
+    }
+
+    @Test
+    void conflictRetryReloadsFreshHistoryAndCompletesTheTurn(@TempDir Path dir) {
+        String url = url(dir);
+        JdbcConversationStore interloper = JdbcConversationStore.fromJdbcUrl(url);
+        JdbcConversationStore store = JdbcConversationStore.fromJdbcUrl(url)
+                .withConflictRetries(3, Duration.ofMillis(5));
+
+        AtomicInteger attempts = new AtomicInteger();
+        store.withMemory("acme", "s", m -> {
+            if (attempts.getAndIncrement() == 0) {
+                // A different instance commits at our position during our first attempt.
+                interloper.withMemory("acme", "s", other -> {
+                    other.add(Message.user("interloper"));
+                    return null;
+                });
+            }
+            m.add(Message.user("mine"));
+            return null;
+        });
+
+        assertEquals(2, attempts.get(), "first attempt conflicts; the retry reloads and succeeds");
+        List<Message> history = JdbcConversationStore.fromJdbcUrl(url)
+                .withMemory("acme", "s", JdbcConversationStoreTest::historyOf);
+        assertEquals(List.of("interloper", "mine"), history.stream().map(Message::content).toList());
     }
 
     private static List<Message> historyOf(dev.vaijanath.aiagent.memory.Memory memory) {
