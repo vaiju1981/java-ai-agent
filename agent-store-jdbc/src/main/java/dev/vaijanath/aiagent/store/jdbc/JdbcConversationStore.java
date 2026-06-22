@@ -31,16 +31,21 @@ import java.util.function.Function;
  * <p>Concurrency: work on a single {@code (tenant, session)} is serialized in-process (striped
  * locks), correct for a single service instance. If multiple instances may write the same session
  * concurrently, use sticky routing or external coordination — a clash rolls back the whole turn and
- * surfaces as a primary-key conflict, never a partially persisted conversation.
+ * surfaces as a primary-key conflict, never a partially persisted conversation. For idempotent or
+ * replayable turns, {@link #withConflictRetries} re-runs the turn against fresh history a bounded
+ * number of times before surfacing the conflict.
  */
 public final class JdbcConversationStore implements ConversationStore {
 
     private static final int STRIPES = 64;
+    private static final long DEFAULT_CONFLICT_BACKOFF_MILLIS = 20;
     private static final TypeReference<List<ToolCall>> TOOL_CALL_LIST = new TypeReference<>() {};
 
     private final ConnectionSource connections;
     private final ObjectMapper mapper = new ObjectMapper();
     private final int maxTurns; // 0 = replay the whole history
+    private final int maxConflictRetries; // 0 = surface the conflict immediately
+    private final long conflictBackoffMillis;
     private final Object[] locks = new Object[STRIPES];
 
     public JdbcConversationStore(ConnectionSource connections) {
@@ -52,14 +57,34 @@ public final class JdbcConversationStore implements ConversationStore {
     }
 
     private JdbcConversationStore(ConnectionSource connections, int maxTurns, boolean initializeSchema) {
+        this(connections, maxTurns, initializeSchema, 0, DEFAULT_CONFLICT_BACKOFF_MILLIS);
+    }
+
+    private JdbcConversationStore(ConnectionSource connections, int maxTurns, boolean initializeSchema,
+            int maxConflictRetries, long conflictBackoffMillis) {
         this.connections = Objects.requireNonNull(connections, "connections");
         this.maxTurns = Math.max(0, maxTurns);
+        this.maxConflictRetries = Math.max(0, maxConflictRetries);
+        this.conflictBackoffMillis = Math.max(0, conflictBackoffMillis);
         for (int i = 0; i < STRIPES; i++) {
             locks[i] = new Object();
         }
         if (initializeSchema) {
             createSchema();
         }
+    }
+
+    /**
+     * Returns a copy that, when a concurrent writer wins the commit race, reloads the session and
+     * re-runs the turn up to {@code maxRetries} times (with {@code backoff} between attempts) before
+     * surfacing a {@link ConcurrentConversationException}. The turn's action is re-executed, so use
+     * this only when repeating it is safe — idempotent/allow-listed tools or a deterministic replay.
+     * Otherwise leave it off (the default) and retry at a layer that can rebuild the request.
+     */
+    public JdbcConversationStore withConflictRetries(int maxRetries, java.time.Duration backoff) {
+        Objects.requireNonNull(backoff, "backoff");
+        return new JdbcConversationStore(
+                connections, maxTurns, false, maxRetries, backoff.toMillis());
     }
 
     /** A store over a JDBC URL (the driver must be on the classpath), e.g. {@code jdbc:sqlite:app.db}. */
@@ -77,14 +102,38 @@ public final class JdbcConversationStore implements ConversationStore {
     public <R> R withMemory(String tenant, String sessionId, Function<Memory, R> action) {
         // Serialize same-session work in-process; different sessions (different stripes) run freely.
         synchronized (locks[Math.floorMod(Objects.hash(tenant, sessionId), STRIPES)]) {
-            JdbcMemory memory = load(tenant, sessionId);
-            R result = action.apply(memory);
-            memory.commit();
-            return result;
+            int attempt = 0;
+            while (true) {
+                JdbcMemory memory = load(tenant, sessionId);
+                try {
+                    R result = action.apply(memory);
+                    memory.commit();
+                    return result;
+                } catch (ConcurrentConversationException conflict) {
+                    if (attempt++ >= maxConflictRetries) {
+                        throw conflict;
+                    }
+                    backoffBeforeRetry();
+                    // Loop: reload fresh history (now including the winner's turn) and re-run.
+                }
+            }
         }
     }
 
-    private JdbcMemory load(String tenant, String sessionId) {
+    private void backoffBeforeRetry() {
+        if (conflictBackoffMillis <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(conflictBackoffMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while retrying a conflicted turn", e);
+        }
+    }
+
+    // Package-private so a test can drive the cross-instance commit race deterministically.
+    JdbcMemory load(String tenant, String sessionId) {
         List<Message> window = new ArrayList<>();
         long nextSeq;
         try (Connection c = connections.get()) {
