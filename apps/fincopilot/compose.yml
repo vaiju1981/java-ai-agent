@@ -42,5 +42,16 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  web:
+    # The React SPA, served by nginx, which proxies /api to the app service. Browse http://localhost:3000.
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      - app
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
 volumes:
   fincopilot-postgres:
