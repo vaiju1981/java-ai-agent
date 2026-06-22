@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0   # full history (Codecov + SonarCloud blame)
 
       - name: Set up JDK 21 (the baseline consumers need)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
