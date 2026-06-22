@@ -6,24 +6,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Configuration for the FinCopilot service. The LLM substrate is Ollama (per the v0.2.0 plan): one
  * model — {@code gemma4:31b-cloud} by default — serves every role; it is a single, swappable value.
+ *
+ * <p>The agent's own knobs (system prompt, model/tool timeouts, max steps) come from {@code agent.*}
+ * (the agent-spring-boot-starter); this holds only what FinCopilot's own beans need.
  */
 @ConfigurationProperties("fincopilot")
 public record FinCopilotProperties(
-        String ollamaBaseUrl,
-        String model,
-        int historyTurns,
-        Duration requestTimeout,
-        Duration modelTimeout,
-        Duration toolTimeout,
-        String auditFile) {
+        String ollamaBaseUrl, String model, int historyTurns, Duration requestTimeout, String auditFile) {
 
     public FinCopilotProperties {
         ollamaBaseUrl = blankTo(ollamaBaseUrl, "http://localhost:11434");
         model = blankTo(model, "gemma4:31b-cloud");
         historyTurns = historyTurns > 0 ? historyTurns : 20;
         requestTimeout = positiveOr(requestTimeout, Duration.ofSeconds(90));
-        modelTimeout = positiveOr(modelTimeout, Duration.ofSeconds(60));
-        toolTimeout = positiveOr(toolTimeout, Duration.ofSeconds(15));
         auditFile = blankTo(auditFile, "var/audit/fincopilot-events.log");
     }
 

@@ -7,6 +7,9 @@ description = "Deployable production reference service for java-ai-agent."
 dependencies {
     implementation(platform(libs.spring.boot.bom))
     implementation(project(":agent-core"))
+    // Shared AgentTurns / SseAgentObserver web plumbing (its agent auto-config beans are
+    // @ConditionalOnMissingBean, so this app's own beans below still take precedence).
+    implementation(project(":agent-spring-boot-starter"))
     implementation(project(":agent-langchain4j"))
     implementation(project(":agent-store-jdbc"))
     implementation(project(":agent-tools-jsonschema"))

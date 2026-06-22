@@ -7,6 +7,9 @@ description = "FinCopilot — a grounded finance copilot built on java-ai-agent 
 dependencies {
     implementation(platform(libs.spring.boot.bom))
     implementation(project(":agent-core"))
+    // Auto-configures the governed agent + streaming factory + executor, and provides the shared
+    // AgentTurns / SseAgentObserver web plumbing (so it isn't duplicated per app).
+    implementation(project(":agent-spring-boot-starter"))
     implementation(project(":agent-langchain4j")) // Ollama ModelPort
     implementation(project(":agent-store-jdbc")) // durable ConversationStore + its Flyway schema
     implementation(project(":agent-tools-jsonschema"))

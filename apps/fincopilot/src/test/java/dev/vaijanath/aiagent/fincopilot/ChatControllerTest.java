@@ -37,8 +37,7 @@ class ChatControllerTest {
             observer.onToolResult("lookup", ToolResult.ok("raw results"));
             return AgentResponse.completed("streamed answer");
         };
-        FinCopilotProperties properties =
-                new FinCopilotProperties(null, null, 0, Duration.ofSeconds(90), null, null, null);
+        FinCopilotProperties properties = new FinCopilotProperties(null, null, 0, Duration.ofSeconds(90), null);
         // Run the streaming turn synchronously so the SSE assertions are deterministic.
         mvc = standaloneSetup(new ChatController(agent, streamingFactory, Runnable::run, properties)).build();
     }

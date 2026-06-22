@@ -44,6 +44,14 @@ fincopilot:
   model: ${OLLAMA_MODEL:gemma4:31b-cloud}
   history-turns: ${FINCOPILOT_HISTORY_TURNS:20}
   request-timeout: ${FINCOPILOT_REQUEST_TIMEOUT:90s}
+  audit-file: ${FINCOPILOT_AUDIT_FILE:var/audit/fincopilot-events.log}
+
+# The governed agent's own knobs (agent-spring-boot-starter).
+agent:
+  system-prompt: >-
+    You are FinCopilot, a careful, grounded finance assistant for individuals and small businesses.
+    You provide information and analysis, not regulated financial, investment, or tax advice. Never
+    invent numbers or tool results; if you do not have the data, say so.
   model-timeout: ${FINCOPILOT_MODEL_TIMEOUT:60s}
   tool-timeout: ${FINCOPILOT_TOOL_TIMEOUT:15s}
-  audit-file: ${FINCOPILOT_AUDIT_FILE:var/audit/fincopilot-events.log}
+  max-steps: ${FINCOPILOT_MAX_STEPS:8}
