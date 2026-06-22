@@ -39,7 +39,9 @@ class AuthConfiguration {
     FilterRegistrationBean<SessionAuthenticationFilter> sessionAuthFilter(AuthService authService) {
         FilterRegistrationBean<SessionAuthenticationFilter> registration =
                 new FilterRegistrationBean<>(new SessionAuthenticationFilter(authService));
-        registration.addUrlPatterns("/api/chat/*");
+        // Guard the authenticated resources (exact + wildcard); /api/auth/* stays public.
+        registration.addUrlPatterns(
+                "/api/chat/*", "/api/accounts", "/api/accounts/*", "/api/transactions", "/api/transactions/*");
         registration.setOrder(10);
         return registration;
     }
