@@ -40,8 +40,11 @@ public final class PgVectorRetriever implements Retriever {
     public PgVectorRetriever(ConnectionSource connections, Embedder embedder, int dimensions) {
         this.connections = Objects.requireNonNull(connections, "connections");
         this.embedder = Objects.requireNonNull(embedder, "embedder");
-        if (dimensions < 1) {
-            throw new IllegalArgumentException("dimensions must be positive");
+        // pgvector's HNSW index supports up to 2000 dimensions; bound here so the value that flows into
+        // the vector(n) DDL is a validated small integer, and so we fail fast with a clear message rather
+        // than at index-creation time.
+        if (dimensions < 1 || dimensions > 2000) {
+            throw new IllegalArgumentException("dimensions must be in [1, 2000], got " + dimensions);
         }
         this.dimensions = dimensions;
     }
@@ -56,16 +59,20 @@ public final class PgVectorRetriever implements Retriever {
 
     /** Creates the pgvector extension, the {@code rag_vectors} table, and an HNSW cosine index. */
     public void ensureSchema() {
+        // The only dynamic part of this DDL is the vector dimension — a validated int in [1, 2000]
+        // (see the constructor), never user-supplied text. A column type modifier cannot be bound as a
+        // statement parameter, so it is formatted into the DDL directly.
+        String createTable = "CREATE TABLE IF NOT EXISTS rag_vectors ("
+                + "tenant VARCHAR(128) NOT NULL,"
+                + "chunk_id VARCHAR(256) NOT NULL,"
+                + "content TEXT NOT NULL,"
+                + "metadata TEXT NOT NULL,"
+                + "embedding vector(" + dimensions + ") NOT NULL,"
+                + "PRIMARY KEY (tenant, chunk_id))";
         try (Connection c = connections.get();
                 Statement st = c.createStatement()) {
             st.execute("CREATE EXTENSION IF NOT EXISTS vector");
-            st.execute("CREATE TABLE IF NOT EXISTS rag_vectors ("
-                    + "tenant VARCHAR(128) NOT NULL,"
-                    + "chunk_id VARCHAR(256) NOT NULL,"
-                    + "content TEXT NOT NULL,"
-                    + "metadata TEXT NOT NULL,"
-                    + "embedding vector(" + dimensions + ") NOT NULL,"
-                    + "PRIMARY KEY (tenant, chunk_id))");
+            st.execute(createTable); // NOSONAR: dimension is a validated int (see above), not user input
             st.execute("CREATE INDEX IF NOT EXISTS rag_vectors_embedding_idx "
                     + "ON rag_vectors USING hnsw (embedding vector_cosine_ops)");
         } catch (SQLException e) {
