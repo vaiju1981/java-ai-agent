@@ -67,8 +67,10 @@ ModelPort model = AnthropicModelPort.fromEnv();            // or fromEnv("claude
 ## 5. Retrieval-augmented answers (RAG)
 
 Ground the agent in retrieved context. Use the in-memory store for small corpora, or `JdbcVectorStore`
-(`agent-store-jdbc`) for a durable one on SQLite/PostgreSQL. Bridge a real embedder with
-`LangChain4jEmbedder` (`agent-langchain4j`).
+(`agent-store-jdbc`) for a durable one on SQLite/PostgreSQL. For large corpora, `PgVectorRetriever`
+(`agent-store-pgvector`) does true approximate-nearest-neighbour search via PostgreSQL + pgvector's
+HNSW index instead of an in-application scan. Bridge a real embedder with `LangChain4jEmbedder`
+(`agent-langchain4j`).
 
 ```java
 InMemoryVectorStore store = new InMemoryVectorStore(embedder);

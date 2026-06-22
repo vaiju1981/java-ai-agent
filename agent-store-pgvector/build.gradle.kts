@@ -15,6 +15,11 @@ dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.launcher)
-    // The driver for the POSTGRES_TEST_URL-gated integration test (runs in CI against pgvector).
+    // The Postgres JDBC driver, used by the Testcontainers integration test.
     testImplementation(libs.postgresql)
+    // Testcontainers spins a real Postgres+pgvector container so the ANN path is covered self-containedly
+    // (no external service needed); the test is skipped automatically where Docker is unavailable.
+    testImplementation(platform(libs.testcontainers.bom))
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.junit)
 }

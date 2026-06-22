@@ -144,15 +144,16 @@ sequenceDiagram
 - **`agent-core` has zero framework dependencies** (SLF4J only) — every substrate is optional.
 - **Modules:** `agent-core` + substrate adapters (`agent-langchain4j`, `agent-spring-ai`,
   `agent-anthropic` [direct official SDK], `agent-adk`, `agent-mcp`) + capability modules
-  (`agent-store-jdbc`, `agent-tools-jsonschema`, `agent-tools-annotations`,
+  (`agent-store-jdbc`, `agent-store-pgvector`, `agent-tools-jsonschema`, `agent-tools-annotations`,
   `agent-observability-otel`, `agent-spring-boot-starter`) + `examples`, `demos`, and a deployable
   `production-reference`.
 
 ## Known gaps (need external systems, not design changes)
 
-- Live **ADK** and **MCP** end-to-end need a configured ADK model / a running MCP server; their
-  adapters are built against the real APIs and unit-tested, but only compile/logic-verified here.
-- **MCP** parameter schemas are advertised permissively (the server validates args); richer schema
-  propagation is a follow-up.
+- Live **ADK** end-to-end needs a configured Gemini model: `AdkLiveE2eTest` drives a real turn through
+  the ADK runner but is credential-gated (`GOOGLE_API_KEY`), so it is skipped in CI.
+- **MCP** is covered end-to-end in CI: `McpStdioE2eTest` launches a real stdio MCP server
+  (`TestStdioMcpServer`) and drives it through the real langchain4j-mcp client; the server's input
+  schema is propagated to a `ToolSpec` so arguments are validated at our boundary.
 - **Maven Central**: published — `io.github.vaiju1981` artifacts are released (v0.1.0, v0.1.1) through
   the signed Central Portal pipeline; see [PUBLISHING.md](PUBLISHING.md).

@@ -16,6 +16,7 @@ langchain4j = "1.16.3"
 springboot = "4.1.0"
 postgresql = "42.7.11"
 anthropic = "2.34.0"
+testcontainers = "2.0.5"
 
 [libraries]
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
@@ -66,3 +67,8 @@ spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-aut
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+
+# Testcontainers — self-contained integration coverage (spins a real Postgres+pgvector container in tests).
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
+testcontainers-junit = { module = "org.testcontainers:testcontainers-junit-jupiter" }
