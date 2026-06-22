@@ -1,7 +1,7 @@
 // Maven Central Portal publishing (aggregates all module publications). Applied here so the publish
 // task lives at the root; credentials come from CENTRAL_* env in the release job.
 plugins {
-    id("com.gradleup.nmcp.settings") version "1.5.0"
+    id("com.gradleup.nmcp.settings") version "1.6.0"
 }
 
 rootProject.name = "java-ai-agent"
