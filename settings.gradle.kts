@@ -21,6 +21,8 @@ include(
     "agent-observability-otel",
     "agent-store-jdbc",
     "agent-tools-jsonschema",
+    "agent-tools-annotations",
+    "agent-anthropic",
     "examples",
     "demos",
     "downstream-smoke",

@@ -1,0 +1,83 @@
+package dev.vaijanath.aiagent.anthropic;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.anthropic.models.messages.MessageCreateParams;
+import com.anthropic.models.messages.Tool;
+import dev.vaijanath.aiagent.model.Message;
+import dev.vaijanath.aiagent.model.ModelRequest;
+import dev.vaijanath.aiagent.model.ToolCall;
+import dev.vaijanath.aiagent.tool.ToolEffect;
+import dev.vaijanath.aiagent.tool.ToolSpec;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class AnthropicModelPortTest {
+
+    @Test
+    void foldsSystemAndMapsConversationRoles() {
+        ModelRequest request = new ModelRequest(
+                List.of(
+                        Message.system("You are helpful."),
+                        Message.user("weather in NYC?"),
+                        Message.assistant(
+                                "let me check",
+                                List.of(new ToolCall("tu_1", "get_weather", "{\"city\":\"NYC\"}"))),
+                        Message.toolResult("tu_1", "get_weather", "sunny")),
+                List.of());
+
+        MessageCreateParams params = AnthropicModelPort.toParams(request, "claude-opus-4-8", 1024);
+
+        assertEquals(1024, params.maxTokens());
+        assertTrue(params.system().isPresent(), "the system turn must fold into the top-level system prompt");
+        // system folded out -> user + assistant(tool_use) + tool_result(as a user turn) = 3 messages
+        assertEquals(3, params.messages().size());
+        assertTrue(params.tools().isEmpty());
+    }
+
+    @Test
+    void mapsToolSpecsOntoTheRequest() {
+        ToolSpec spec = new ToolSpec(
+                "get_weather",
+                "current weather",
+                "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}",
+                ToolEffect.READ_ONLY);
+        ModelRequest request = new ModelRequest(List.of(Message.user("hi")), List.of(spec));
+
+        MessageCreateParams params = AnthropicModelPort.toParams(request, "claude-opus-4-8", 1024);
+
+        assertTrue(params.tools().isPresent());
+        assertEquals(1, params.tools().get().size());
+    }
+
+    @Test
+    void buildsToolWithSchemaPropertiesAndRequired() {
+        ToolSpec spec = new ToolSpec(
+                "get_weather",
+                "current weather",
+                "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"},"
+                        + "\"units\":{\"type\":\"string\"}},\"required\":[\"city\"]}",
+                ToolEffect.READ_ONLY);
+
+        Tool tool = AnthropicModelPort.toTool(spec);
+
+        assertEquals("get_weather", tool.name());
+        assertEquals("current weather", tool.description().orElse(""));
+        assertEquals(List.of("city"), tool.inputSchema().required().orElse(List.of()));
+        assertTrue(tool.inputSchema().properties().isPresent());
+    }
+
+    @Test
+    void toolWithoutRequiredOrPropertiesStillBuilds() {
+        ToolSpec spec = new ToolSpec(
+                "ping", "no args", "{\"type\":\"object\",\"properties\":{}}", ToolEffect.READ_ONLY);
+
+        Tool tool = AnthropicModelPort.toTool(spec);
+
+        assertEquals("ping", tool.name());
+        assertTrue(
+                tool.inputSchema().required().isEmpty()
+                        || tool.inputSchema().required().get().isEmpty());
+    }
+}
