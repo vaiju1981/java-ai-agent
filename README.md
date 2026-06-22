@@ -158,8 +158,8 @@ For the deployment-shaped golden path—not a demo—see the
 [`production-reference`](production-reference/README.md) service. It wires the production runtime
 to PostgreSQL/Flyway, HikariCP, durable audit, bounded requests, health probes, and Ollama.
 
-The [`demos`](demos/README.md) module has six runnable, end-to-end demos — each backed by real data
-or the real trust layer, and verified live against a local model:
+The [`demos`](demos/README.md) module is a small set of **deep, production-shaped applications** —
+each runs through the governed runtime and is verified live against a local model:
 
 ```bash
 export AGENT_MODEL=gemma4:31b-cloud   # any pulled, tool-capable Ollama model
@@ -168,12 +168,10 @@ export AGENT_MODEL=gemma4:31b-cloud   # any pulled, tool-capable Ollama model
 
 | Demo | Package | What it shows |
 |---|---|---|
-| **PersonalFinanceDemo** | `finance` | a ~24-tool toolkit — data lookups, data-aware analyses over real transactions (top merchants, recurring subscriptions, budget status), and planning calculators — so the agent must pick the right tool among many |
-| **DataAnalystDemo** | `data` | explore-then-query over ~5,000 SQLite rows: schema discovery + a group-by `aggregate` + read-only `sql`; rows stay in the DB, so it scales |
-| **LogAnalystDemo** | `logs` | natural-language questions over ~10,000 request logs, each answered by one generated `SELECT` |
-| **SupportTriageDemo** | `support` | structured classification — tickets → `{priority, category, team}` bound straight to a record (no parsing) |
-| **SafeHealthDemo** | `health` | the trust layer on sensitive data: kidguard guardrails (crisis · PII · Llama Guard) under an explain-never-diagnose rule |
-| **ResearchBriefingDemo** | `research` | a deep agent — plan → concurrent sub-agents → synthesized briefing |
+| **GovernedSupportDeskDemo** | `flagship` | a deterministic (no-model) tour of the whole trust layer: durable restart, deny-by-default → allow-list, guardrail block + PII scrub, token-budget stop, tenant isolation, audit |
+| **DataAnalystDemo** | `data` | a real EDA agent over a multi-table warehouse — profiling, histograms, IQR outliers, correlation, segmentation, time-series, **driver analysis** — writing a persisted report |
+| **FraudInvestigationDemo** | `fraud` | analysis **plus governed, effectful action**: investigates planted fraud, then `flag_for_review` (allowed) and `freeze_account` (**denied without authorization**), idempotent and audited |
+| **PersonalFinanceDemo** | `finance` | a financial advisor over a year of income + expenses: cash-flow, savings-rate trend, budget variance + forecast, subscription/anomaly detection, goal projection → a persisted plan |
 
 See [demos/README.md](demos/README.md) for what each one does and sample output.
 
@@ -196,8 +194,8 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
   JSON Schema before the tool runs, so malformed calls are rejected without side effects.
 - **`examples`** — a graduated set of runnable agents, from `MinimalAgent` to the `StudyBuddy`
   capstone (which composes everything); see [examples/README.md](examples/README.md).
-- **`demos`** — six real-world, end-to-end demos (finance, data, logs, support, health, research),
-  each verified live against a local model; see [demos/README.md](demos/README.md).
+- **`demos`** — deep, production-shaped applications (a flagship trust-layer tour, a data analyst, a
+  fraud investigator, a financial advisor), each governed and verified live; see [demos/README.md](demos/README.md).
 - **`production-reference`** — a deployable Spring Boot/PostgreSQL golden path with migrations,
   pooling, durable audit, safe runtime presets, health probes, and bounded multi-tenant requests.
 
