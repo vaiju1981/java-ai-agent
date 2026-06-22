@@ -16,10 +16,14 @@ dependencies {
     implementation(libs.spring.boot.flyway)
     runtimeOnly(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)
+    // Backs the actuator /prometheus endpoint so agent + JVM metrics are actually scrapeable.
+    runtimeOnly(libs.micrometer.registry.prometheus)
 
+    testImplementation(platform(libs.spring.boot.bom))
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.launcher)
+    testImplementation(libs.spring.boot.test)
 }
 
 application {
