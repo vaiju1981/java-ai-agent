@@ -20,7 +20,7 @@ jobs:
       ORG_GRADLE_PROJECT_centralUsername: ${{ secrets.CENTRAL_USERNAME }}
       ORG_GRADLE_PROJECT_centralPassword: ${{ secrets.CENTRAL_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
