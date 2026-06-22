@@ -18,8 +18,9 @@ import org.slf4j.LoggerFactory;
  * <p>Built on the LangChain4j MCP client. Connect a {@code McpClient} (stdio/HTTP transport) and
  * pass it here. The MCP server's declared input schema is propagated (see {@link McpSchemas}) so a
  * {@code ToolArgumentValidator} can reject malformed calls at our boundary, and a failing call's
- * remote error detail is logged but kept out of the model context. End-to-end use requires a running
- * MCP server; the wrapping/execution logic is unit tested against the real API.
+ * remote error detail is logged but kept out of the model context. The full client/transport path —
+ * {@code initialize → tools/list → tools/call} over stdio — is exercised end-to-end against a real
+ * MCP server process in {@code McpStdioE2eTest}.
  */
 public final class McpTools {
 

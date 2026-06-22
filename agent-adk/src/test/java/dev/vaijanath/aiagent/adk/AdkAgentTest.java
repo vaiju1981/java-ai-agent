@@ -10,7 +10,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Verifies the event-stream → answer reduction with real ADK {@link Event}/{@link Content} objects.
- * (The full {@code run()} path drives a live ADK runner/model, which a unit test can't host.)
+ * (The full {@code run()} path drives a live ADK runner/model; {@link AdkLiveE2eTest} covers it
+ * end-to-end when a Gemini credential is present.)
  */
 class AdkAgentTest {
 

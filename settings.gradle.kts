@@ -20,6 +20,7 @@ include(
     "agent-mcp",
     "agent-observability-otel",
     "agent-store-jdbc",
+    "agent-store-pgvector",
     "agent-tools-jsonschema",
     "agent-tools-annotations",
     "agent-anthropic",

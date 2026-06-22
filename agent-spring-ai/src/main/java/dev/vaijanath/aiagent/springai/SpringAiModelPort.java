@@ -8,7 +8,6 @@ import dev.vaijanath.aiagent.model.Usage;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -23,9 +22,15 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 
 /**
  * A {@link ModelPort} backed by any Spring AI {@link ChatModel} — a second L0 substrate alongside
- * LangChain4j, with tool-calling. Tools are passed as definitions with Spring AI's internal tool
- * execution <b>disabled</b>, so the model only requests tools and <i>our</i> runtime executes them
- * (honoring guardrails and the {@code ToolApprover}).
+ * LangChain4j, with tool-calling. Tool definitions are advertised to the model and the model's tool
+ * <i>requests</i> are returned for <i>our</i> runtime to execute (honoring guardrails and the
+ * {@code ToolApprover}).
+ *
+ * <p>Spring AI 2.0 removed the per-request {@code internalToolExecutionEnabled} flag; whether the
+ * framework auto-executes tools is now a ChatModel-level concern (its tool-calling manager /
+ * execution-eligibility predicate). The {@link ChatModel} passed here must therefore be built to
+ * <b>not</b> internally execute tools — otherwise it invokes the definition-only callbacks below,
+ * which fail fast rather than silently bypass the agent runtime.
  */
 public final class SpringAiModelPort implements ModelPort {
 
@@ -57,7 +62,6 @@ public final class SpringAiModelPort implements ModelPort {
                     .toList();
             ToolCallingChatOptions options = ToolCallingChatOptions.builder()
                     .toolCallbacks(callbacks)
-                    .internalToolExecutionEnabled(false) // the agent runtime executes tools, not Spring AI
                     .build();
             prompt = new Prompt(messages, options);
         }
@@ -83,10 +87,15 @@ public final class SpringAiModelPort implements ModelPort {
             case SYSTEM -> new SystemMessage(m.content());
             case USER -> new UserMessage(m.content());
             case ASSISTANT -> m.hasToolCalls()
-                    ? new AssistantMessage(m.content(), Map.of(), toSpringToolCalls(m.toolCalls()))
+                    ? AssistantMessage.builder()
+                            .content(m.content())
+                            .toolCalls(toSpringToolCalls(m.toolCalls()))
+                            .build()
                     : new AssistantMessage(m.content());
-            case TOOL -> new ToolResponseMessage(List.of(
-                    new ToolResponseMessage.ToolResponse(m.toolCallId(), m.toolName(), m.content())));
+            case TOOL -> ToolResponseMessage.builder()
+                    .responses(List.of(
+                            new ToolResponseMessage.ToolResponse(m.toolCallId(), m.toolName(), m.content())))
+                    .build();
         };
     }
 

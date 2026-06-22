@@ -30,8 +30,9 @@ tasks.register<Copy>("aggregateJavadoc") {
     description = "Aggregates each module's Javadoc into build/docs/javadoc (for GitHub Pages)."
     group = "documentation"
     val modules = listOf(
-        "agent-core", "agent-langchain4j", "agent-spring-ai", "agent-adk", "agent-mcp",
-        "agent-observability-otel", "agent-store-jdbc", "agent-tools-jsonschema")
+        "agent-core", "agent-langchain4j", "agent-spring-ai", "agent-anthropic", "agent-adk",
+        "agent-mcp", "agent-observability-otel", "agent-store-jdbc", "agent-store-pgvector",
+        "agent-tools-jsonschema", "agent-tools-annotations", "agent-spring-boot-starter")
     modules.forEach { name ->
         dependsOn(":$name:javadoc")
         from(project(":$name").layout.buildDirectory.dir("docs/javadoc")) { into(name) }
@@ -90,11 +91,13 @@ subprojects {
             "agent-core" to "0.80", "agent-store-jdbc" to "0.85", "agent-tools-jsonschema" to "0.80",
             "agent-mcp" to "0.70", "agent-spring-ai" to "0.65", "agent-observability-otel" to "0.70",
             "agent-adk" to "0.45", "agent-langchain4j" to "0.10",
+            "agent-store-pgvector" to "0.10", // thin integration adapter; the DB path is CI-tested
         ).getOrDefault(project.name, "0.60")
         val branchFloor = mapOf(
             "agent-core" to "0.60", "agent-store-jdbc" to "0.70", "agent-tools-jsonschema" to "0.70",
             "agent-mcp" to "0.45", "agent-spring-ai" to "0.45", "agent-observability-otel" to "0.15",
             "agent-adk" to "0.50", "agent-langchain4j" to "0.05",
+            "agent-store-pgvector" to "0.05",
         ).getOrDefault(project.name, "0.40")
         tasks.withType<JacocoCoverageVerification>().configureEach {
             violationRules {
