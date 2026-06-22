@@ -88,14 +88,27 @@ are **idempotent** (a retry never double-freezes).
 `FraudToolsTest` proves it deterministically: the risk signals surface the planted accounts, actions
 are idempotent, and the runtime allows the flag while denying the freeze.
 
-## PersonalFinanceDemo — many tools, the model picks the right one
+## PersonalFinanceDemo — a real financial advisor
 
-A personal-finance assistant with a realistic **~24-tool** toolkit: data lookups
-(`categorize_merchant`, `budget_check`, `sql`), data-aware analyses over the actual transactions
-(`top_merchants`, `recurring_subscriptions`, `spending_by_category`, `category_budget_status`,
-`largest_expenses`, `monthly_spending`), and planning calculators (compound interest, loan payment,
-tip, savings rate, ROI, …) — so it also validates that the agent picks the right tool among many.
+A financial advisor over a **full year of income and expenses**, given a real advisory toolkit:
+
+- **`cash_flow`** — monthly income, expense, and net savings;
+- **`savings_rate`** — overall and first- vs second-half (catches a decline);
+- **`spending_by_category`** / **`spending_trend`** — totals and a category's month-by-month creep;
+- **`budget_variance`** — average spend vs budget with an **annualized year-end forecast** and an
+  over/under flag;
+- **`detect_subscriptions`** — recurring charges (new or forgotten);
+- **`detect_anomalies`** — one-off shocks, robust to the outlier itself;
+- **`goal_projection`** — months to a savings target at the current net — plus planning calculators,
+  `categorize_merchant`, and a read-only `sql` escape hatch.
+
+The data has **planted signal** (see `FinanceData`): dining lifestyle-creep, a new mid-year gym
+subscription, an anomalous ~$3,500 trip, and a **declining second-half savings rate**. It runs as one
+review that writes a persisted **financial plan** (`record_finding`).
 
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.finance.PersonalFinanceDemo
 ```
+
+`AdvisoryToolsTest` proves the tools find the signal (the H2 savings decline, dining creep, the gym
+subscription, the anomalous trip, dining over budget).
