@@ -20,6 +20,11 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.pages.outputs.page_url }}
+    env:
+      CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+      CENTRAL_TOKEN: ${{ secrets.CENTRAL_TOKEN }}
+      SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +43,12 @@ jobs:
       - name: Build release artifacts + aggregate Javadoc
         run: ./gradlew build aggregateJavadoc --no-daemon --stacktrace
 
+      # Signs and uploads all module artifacts to the Central Portal as one deployment
+      # (USER_MANAGED — review and release it in the Central Portal UI). Runs only when configured.
+      - name: Publish to Maven Central (Central Portal)
+        if: ${{ env.CENTRAL_USERNAME != '' }}
+        run: ./gradlew publishAggregationToCentralPortal --no-daemon --stacktrace
+
       - name: Create GitHub Release (with artifacts)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,7 +64,3 @@ jobs:
       - name: Deploy Javadoc to GitHub Pages
         id: pages
         uses: actions/deploy-pages@v4
-
-      # Maven Central RELEASE upload (signing + Central Portal) is added in a follow-up once the
-      # CENTRAL_* and SIGNING_* secrets are configured — release artifacts are built and signed here
-      # first, then published via the Central Portal.
