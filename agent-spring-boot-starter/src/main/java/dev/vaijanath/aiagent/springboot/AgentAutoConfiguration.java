@@ -12,6 +12,9 @@ import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolArgumentValidator;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Function;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -64,6 +67,49 @@ public class AgentAutoConfiguration {
             ObjectProvider<Tool> tools,
             ObjectProvider<Guardrail> guardrails,
             ObjectProvider<AgentObserver> observers) {
+        return newBuilder(model, conversationStore, auditSink, argumentValidator, properties, tools, guardrails, observers)
+                .build();
+    }
+
+    /**
+     * A factory for per-request agents that carry an extra {@link AgentObserver} (e.g. an SSE forwarder)
+     * alongside the standard configuration — so streaming endpoints get one agent per turn without those
+     * events leaking across concurrent requests. Built from the same configuration as {@link #agent}.
+     */
+    @Bean
+    @ConditionalOnBean(ModelPort.class)
+    @ConditionalOnMissingBean
+    public Function<AgentObserver, Agent> agentStreamingFactory(
+            ModelPort model,
+            ConversationStore conversationStore,
+            AuditSink auditSink,
+            ToolArgumentValidator argumentValidator,
+            AgentProperties properties,
+            ObjectProvider<Tool> tools,
+            ObjectProvider<Guardrail> guardrails,
+            ObjectProvider<AgentObserver> observers) {
+        return perRequestObserver -> newBuilder(
+                        model, conversationStore, auditSink, argumentValidator, properties, tools, guardrails, observers)
+                .observer(perRequestObserver)
+                .build();
+    }
+
+    /** Runs streaming turns off the request thread so an SSE response can be returned immediately. */
+    @Bean(destroyMethod = "close")
+    @ConditionalOnMissingBean
+    public ExecutorService agentStreamExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    private static ProductionAgentRuntime.Builder newBuilder(
+            ModelPort model,
+            ConversationStore conversationStore,
+            AuditSink auditSink,
+            ToolArgumentValidator argumentValidator,
+            AgentProperties properties,
+            ObjectProvider<Tool> tools,
+            ObjectProvider<Guardrail> guardrails,
+            ObjectProvider<AgentObserver> observers) {
         ProductionAgentRuntime.Builder builder = ProductionAgentRuntime.builder()
                 .model(model)
                 .conversationStore(conversationStore)
@@ -78,6 +124,6 @@ public class AgentAutoConfiguration {
         tools.orderedStream().forEach(builder::tool);
         guardrails.orderedStream().forEach(builder::guardrail);
         observers.orderedStream().forEach(builder::observer);
-        return builder.build();
+        return builder;
     }
 }

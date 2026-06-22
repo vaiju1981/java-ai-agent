@@ -2,16 +2,16 @@ plugins {
     application
 }
 
-description = "Deployable production reference service for java-ai-agent."
+description = "FinCopilot — a grounded finance copilot built on java-ai-agent (the v0.2.0 flagship app)."
 
 dependencies {
     implementation(platform(libs.spring.boot.bom))
     implementation(project(":agent-core"))
-    // Shared AgentTurns / SseAgentObserver web plumbing (its agent auto-config beans are
-    // @ConditionalOnMissingBean, so this app's own beans below still take precedence).
+    // Auto-configures the governed agent + streaming factory + executor, and provides the shared
+    // AgentTurns / SseAgentObserver web plumbing (so it isn't duplicated per app).
     implementation(project(":agent-spring-boot-starter"))
-    implementation(project(":agent-langchain4j"))
-    implementation(project(":agent-store-jdbc"))
+    implementation(project(":agent-langchain4j")) // Ollama ModelPort
+    implementation(project(":agent-store-jdbc")) // durable ConversationStore + its Flyway schema
     implementation(project(":agent-tools-jsonschema"))
     implementation(libs.spring.boot.web)
     implementation(libs.spring.boot.actuator)
@@ -19,7 +19,6 @@ dependencies {
     implementation(libs.spring.boot.flyway)
     runtimeOnly(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)
-    // Backs the actuator /prometheus endpoint so agent + JVM metrics are actually scrapeable.
     runtimeOnly(libs.micrometer.registry.prometheus)
 
     testImplementation(platform(libs.spring.boot.bom))
@@ -30,5 +29,5 @@ dependencies {
 }
 
 application {
-    mainClass.set("dev.vaijanath.aiagent.reference.ProductionReferenceApplication")
+    mainClass.set("dev.vaijanath.aiagent.fincopilot.FinCopilotApplication")
 }
