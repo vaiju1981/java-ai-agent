@@ -17,6 +17,7 @@ dependencies {
     implementation(libs.spring.boot.actuator)
     implementation(libs.spring.boot.jdbc)
     implementation(libs.spring.boot.flyway)
+    implementation(libs.spring.security.crypto) // BCrypt password hashing for consumer auth
     runtimeOnly(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)
     runtimeOnly(libs.micrometer.registry.prometheus)
@@ -26,6 +27,10 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.launcher)
     testImplementation(libs.spring.boot.test)
+    // Self-contained DB tests for the user/session stores (skipped where Docker is unavailable).
+    testImplementation(platform(libs.testcontainers.bom))
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.junit)
 }
 
 application {
