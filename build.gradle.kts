@@ -91,13 +91,15 @@ subprojects {
             "agent-core" to "0.80", "agent-store-jdbc" to "0.85", "agent-tools-jsonschema" to "0.80",
             "agent-mcp" to "0.70", "agent-spring-ai" to "0.65", "agent-observability-otel" to "0.70",
             "agent-adk" to "0.45", "agent-langchain4j" to "0.10",
-            "agent-store-pgvector" to "0.10", // thin integration adapter; the DB path is CI-tested
+            // Floor = the always-on guard tests; the Testcontainers test lifts the real DB path to ~82%
+            // line wherever Docker is available (CI + local), but is skipped on Docker-less machines.
+            "agent-store-pgvector" to "0.25",
         ).getOrDefault(project.name, "0.60")
         val branchFloor = mapOf(
             "agent-core" to "0.60", "agent-store-jdbc" to "0.70", "agent-tools-jsonschema" to "0.70",
             "agent-mcp" to "0.45", "agent-spring-ai" to "0.45", "agent-observability-otel" to "0.15",
             "agent-adk" to "0.50", "agent-langchain4j" to "0.05",
-            "agent-store-pgvector" to "0.05",
+            "agent-store-pgvector" to "0.45",
         ).getOrDefault(project.name, "0.40")
         tasks.withType<JacocoCoverageVerification>().configureEach {
             violationRules {

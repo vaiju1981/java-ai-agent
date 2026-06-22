@@ -1,18 +1,19 @@
 package dev.vaijanath.aiagent.store.pgvector;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vaijanath.aiagent.rag.Embedder;
-import dev.vaijanath.aiagent.rag.RetrievedChunk;
+import dev.vaijanath.aiagent.store.jdbc.ConnectionSource;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
+/**
+ * Pure-logic and guard-path tests that need no database (always run). The live ANN path
+ * ({@code ensureSchema}/{@code add}/{@code retrieve}) is covered against a real pgvector instance in
+ * {@link PgVectorRetrieverContainerTest}.
+ */
 class PgVectorRetrieverTest {
 
     private static Embedder bagOfWords(String... vocab) {
@@ -29,7 +30,12 @@ class PgVectorRetrieverTest {
         };
     }
 
-    // --- pure logic (always runs, no database) ---
+    /** A connection source that fails if used — proves a code path never opens a database connection. */
+    private static ConnectionSource noDatabase() {
+        return () -> {
+            throw new AssertionError("must not open a database connection");
+        };
+    }
 
     @Test
     void formatsVectorLiterals() {
@@ -46,27 +52,27 @@ class PgVectorRetrieverTest {
     @Test
     void rejectsNonPositiveDimensions() {
         assertThrows(
-                IllegalArgumentException.class,
-                () -> new PgVectorRetriever(() -> null, bagOfWords("a"), 0));
+                IllegalArgumentException.class, () -> new PgVectorRetriever(noDatabase(), bagOfWords("a"), 0));
     }
 
-    // --- integration: runs in CI against the pgvector Postgres service ---
+    @Test
+    void rejectsDimensionsAbovePgvectorHnswLimit() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new PgVectorRetriever(noDatabase(), bagOfWords("a"), 2001));
+    }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "POSTGRES_TEST_URL", matches = ".+")
-    void storesAndRetrievesViaPgvectorAnn() {
-        PgVectorRetriever store =
-                PgVectorRetriever.fromJdbcUrl(System.getenv("POSTGRES_TEST_URL"), bagOfWords("cat", "dog", "fish"), 3);
-        String tenant = "pgv-" + UUID.randomUUID();
-        store.add(tenant, "c1", "the cat", Map.of("source", "doc-1"));
-        store.add(tenant, "c2", "the dog");
-        store.add(tenant, "c3", "a fish");
+    void retrieveWithNonPositiveLimitReturnsEmptyWithoutTouchingTheDatabase() {
+        PgVectorRetriever store = new PgVectorRetriever(noDatabase(), bagOfWords("a"), 1);
+        assertTrue(store.retrieve("t", "q", 0).isEmpty());
+        assertTrue(store.retrieve("t", "q", -1).isEmpty());
+    }
 
-        List<RetrievedChunk> hits = store.retrieve(tenant, "where is the cat?", 2);
-
-        assertFalse(hits.isEmpty());
-        assertEquals("c1", hits.get(0).id(), "the cat chunk is the nearest neighbour");
-        assertEquals("doc-1", hits.get(0).metadata().get("source"));
-        assertTrue(hits.get(0).score() >= hits.get(hits.size() - 1).score());
+    @Test
+    void addRejectsEmbeddingWithWrongDimensionWithoutTouchingTheDatabase() {
+        // The embedder yields a length-2 vector but the store is configured for 3 dimensions.
+        PgVectorRetriever store = new PgVectorRetriever(noDatabase(), bagOfWords("a", "b"), 3);
+        assertThrows(IllegalArgumentException.class, () -> store.add("t", "id", "a b"));
     }
 }
