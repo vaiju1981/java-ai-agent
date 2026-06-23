@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   approveAction,
+  deleteSession,
   getGoals,
   getSessionMessages,
   getSessions,
@@ -243,6 +244,15 @@ function History({ onOpen }) {
       .catch((e) => setError(e.message));
   }, []);
 
+  async function remove(sessionId) {
+    try {
+      await deleteSession(sessionId);
+      setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   return (
     <main style={S.messages}>
       {error && <div style={S.error}>{error}</div>}
@@ -252,12 +262,17 @@ function History({ onOpen }) {
       )}
       {sessions &&
         sessions.map((s) => (
-          <button key={s.sessionId} style={S.sessionRow} onClick={() => onOpen(s.sessionId)}>
-            <span>Conversation {s.sessionId}</span>
-            <span style={S.hintSmall}>
-              {s.messageCount} messages · {new Date(s.lastActivityMillis).toLocaleString()}
-            </span>
-          </button>
+          <div key={s.sessionId} style={S.sessionRow}>
+            <button style={S.sessionOpen} onClick={() => onOpen(s.sessionId)}>
+              <span>Conversation {s.sessionId}</span>
+              <span style={S.hintSmall}>
+                {s.messageCount} messages · {new Date(s.lastActivityMillis).toLocaleString()}
+              </span>
+            </button>
+            <button style={S.deleteBtn} title="Delete conversation" onClick={() => remove(s.sessionId)}>
+              ✕
+            </button>
+          </div>
         ))}
     </main>
   );

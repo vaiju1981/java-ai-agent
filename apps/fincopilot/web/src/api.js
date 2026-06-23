@@ -84,6 +84,8 @@ export const listTransactions = () => api('GET', '/api/transactions');
 export const getSessions = () => api('GET', '/api/chat/sessions');
 export const getSessionMessages = (sessionId) =>
   api('GET', `/api/chat/sessions/${encodeURIComponent(sessionId)}`);
+export const deleteSession = (sessionId) =>
+  api('DELETE', `/api/chat/sessions/${encodeURIComponent(sessionId)}`);
 
 // Human-in-the-loop tool approval + savings goals.
 export const approveAction = (approvalId, approved) =>

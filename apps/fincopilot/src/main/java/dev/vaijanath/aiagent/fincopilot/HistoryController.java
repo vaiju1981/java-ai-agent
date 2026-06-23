@@ -7,6 +7,8 @@ import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.springboot.web.AgentTurns;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestAttribute;
@@ -48,6 +50,15 @@ class HistoryController {
                 .filter(m -> !m.content().isBlank())
                 .map(HistoryController::toView)
                 .toList();
+    }
+
+    @DeleteMapping("/{sessionId}")
+    ResponseEntity<Void> delete(
+            @RequestAttribute(SessionAuthenticationFilter.PRINCIPAL_ATTRIBUTE) String principal,
+            @PathVariable String sessionId) {
+        AgentTurns.requireIdentifier(sessionId, "sessionId");
+        history.delete(principal, sessionId);
+        return ResponseEntity.noContent().build();
     }
 
     private static MessageView toView(Message message) {

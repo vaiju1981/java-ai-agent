@@ -1,5 +1,7 @@
 package dev.vaijanath.aiagent.fincopilot;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -19,23 +21,36 @@ class HistoryControllerTest {
 
     private static final String PRINCIPAL = SessionAuthenticationFilter.PRINCIPAL_ATTRIBUTE;
 
+    /** A configurable in-test ConversationHistory. */
+    private static final class FakeHistory implements ConversationHistory {
+        List<SessionSummary> sessions = List.of();
+        List<Message> history = List.of();
+        String deleted;
+
+        @Override
+        public List<SessionSummary> listSessions(String tenant) {
+            return sessions;
+        }
+
+        @Override
+        public List<Message> messages(String tenant, String sessionId) {
+            return history;
+        }
+
+        @Override
+        public void delete(String tenant, String sessionId) {
+            deleted = tenant + "/" + sessionId;
+        }
+    }
+
     private MockMvc mvc(ConversationHistory history) {
         return standaloneSetup(new HistoryController(history)).build();
     }
 
     @Test
     void listsTheUsersSessions() throws Exception {
-        ConversationHistory history = new ConversationHistory() {
-            @Override
-            public List<SessionSummary> listSessions(String tenant) {
-                return List.of(new SessionSummary("s-1", 4, Instant.ofEpochMilli(1000)));
-            }
-
-            @Override
-            public List<Message> messages(String tenant, String sessionId) {
-                return List.of();
-            }
-        };
+        FakeHistory history = new FakeHistory();
+        history.sessions = List.of(new ConversationHistory.SessionSummary("s-1", 4, Instant.ofEpochMilli(1000)));
 
         mvc(history)
                 .perform(get("/api/chat/sessions").requestAttr(PRINCIPAL, "u1"))
@@ -47,22 +62,13 @@ class HistoryControllerTest {
 
     @Test
     void replaysOnlyUserAndAssistantTextHidingSystemAndToolPlumbing() throws Exception {
-        ConversationHistory history = new ConversationHistory() {
-            @Override
-            public List<SessionSummary> listSessions(String tenant) {
-                return List.of();
-            }
-
-            @Override
-            public List<Message> messages(String tenant, String sessionId) {
-                return List.of(
-                        Message.system("you are FinCopilot"),
-                        Message.user("hi"),
-                        Message.assistant("", List.of(new ToolCall("id", "finance_summary", "{}"))),
-                        Message.toolResult("id", "finance_summary", "42"),
-                        Message.assistant("here is your summary"));
-            }
-        };
+        FakeHistory history = new FakeHistory();
+        history.history = List.of(
+                Message.system("you are FinCopilot"),
+                Message.user("hi"),
+                Message.assistant("", List.of(new ToolCall("id", "finance_summary", "{}"))),
+                Message.toolResult("id", "finance_summary", "42"),
+                Message.assistant("here is your summary"));
 
         mvc(history)
                 .perform(get("/api/chat/sessions/s-1").requestAttr(PRINCIPAL, "u1"))
@@ -76,20 +82,19 @@ class HistoryControllerTest {
 
     @Test
     void rejectsAMalformedSessionId() throws Exception {
-        ConversationHistory history = new ConversationHistory() {
-            @Override
-            public List<SessionSummary> listSessions(String tenant) {
-                return List.of();
-            }
-
-            @Override
-            public List<Message> messages(String tenant, String sessionId) {
-                return List.of();
-            }
-        };
-
-        mvc(history)
+        mvc(new FakeHistory())
                 .perform(get("/api/chat/sessions/bad@id").requestAttr(PRINCIPAL, "u1"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void deletesTheSessionScopedToTheUser() throws Exception {
+        FakeHistory history = new FakeHistory();
+
+        mvc(history)
+                .perform(delete("/api/chat/sessions/s-1").requestAttr(PRINCIPAL, "u1"))
+                .andExpect(status().isNoContent());
+
+        assertEquals("u1/s-1", history.deleted, "delete is scoped to the authenticated user and session");
     }
 }

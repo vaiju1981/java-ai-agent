@@ -110,6 +110,11 @@ public final class InMemoryConversationStore implements ConversationStore, Conve
         }
     }
 
+    @Override
+    public void delete(String tenant, String sessionId) {
+        entries.remove(new Key(tenant, sessionId));
+    }
+
     /** Evicts the least-recently-used unpinned entry if over the cap; pinned (in-flight) entries stay. */
     private void evictIfNeeded() {
         if (entries.size() <= maxSessions) {
