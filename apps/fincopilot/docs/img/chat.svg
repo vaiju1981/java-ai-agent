@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect x="0" y="0" width="900" height="600" rx="14" fill="#0f172a"/>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="900" height="52" fill="#0f172a"/>
+  <line x1="0" y1="52" x2="900" y2="52" stroke="#1e293b"/>
+  <text x="24" y="33" fill="#38bdf8" font-size="16" font-weight="700">FinCopilot</text>
+  <!-- nav chips -->
+  <rect x="360" y="14" width="56" height="26" rx="8" fill="#0b3a52" stroke="#38bdf8"/>
+  <text x="388" y="31" fill="#e2e8f0" font-size="12" text-anchor="middle">Chat</text>
+  <rect x="422" y="14" width="84" height="26" rx="8" fill="none" stroke="#334155"/>
+  <text x="464" y="31" fill="#94a3b8" font-size="12" text-anchor="middle">Dashboard</text>
+  <rect x="512" y="14" width="52" height="26" rx="8" fill="none" stroke="#334155"/>
+  <text x="538" y="31" fill="#94a3b8" font-size="12" text-anchor="middle">Data</text>
+  <rect x="570" y="14" width="56" height="26" rx="8" fill="none" stroke="#334155"/>
+  <text x="598" y="31" fill="#94a3b8" font-size="12" text-anchor="middle">Goals</text>
+  <rect x="632" y="14" width="62" height="26" rx="8" fill="none" stroke="#334155"/>
+  <text x="663" y="31" fill="#94a3b8" font-size="12" text-anchor="middle">History</text>
+  <text x="876" y="31" fill="#94a3b8" font-size="12" text-anchor="end">Sign out</text>
+
+  <!-- User bubble (right) -->
+  <rect x="436" y="74" width="440" height="40" rx="12" fill="#38bdf8"/>
+  <text x="858" y="99" fill="#0f172a" font-size="13.5" text-anchor="end">How much did I spend by category last month?</text>
+
+  <!-- tool_data card: spending bars (left) -->
+  <rect x="24" y="130" width="470" height="196" rx="12" fill="#0b3a52" stroke="#334155"/>
+  <text x="44" y="156" fill="#94a3b8" font-size="12">Spending by category</text>
+  <!-- rows -->
+  <text x="120" y="183" fill="#94a3b8" font-size="12" text-anchor="end">rent</text>
+  <rect x="132" y="173" width="260" height="14" rx="4" fill="#38bdf8"/>
+  <text x="404" y="184" fill="#cbd5e1" font-size="12">1,500</text>
+
+  <text x="120" y="211" fill="#94a3b8" font-size="12" text-anchor="end">groceries</text>
+  <rect x="132" y="201" width="120" height="14" rx="4" fill="#38bdf8"/>
+  <text x="264" y="212" fill="#cbd5e1" font-size="12">690</text>
+
+  <text x="120" y="239" fill="#94a3b8" font-size="12" text-anchor="end">dining</text>
+  <rect x="132" y="229" width="72" height="14" rx="4" fill="#38bdf8"/>
+  <text x="216" y="240" fill="#cbd5e1" font-size="12">410</text>
+
+  <text x="120" y="267" fill="#94a3b8" font-size="12" text-anchor="end">transport</text>
+  <rect x="132" y="257" width="52" height="14" rx="4" fill="#38bdf8"/>
+  <text x="196" y="268" fill="#cbd5e1" font-size="12">300</text>
+
+  <text x="120" y="295" fill="#94a3b8" font-size="12" text-anchor="end">utilities</text>
+  <rect x="132" y="285" width="34" height="14" rx="4" fill="#38bdf8"/>
+  <text x="178" y="296" fill="#cbd5e1" font-size="12">190</text>
+  <text x="44" y="318" fill="#64748b" font-size="10.5">↑ rendered inline from the tool's structured result (StructuredTool → tool_data)</text>
+
+  <!-- Assistant bubble (left) -->
+  <rect x="24" y="342" width="560" height="150" rx="12" fill="#1e293b"/>
+  <text x="44" y="366" fill="#94a3b8" font-size="11">used: spending_by_category</text>
+  <text x="44" y="390" fill="#e2e8f0" font-size="13.5">Last month you spent <tspan font-weight="700">$3,090</tspan> across five categories. Your</text>
+  <text x="44" y="410" fill="#e2e8f0" font-size="13.5">largest was <tspan font-weight="700">rent ($1,500)</tspan>, followed by groceries ($690).</text>
+  <text x="44" y="434" fill="#e2e8f0" font-size="13.5">Dining and transport together were $710 — a place to trim if</text>
+  <text x="44" y="454" fill="#e2e8f0" font-size="13.5">you want to save faster.</text>
+  <text x="44" y="478" fill="#64748b" font-size="11.5" font-style="italic">General information, not personalized financial advice.</text>
+
+  <!-- Composer -->
+  <rect x="24" y="540" width="760" height="40" rx="8" fill="#1e293b" stroke="#334155"/>
+  <text x="40" y="565" fill="#64748b" font-size="13">Message FinCopilot…</text>
+  <rect x="796" y="540" width="80" height="40" rx="8" fill="#38bdf8"/>
+  <text x="836" y="565" fill="#0f172a" font-size="13.5" font-weight="600" text-anchor="middle">Send</text>
+</svg>
