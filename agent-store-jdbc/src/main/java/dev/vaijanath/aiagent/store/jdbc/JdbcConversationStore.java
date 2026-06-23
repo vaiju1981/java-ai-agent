@@ -243,6 +243,40 @@ public final class JdbcConversationStore implements ConversationStore, Conversat
         return messages;
     }
 
+    @Override
+    public void delete(String tenant, String sessionId) {
+        // Serialize with same-session turns so a delete never races a turn's load/commit.
+        synchronized (locks[Math.floorMod(Objects.hash(tenant, sessionId), STRIPES)]) {
+            try (Connection c = connections.get()) {
+                boolean autoCommit = c.getAutoCommit();
+                c.setAutoCommit(false);
+                try {
+                    // agent_messages references agent_turns (FK): delete messages first, then turns.
+                    try (PreparedStatement ps =
+                            c.prepareStatement("DELETE FROM agent_messages WHERE tenant = ? AND session_id = ?")) {
+                        ps.setString(1, tenant);
+                        ps.setString(2, sessionId);
+                        ps.executeUpdate();
+                    }
+                    try (PreparedStatement ps =
+                            c.prepareStatement("DELETE FROM agent_turns WHERE tenant = ? AND session_id = ?")) {
+                        ps.setString(1, tenant);
+                        ps.setString(2, sessionId);
+                        ps.executeUpdate();
+                    }
+                    c.commit();
+                } catch (SQLException e) {
+                    c.rollback();
+                    throw e;
+                } finally {
+                    c.setAutoCommit(autoCommit);
+                }
+            } catch (SQLException e) {
+                throw new IllegalStateException("failed to delete session " + tenant + "/" + sessionId, e);
+            }
+        }
+    }
+
     private void createSchema() {
         String ddl = "CREATE TABLE IF NOT EXISTS agent_messages ("
                 + "tenant VARCHAR(255) NOT NULL,"
