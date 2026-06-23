@@ -16,6 +16,7 @@ public final class AuthService {
     private final SessionStore sessions;
     private final PasswordEncoder passwordEncoder;
     private final Duration sessionTtl;
+    private final String dummyHash;
 
     public AuthService(
             UserStore users, SessionStore sessions, PasswordEncoder passwordEncoder, Duration sessionTtl) {
@@ -23,6 +24,8 @@ public final class AuthService {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.passwordEncoder = Objects.requireNonNull(passwordEncoder, "passwordEncoder");
         this.sessionTtl = Objects.requireNonNull(sessionTtl, "sessionTtl");
+        // A throwaway hash so login can always run a comparison (timing-equalised, see login()).
+        this.dummyHash = passwordEncoder.encode("unused-account-placeholder");
     }
 
     /** Registers a new account and returns a fresh session token; empty if the email is already taken. */
@@ -37,7 +40,11 @@ public final class AuthService {
      */
     public Optional<String> login(String email, String password) {
         Optional<User> user = users.findByEmail(normalize(email));
-        if (user.isEmpty() || !passwordEncoder.matches(password, user.get().passwordHash())) {
+        // Always run a hash comparison (real or dummy) so response timing doesn't reveal which emails
+        // are registered (no user enumeration).
+        String hash = user.map(User::passwordHash).orElse(dummyHash);
+        boolean passwordMatches = passwordEncoder.matches(password, hash);
+        if (user.isEmpty() || !passwordMatches) {
             return Optional.empty();
         }
         return Optional.of(sessions.create(user.get().id(), sessionTtl));

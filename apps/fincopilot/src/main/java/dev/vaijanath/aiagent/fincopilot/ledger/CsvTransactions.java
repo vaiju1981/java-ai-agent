@@ -14,6 +14,8 @@ import java.util.Locale;
  */
 public final class CsvTransactions {
 
+    private static final int MAX_ROWS = 10_000;
+
     private CsvTransactions() {}
 
     /** A parsed CSV row (without the identity fields the server assigns: id, user, account). */
@@ -27,6 +29,9 @@ public final class CsvTransactions {
         }
         String[] lines = csv.strip().split("\\r?\\n");
         int start = lines.length > 0 && lines[0].toLowerCase(Locale.ROOT).contains("date") ? 1 : 0;
+        if (lines.length - start > MAX_ROWS) {
+            throw new IllegalArgumentException("too many rows (max " + MAX_ROWS + ")");
+        }
         for (int i = start; i < lines.length; i++) {
             String line = lines[i].strip();
             if (line.isEmpty()) {
