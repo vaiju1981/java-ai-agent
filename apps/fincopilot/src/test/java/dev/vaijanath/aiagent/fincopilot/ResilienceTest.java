@@ -15,7 +15,6 @@ import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,8 +37,10 @@ class ResilienceTest {
                 .conversationStore(new InMemoryConversationStore())
                 .auditSink(new InMemoryAuditSink())
                 .argumentValidator(new JsonSchemaToolValidator())
-                .modelTimeout(Duration.ofSeconds(10))
-                .toolTimeout(Duration.ofSeconds(5))
+                // Generous timeouts: these tests probe isolation and graceful failure, not latency, so
+                // no turn should trip a wall-clock bound even on a loaded CI runner.
+                .modelTimeout(Duration.ofSeconds(60))
+                .toolTimeout(Duration.ofSeconds(60))
                 .build();
     }
 
@@ -76,7 +77,7 @@ class ResilienceTest {
                 futures.add(pool.submit(() -> agent.run(turn(idx)).output()));
             }
             for (int i = 0; i < turns; i++) {
-                assertEquals("turn-" + i, futures.get(i).get(30, TimeUnit.SECONDS), "turn " + i + " stayed isolated");
+                assertEquals("turn-" + i, futures.get(i).get(60, TimeUnit.SECONDS), "turn " + i + " stayed isolated");
             }
         } finally {
             pool.shutdownNow();
@@ -84,9 +85,9 @@ class ResilienceTest {
     }
 
     private static AgentRequest turn(int i) {
+        // No deadline (null): this test asserts session isolation, not deadline behaviour, so a turn must
+        // not race a wall-clock bound under CI scheduling. Distinct session/principal/tenant per turn.
         return new AgentRequest(
-                "turn-" + i,
-                new RequestContext(
-                        "s-" + i, "u-" + i, "u-" + i, "t-" + i, Instant.now().plus(Duration.ofSeconds(30)), Map.of()));
+                "turn-" + i, new RequestContext("s-" + i, "u-" + i, "u-" + i, "t-" + i, null, Map.of()));
     }
 }
