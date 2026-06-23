@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.springboot;
 
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.ProductionAgentRuntime;
+import dev.vaijanath.aiagent.annotation.Internal;
 import dev.vaijanath.aiagent.audit.AuditSink;
 import dev.vaijanath.aiagent.audit.InMemoryAuditSink;
 import dev.vaijanath.aiagent.guardrail.Guardrail;
@@ -10,6 +11,7 @@ import dev.vaijanath.aiagent.memory.InMemoryConversationStore;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.springboot.metrics.MicrometerAgentObserver;
+import dev.vaijanath.aiagent.tool.ApprovalHandler;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolArgumentValidator;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
@@ -36,7 +38,13 @@ import org.springframework.context.annotation.Configuration;
  * <p>The agent is assembled with {@link ProductionAgentRuntime}: durable-store + audit + argument
  * validation, model/tool timeouts, deny-effectful tool authorization, and a hard per-turn deadline.
  * For production, override the in-memory store and audit sink with durable beans.
+ *
+ * <p>{@code @Internal}: the supported contract is the <em>beans this produces</em> and the {@code agent.*}
+ * properties — not these {@code @Bean} factory-method signatures, which Spring calls reflectively and which
+ * evolve (e.g. to inject new optional beans). Its behaviour is covered by the autoconfiguration tests, so
+ * the API-compatibility check skips it.
  */
+@Internal
 @AutoConfiguration
 @EnableConfigurationProperties(AgentProperties.class)
 public class AgentAutoConfiguration {
@@ -70,8 +78,11 @@ public class AgentAutoConfiguration {
             AgentProperties properties,
             ObjectProvider<Tool> tools,
             ObjectProvider<Guardrail> guardrails,
-            ObjectProvider<AgentObserver> observers) {
-        return newBuilder(model, conversationStore, auditSink, argumentValidator, properties, tools, guardrails, observers)
+            ObjectProvider<AgentObserver> observers,
+            ObjectProvider<ApprovalHandler> approvalHandler) {
+        return newBuilder(
+                        model, conversationStore, auditSink, argumentValidator, properties,
+                        tools, guardrails, observers, approvalHandler)
                 .build();
     }
 
@@ -91,9 +102,11 @@ public class AgentAutoConfiguration {
             AgentProperties properties,
             ObjectProvider<Tool> tools,
             ObjectProvider<Guardrail> guardrails,
-            ObjectProvider<AgentObserver> observers) {
+            ObjectProvider<AgentObserver> observers,
+            ObjectProvider<ApprovalHandler> approvalHandler) {
         return perRequestObserver -> newBuilder(
-                        model, conversationStore, auditSink, argumentValidator, properties, tools, guardrails, observers)
+                        model, conversationStore, auditSink, argumentValidator, properties,
+                        tools, guardrails, observers, approvalHandler)
                 .observer(perRequestObserver)
                 .build();
     }
@@ -131,7 +144,8 @@ public class AgentAutoConfiguration {
             AgentProperties properties,
             ObjectProvider<Tool> tools,
             ObjectProvider<Guardrail> guardrails,
-            ObjectProvider<AgentObserver> observers) {
+            ObjectProvider<AgentObserver> observers,
+            ObjectProvider<ApprovalHandler> approvalHandler) {
         ProductionAgentRuntime.Builder builder = ProductionAgentRuntime.builder()
                 .model(model)
                 .conversationStore(conversationStore)
@@ -146,6 +160,8 @@ public class AgentAutoConfiguration {
         tools.orderedStream().forEach(builder::tool);
         guardrails.orderedStream().forEach(builder::guardrail);
         observers.orderedStream().forEach(builder::observer);
+        // Optional: an ApprovalHandler bean enables human-in-the-loop approval of effectful tools.
+        approvalHandler.ifAvailable(builder::approvalHandler);
         return builder;
     }
 }

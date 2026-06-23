@@ -6,6 +6,7 @@ import dev.vaijanath.aiagent.guardrail.GuardrailStage;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
+import dev.vaijanath.aiagent.tool.ApprovalRequest;
 import dev.vaijanath.aiagent.tool.ToolResult;
 
 /**
@@ -39,6 +40,14 @@ public interface AgentObserver {
      * {@link #onToolResult} text. For UIs and recorders only — this payload is never sent to the model.
      */
     default void onToolData(String toolName, String dataJson) {}
+
+    /**
+     * An effectful tool call requires human approval before it can run (the {@code ToolApprover} denied it
+     * and an {@link dev.vaijanath.aiagent.tool.ApprovalHandler} is configured). Emitted just before the
+     * runtime blocks on the handler, so a UI can surface the request and resolve it by
+     * {@link ApprovalRequest#approvalId()}.
+     */
+    default void onApprovalRequired(ApprovalRequest request) {}
 
     default void onTurnEnd(AgentResponse response) {}
 

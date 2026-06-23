@@ -4,6 +4,12 @@ plugins {
 
 description = "Spring Boot starter — autoconfigures a governed Agent from a ModelPort bean."
 
+// AgentAutoConfiguration is @Internal Spring plumbing: its @Bean method signatures (Spring calls them
+// reflectively and they evolve to inject new optional beans) are not a user-facing API, and its behaviour
+// is covered by the autoconfiguration tests. Exclude it from the API-compatibility check by name (the
+// @Internal annotation was added after the 0.1.2 baseline, so annotation-exclude alone can't match it).
+extra["japicmpExcludes"] = "dev.vaijanath.aiagent.springboot.AgentAutoConfiguration"
+
 dependencies {
     api(project(":agent-core"))
     // The default tool-argument validator the governed runtime requires.
