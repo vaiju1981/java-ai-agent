@@ -18,6 +18,7 @@ dependencies {
     implementation(libs.spring.boot.jdbc)
     implementation(libs.spring.boot.flyway)
     implementation(libs.spring.security.crypto) // BCrypt password hashing for consumer auth
+    implementation(libs.jackson.databind) // parse the model's tool arguments in the Analyst tools
     runtimeOnly(libs.flyway.postgresql)
     runtimeOnly(libs.postgresql)
     runtimeOnly(libs.micrometer.registry.prometheus)
