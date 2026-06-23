@@ -53,7 +53,10 @@ tasks.register<Copy>("aggregateJavadoc") {
 }
 
 subprojects {
-    // Pin CVE-flagged transitive deps to patched versions within the same minor line (Dependabot).
+    // Pin CVE-flagged transitive deps to patched versions (Dependabot). netty/bouncycastle stay within
+    // their minor line; OpenTelemetry is forced across the whole group to keep its core artifacts aligned
+    // (the API/SDK are backward-compatible across the 1.x line) — google-adk drags in 1.51.0, which has a
+    // medium-severity advisory in opentelemetry-api (<= 1.61.0). Keep this in step with the version catalog.
     configurations.configureEach {
         resolutionStrategy.eachDependency {
             if (requested.group == "io.netty") {
@@ -61,6 +64,9 @@ subprojects {
             }
             if (requested.group == "org.bouncycastle") {
                 useVersion("1.84")
+            }
+            if (requested.group == "io.opentelemetry") {
+                useVersion("1.63.0")
             }
         }
     }
