@@ -48,6 +48,8 @@ class AuthConfiguration {
                 "/api/transactions",
                 "/api/transactions/*",
                 "/api/analytics/*",
+                "/api/goals",
+                "/api/goals/*",
                 "/api/me",
                 "/api/me/*");
         registration.setOrder(10);

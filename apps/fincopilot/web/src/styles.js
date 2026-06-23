@@ -44,4 +44,5 @@ export const S = {
   chatBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', borderBottom: '1px solid #1e293b' },
   hintSmall: { fontSize: 12, color: '#64748b' },
   sessionRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', cursor: 'pointer', textAlign: 'left', font: 'inherit' },
+  approvalCard: { display: 'flex', flexDirection: 'column', gap: 10, margin: '0 16px 8px', padding: 14, borderRadius: 10, border: '1px solid #f59e0b', background: '#3b2f1a', color: '#fde68a' },
 };

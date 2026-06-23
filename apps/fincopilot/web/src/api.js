@@ -85,6 +85,11 @@ export const getSessions = () => api('GET', '/api/chat/sessions');
 export const getSessionMessages = (sessionId) =>
   api('GET', `/api/chat/sessions/${encodeURIComponent(sessionId)}`);
 
+// Human-in-the-loop tool approval + savings goals.
+export const approveAction = (approvalId, approved) =>
+  api('POST', '/api/chat/approve', { approvalId, approved });
+export const getGoals = () => api('GET', '/api/goals');
+
 /**
  * Streams one chat turn, invoking onEvent(name, data) for each SSE event
  * ('tool', 'tool_result', 'final', 'error'). Throws on auth/transport failure.

@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { getSessionMessages, getSessions, getToken, login, logout, signup, streamTurn } from './api.js';
+import {
+  approveAction,
+  getSessionMessages,
+  getSessions,
+  getToken,
+  login,
+  logout,
+  signup,
+  streamTurn,
+} from './api.js';
 import Dashboard from './Dashboard.jsx';
 import Data from './Data.jsx';
 import { S } from './styles.js';
@@ -113,6 +122,7 @@ function Chat({ sessionId, onNewChat }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(null);
 
   // Load this session's prior messages so a refresh or a resumed session shows its history.
   useEffect(() => {
@@ -142,16 +152,34 @@ function Chat({ sessionId, onNewChat }) {
       await streamTurn(sessionId, text, (event, data) => {
         if (event === 'tool') {
           tools.push(data.name);
+        } else if (event === 'approval_required') {
+          setPending({ approvalId: data.approvalId, name: data.name, args: data.arguments });
         } else if (event === 'final') {
+          setPending(null);
           setMessages((m) => [...m, { role: 'assistant', text: data.output, tools: [...tools] }]);
         } else if (event === 'error') {
+          setPending(null);
           setMessages((m) => [...m, { role: 'assistant', text: 'Something went wrong handling that.', error: true }]);
         }
       });
     } catch (e) {
+      setPending(null);
       setMessages((m) => [...m, { role: 'assistant', text: e.message, error: true }]);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function resolve(approved) {
+    const action = pending;
+    setPending(null);
+    if (!action) {
+      return;
+    }
+    try {
+      await approveAction(action.approvalId, approved);
+    } catch {
+      // if this fails the turn simply times out and is declined
     }
   }
 
@@ -169,8 +197,21 @@ function Chat({ sessionId, onNewChat }) {
             <div style={m.error ? S.errText : undefined}>{m.text}</div>
           </div>
         ))}
-        {busy && <div style={S.assistant}><em>thinking…</em></div>}
+        {busy && !pending && <div style={S.assistant}><em>thinking…</em></div>}
       </main>
+      {pending && (
+        <div style={S.approvalCard}>
+          <div>
+            FinCopilot wants to run <b>{pending.name}</b>
+            {pending.args && pending.args !== '{}' ? <span style={S.hintSmall}> with {pending.args}</span> : null}.
+            Approve?
+          </div>
+          <div style={S.row}>
+            <button style={S.primary} onClick={() => resolve(true)}>Approve</button>
+            <button style={S.secondary} onClick={() => resolve(false)}>Reject</button>
+          </div>
+        </div>
+      )}
       <footer style={S.composer}>
         <input style={S.composerInput} placeholder="Message FinCopilot…" value={input} disabled={busy}
           onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} />
