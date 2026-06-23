@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
   approveAction,
   deleteSession,
@@ -206,7 +207,13 @@ function Chat({ sessionId, onNewChat }) {
           ) : (
             <div key={i} style={m.role === 'user' ? S.user : S.assistant}>
               {m.tools && m.tools.length > 0 && <div style={S.tools}>used: {m.tools.join(', ')}</div>}
-              <div style={m.error ? S.errText : undefined}>{formatInline(m.text)}</div>
+              {m.error ? (
+                <div style={S.errText}>{m.text}</div>
+              ) : m.role === 'user' ? (
+                <div>{m.text}</div>
+              ) : (
+                <Markdown text={m.text} />
+              )}
             </div>
           ),
         )}
@@ -310,22 +317,32 @@ function Goals() {
   );
 }
 
-// Minimal, XSS-safe inline formatting: **bold** and `code`. Newlines render via white-space:pre-wrap.
-function formatInline(text) {
-  const parts = String(text == null ? '' : text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith('`') && part.endsWith('`')) {
-      return (
-        <code key={i} style={S.code}>
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    return part;
-  });
+// Full markdown for assistant answers — react-markdown is XSS-safe by default (it never renders raw HTML).
+// Element overrides keep it tight and on-theme; links open safely in a new tab.
+const MD_COMPONENTS = {
+  p: (props) => <p style={{ margin: '0 0 8px' }} {...strip(props)} />,
+  ul: (props) => <ul style={{ margin: '4px 0', paddingLeft: 18 }} {...strip(props)} />,
+  ol: (props) => <ol style={{ margin: '4px 0', paddingLeft: 18 }} {...strip(props)} />,
+  li: (props) => <li style={{ margin: '2px 0' }} {...strip(props)} />,
+  h1: (props) => <h3 style={S.mdHeading} {...strip(props)} />,
+  h2: (props) => <h3 style={S.mdHeading} {...strip(props)} />,
+  h3: (props) => <h3 style={S.mdHeading} {...strip(props)} />,
+  pre: (props) => <pre style={S.mdPre} {...strip(props)} />,
+  code: (props) => <code style={S.code} {...strip(props)} />,
+  a: (props) => <a target="_blank" rel="noopener noreferrer" {...strip(props)} />,
+};
+
+// Drop react-markdown's internal `node` prop so it isn't spread onto the DOM element.
+function strip({ node, ...rest }) {
+  return rest;
+}
+
+function Markdown({ text }) {
+  return (
+    <div style={S.markdown}>
+      <ReactMarkdown components={MD_COMPONENTS}>{String(text == null ? '' : text)}</ReactMarkdown>
+    </div>
+  );
 }
 
 function fmt(value) {
