@@ -1,17 +1,40 @@
-import React, { useState } from 'react';
-import { getToken, login, logout, signup, streamTurn } from './api.js';
+import React, { useEffect, useState } from 'react';
+import { getSessionMessages, getSessions, getToken, login, logout, signup, streamTurn } from './api.js';
 import Dashboard from './Dashboard.jsx';
 import Data from './Data.jsx';
 import { S } from './styles.js';
 
-const VIEWS = ['chat', 'dashboard', 'data'];
+const VIEWS = ['chat', 'dashboard', 'data', 'history'];
+const SESSION_KEY = 'fincopilot.session';
+
+const newSessionId = () => 's-' + Math.random().toString(36).slice(2, 10);
+
+function currentSessionId() {
+  let id = localStorage.getItem(SESSION_KEY);
+  if (!id) {
+    id = newSessionId();
+    localStorage.setItem(SESSION_KEY, id);
+  }
+  return id;
+}
 
 export default function App() {
   const [token, setTok] = useState(getToken());
   const [view, setView] = useState('chat');
+  const [sessionId, setSessionId] = useState(currentSessionId);
 
   if (!token) {
     return <Auth onAuthed={setTok} />;
+  }
+
+  function openSession(id) {
+    localStorage.setItem(SESSION_KEY, id);
+    setSessionId(id);
+    setView('chat');
+  }
+
+  function startNewChat() {
+    openSession(newSessionId());
   }
 
   return (
@@ -34,9 +57,10 @@ export default function App() {
           Sign out
         </button>
       </header>
-      {view === 'chat' && <Chat />}
+      {view === 'chat' && <Chat key={sessionId} sessionId={sessionId} onNewChat={startNewChat} />}
       {view === 'dashboard' && <Dashboard />}
       {view === 'data' && <Data />}
+      {view === 'history' && <History onOpen={openSession} />}
     </div>
   );
 }
@@ -79,11 +103,25 @@ function Auth({ onAuthed }) {
   );
 }
 
-function Chat() {
-  const [sessionId] = useState(() => 's-' + Math.random().toString(36).slice(2, 10));
+function Chat({ sessionId, onNewChat }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Load this session's prior messages so a refresh or a resumed session shows its history.
+  useEffect(() => {
+    let active = true;
+    getSessionMessages(sessionId)
+      .then((past) => {
+        if (active && past && past.length > 0) {
+          setMessages(past.map((m) => ({ role: m.role, text: m.content })));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [sessionId]);
 
   async function send() {
     const text = input.trim();
@@ -113,6 +151,10 @@ function Chat() {
 
   return (
     <>
+      <div style={S.chatBar}>
+        <span style={S.hintSmall}>Conversation {sessionId}</span>
+        <button style={S.link} onClick={onNewChat}>New chat</button>
+      </div>
       <main style={S.messages}>
         {messages.length === 0 && <p style={S.hint}>Ask about your finances — e.g. “How much did I spend on groceries?”</p>}
         {messages.map((m, i) => (
@@ -129,5 +171,35 @@ function Chat() {
         <button style={S.primary} onClick={send} disabled={busy}>Send</button>
       </footer>
     </>
+  );
+}
+
+function History({ onOpen }) {
+  const [sessions, setSessions] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    getSessions()
+      .then(setSessions)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  return (
+    <main style={S.messages}>
+      {error && <div style={S.error}>{error}</div>}
+      {!error && sessions === null && <p style={S.hint}>Loading…</p>}
+      {!error && sessions !== null && sessions.length === 0 && (
+        <p style={S.hint}>No past conversations yet.</p>
+      )}
+      {sessions &&
+        sessions.map((s) => (
+          <button key={s.sessionId} style={S.sessionRow} onClick={() => onOpen(s.sessionId)}>
+            <span>Conversation {s.sessionId}</span>
+            <span style={S.hintSmall}>
+              {s.messageCount} messages · {new Date(s.lastActivityMillis).toLocaleString()}
+            </span>
+          </button>
+        ))}
+    </main>
   );
 }

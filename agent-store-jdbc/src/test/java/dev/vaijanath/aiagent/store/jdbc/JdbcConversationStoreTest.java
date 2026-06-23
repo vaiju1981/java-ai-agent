@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.vaijanath.aiagent.memory.ConversationHistory;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.Role;
 import dev.vaijanath.aiagent.model.ToolCall;
@@ -266,6 +267,34 @@ class JdbcConversationStoreTest {
         List<Message> history = JdbcConversationStore.fromJdbcUrl(url)
                 .withMemory("acme", "s", JdbcConversationStoreTest::historyOf);
         assertEquals(List.of("interloper", "mine"), history.stream().map(Message::content).toList());
+    }
+
+    @Test
+    void browsesHistoryListingSessionsAndReadingMessages(@TempDir Path dir) {
+        JdbcConversationStore store = JdbcConversationStore.fromJdbcUrl(url(dir));
+        store.withMemory("acme", "s1", m -> {
+            m.add(Message.user("hi"));
+            m.add(Message.assistant("hello"));
+            return null;
+        });
+        store.withMemory("acme", "s2", m -> {
+            m.add(Message.user("again"));
+            return null;
+        });
+        store.withMemory("other", "s3", m -> {
+            m.add(Message.user("nope"));
+            return null;
+        });
+
+        List<ConversationHistory.SessionSummary> sessions = store.listSessions("acme");
+        assertEquals(2, sessions.size(), "only the tenant's own sessions are listed");
+        assertTrue(sessions.stream().anyMatch(s -> s.sessionId().equals("s1") && s.messageCount() == 2));
+        assertTrue(sessions.stream().anyMatch(s -> s.sessionId().equals("s2") && s.messageCount() == 1));
+
+        List<Message> s1 = store.messages("acme", "s1");
+        assertEquals(List.of("hi", "hello"), s1.stream().map(Message::content).toList());
+        assertTrue(store.messages("acme", "missing").isEmpty(), "an unknown session reads empty");
+        assertTrue(store.messages("other", "s1").isEmpty(), "another tenant cannot read the session");
     }
 
     private static List<Message> historyOf(dev.vaijanath.aiagent.memory.Memory memory) {

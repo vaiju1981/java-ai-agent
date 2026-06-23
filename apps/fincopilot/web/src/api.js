@@ -80,6 +80,11 @@ export const addTransaction = (txn) => api('POST', '/api/transactions', txn);
 export const importCsv = (accountId, csv) => api('POST', '/api/transactions/import', { accountId, csv });
 export const listTransactions = () => api('GET', '/api/transactions');
 
+// Conversation history.
+export const getSessions = () => api('GET', '/api/chat/sessions');
+export const getSessionMessages = (sessionId) =>
+  api('GET', `/api/chat/sessions/${encodeURIComponent(sessionId)}`);
+
 /**
  * Streams one chat turn, invoking onEvent(name, data) for each SSE event
  * ('tool', 'tool_result', 'final', 'error'). Throws on auth/transport failure.
