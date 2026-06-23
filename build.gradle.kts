@@ -166,12 +166,21 @@ subprojects {
             group = "verification"
             val jarTask = tasks.named("jar")
             dependsOn(jarTask)
+            // Track the jar as an input (not just a dependency) so a changed API re-runs the check rather
+            // than being skipped as up-to-date when only the jar changed.
+            inputs.files(jarTask).withPropertyName("subjectJar")
             inputs.files(japicmpBaseline).withPropertyName("baseline")
             outputs.file(japicmpReport)
             classpath = japicmpTool
             mainClass.set("japicmp.JApiCmp")
             doFirst {
                 japicmpReport.get().asFile.parentFile.mkdirs()
+                // Always exclude @Internal-annotated elements. A module may also exclude classes by name
+                // via the `japicmpExcludes` extra property (semicolon-separated) — needed for elements that
+                // gained @Internal only in the new version (annotation-exclude can't match the old jar), e.g.
+                // Spring autoconfiguration classes whose @Bean method signatures are not a user-facing API.
+                val byName = (project.findProperty("japicmpExcludes") as String?)?.takeIf(String::isNotBlank)
+                val excludes = "@dev.vaijanath.aiagent.annotation.Internal" + (byName?.let { ";$it" } ?: "")
                 args = listOf(
                     "--old", japicmpBaseline.singleFile.absolutePath,
                     "--new", jarTask.get().outputs.files.singleFile.absolutePath,
@@ -179,7 +188,7 @@ subprojects {
                     "--only-modified",
                     "--ignore-missing-classes",
                     "--error-on-binary-incompatibility",
-                    "--exclude", "@dev.vaijanath.aiagent.annotation.Internal",
+                    "--exclude", excludes,
                     "--html-file", japicmpReport.get().asFile.absolutePath,
                 )
             }

@@ -3,7 +3,10 @@ package dev.vaijanath.aiagent.springboot.web;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import dev.vaijanath.aiagent.model.ToolCall;
+import dev.vaijanath.aiagent.tool.ApprovalRequest;
+import dev.vaijanath.aiagent.tool.ToolCallContext;
 import dev.vaijanath.aiagent.tool.ToolResult;
+import dev.vaijanath.aiagent.tool.ToolSpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -18,6 +21,10 @@ class SseAgentObserverTest {
             observer.onToolCall(new ToolCall("c1", "lookup", "{}"));
             observer.onToolResult("lookup", ToolResult.ok("raw"));
             observer.onToolData("lookup", "{\"rows\":3}");
+            ToolCall write = new ToolCall("c9", "set_goal", "{\"amount\":100}");
+            ToolSpec spec = new ToolSpec("set_goal", "", "{}");
+            observer.onApprovalRequired(new ApprovalRequest(
+                    "ap-1", write, new ToolCallContext(spec, write.argumentsJson(), "u1", "u1", "t", "s", null, null)));
             // After completion further sends are swallowed rather than thrown.
             emitter.complete();
             observer.onToolCall(new ToolCall("c2", "calc", "{}"));
