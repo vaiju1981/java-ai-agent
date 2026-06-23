@@ -48,6 +48,18 @@ tasks.register<Copy>("aggregateJavadoc") {
 }
 
 subprojects {
+    // Pin CVE-flagged transitive deps to patched versions within the same minor line (Dependabot).
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "io.netty") {
+                useVersion("4.2.15.Final")
+            }
+            if (requested.group == "org.bouncycastle") {
+                useVersion("1.84")
+            }
+        }
+    }
+
     tasks.withType<JavaCompile>().configureEach {
         options.release.set(21)
         options.encoding = "UTF-8"
