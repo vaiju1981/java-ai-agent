@@ -1,5 +1,6 @@
-package dev.vaijanath.aiagent.reference;
+package dev.vaijanath.aiagent.springboot.health;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -9,23 +10,34 @@ import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
 
 /**
- * Readiness reflects model reachability: an agent whose model backend is down would 503 every turn,
- * so it should not report ready and take traffic. Contributes to the {@code readiness} group, so a
- * model outage drains the instance from a load balancer instead of serving failing requests.
+ * Readiness that reflects the reachability of an HTTP model backend (e.g. Ollama): an agent whose model
+ * is down would fail every turn, so the instance should not report ready and take traffic. Register it
+ * in the {@code readiness} health group — the bean name becomes the contributor key — so a backend
+ * outage drains the instance from a load balancer instead of serving failing requests.
+ *
+ * <p>It issues a short GET to the base URL and treats any response below {@code 500} as up (the backend
+ * is answering, even if the root path itself isn't a real route). Connect/read timeouts and errors are
+ * down. The probe is deliberately cheap so it can run on the readiness interval without load.
  */
-class ModelHealthIndicator implements HealthIndicator {
+public final class ModelEndpointHealthIndicator implements HealthIndicator {
 
     private final URI baseUri;
+    private final Duration timeout;
     private final HttpClient http;
 
-    ModelHealthIndicator(String baseUrl) {
+    public ModelEndpointHealthIndicator(String baseUrl) {
+        this(baseUrl, Duration.ofSeconds(2));
+    }
+
+    public ModelEndpointHealthIndicator(String baseUrl, Duration timeout) {
         this.baseUri = URI.create(baseUrl);
-        this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+        this.timeout = timeout;
+        this.http = HttpClient.newBuilder().connectTimeout(timeout).build();
     }
 
     @Override
     public Health health() {
-        HttpRequest request = HttpRequest.newBuilder(baseUri).timeout(Duration.ofSeconds(2)).GET().build();
+        HttpRequest request = HttpRequest.newBuilder(baseUri).timeout(timeout).GET().build();
         try {
             HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
             if (response.statusCode() < 500) {
@@ -38,7 +50,7 @@ class ModelHealthIndicator implements HealthIndicator {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Health.down().withDetail("baseUrl", baseUri.toString()).withDetail("error", "interrupted").build();
-        } catch (Exception e) {
+        } catch (IOException e) {
             return Health.down()
                     .withDetail("baseUrl", baseUri.toString())
                     .withDetail("error", e.getClass().getSimpleName())

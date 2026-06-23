@@ -67,6 +67,8 @@ spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-aut
 spring-security-crypto = { module = "org.springframework.security:spring-security-crypto" }
 # Prometheus scrape endpoint for actuator metrics (version managed by the Spring Boot BOM).
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
+# Micrometer core (MeterRegistry) — compile-only in the starter for optional metrics autoconfig.
+micrometer-core = { module = "io.micrometer:micrometer-core" }
 flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 

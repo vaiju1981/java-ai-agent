@@ -13,6 +13,8 @@ import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ResilientModelPort;
 import dev.vaijanath.aiagent.observe.AgentObserver;
+import dev.vaijanath.aiagent.springboot.health.ModelEndpointHealthIndicator;
+import dev.vaijanath.aiagent.springboot.metrics.MicrometerAgentObserver;
 import dev.vaijanath.aiagent.store.jdbc.JdbcConversationStore;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -105,7 +107,7 @@ class AgentConfiguration {
                 .argumentValidator(new JsonSchemaToolValidator())
                 .modelTimeout(properties.modelTimeout())
                 .toolTimeout(properties.toolTimeout())
-                .observer(new MeterRegistryAgentObserver(meterRegistry))
+                .observer(new MicrometerAgentObserver(meterRegistry))
                 .systemPrompt("You are a concise, accurate production assistant. Never invent tool results.");
         contentGuardrails(properties).forEach(builder::guardrail);
         return builder;
@@ -131,8 +133,8 @@ class AgentConfiguration {
 
     /** Readiness reflects model reachability (contributes to the {@code readiness} group as "model"). */
     @Bean
-    ModelHealthIndicator model(AgentProperties properties) {
-        return new ModelHealthIndicator(properties.ollamaBaseUrl());
+    ModelEndpointHealthIndicator model(AgentProperties properties) {
+        return new ModelEndpointHealthIndicator(properties.ollamaBaseUrl());
     }
 
     @Bean
