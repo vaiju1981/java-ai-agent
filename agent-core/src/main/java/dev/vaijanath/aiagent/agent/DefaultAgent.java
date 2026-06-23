@@ -16,6 +16,8 @@ import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
+import dev.vaijanath.aiagent.tool.ApprovalHandler;
+import dev.vaijanath.aiagent.tool.ApprovalRequest;
 import dev.vaijanath.aiagent.tool.ContextualTool;
 import dev.vaijanath.aiagent.tool.StructuredTool;
 import dev.vaijanath.aiagent.tool.StructuredToolResult;
@@ -25,6 +27,7 @@ import dev.vaijanath.aiagent.tool.ToolApprovers;
 import dev.vaijanath.aiagent.tool.ToolArgumentValidator;
 import dev.vaijanath.aiagent.tool.ToolCallContext;
 import dev.vaijanath.aiagent.tool.ToolDecision;
+import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolExecutor;
 import dev.vaijanath.aiagent.tool.ToolInvocation;
 import dev.vaijanath.aiagent.tool.ToolResult;
@@ -39,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -74,6 +78,7 @@ public final class DefaultAgent implements Agent {
     private final ToolArgumentValidator toolArgumentValidator;
     private final ToolSelector toolSelector;
     private final ToolExecutor toolExecutor;
+    private final ApprovalHandler approvalHandler;
     private final ConversationStore conversations;
     private final List<AgentObserver> observers;
     private final AuditSink auditSink;
@@ -94,6 +99,7 @@ public final class DefaultAgent implements Agent {
                 b.toolArgumentValidator != null ? b.toolArgumentValidator : ToolArgumentValidator.none();
         this.toolSelector = b.toolSelector != null ? b.toolSelector : ToolSelectors.all();
         this.toolExecutor = b.toolExecutor;
+        this.approvalHandler = b.approvalHandler;
         this.conversations = b.conversationStore != null
                 ? b.conversationStore
                 : new InMemoryConversationStore(
@@ -287,10 +293,30 @@ public final class DefaultAgent implements Agent {
                 ctx.traceId(), ctx.sessionId(), ctx.deadline(), ctx.attributes().get("idempotencyKey"));
         ToolDecision decision = toolApprover.authorize(callContext);
         if (!decision.allowed()) {
-            log.info("tool '{}' denied: {}", call.name(), decision.reason());
-            audit("tool.denied", ctx, "tool=" + call.name() + " reason=" + decision.reason());
-            return StructuredToolResult.of(
-                    ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason()));
+            // An effectful tool the policy didn't auto-approve can be escalated to a human approver, if one
+            // is configured; otherwise it is hard-denied (the safe default).
+            if (approvalHandler == null || tool.spec().effect() != ToolEffect.EFFECTFUL) {
+                log.info("tool '{}' denied: {}", call.name(), decision.reason());
+                audit("tool.denied", ctx, "tool=" + call.name() + " reason=" + decision.reason());
+                return StructuredToolResult.of(
+                        ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason()));
+            }
+            ApprovalRequest request = new ApprovalRequest(UUID.randomUUID().toString(), call, callContext);
+            notify(o -> o.onApprovalRequired(request));
+            boolean approved;
+            try {
+                approved = approvalHandler.requestApproval(request);
+            } catch (RuntimeException e) {
+                log.warn("approval handler failed for tool '{}'", call.name(), e);
+                audit("tool.denied", ctx, "tool=" + call.name() + " reason=approval-error");
+                return StructuredToolResult.of(ToolResult.error("tool '" + call.name() + "' approval failed"));
+            }
+            if (!approved) {
+                log.info("tool '{}' declined by the approver", call.name());
+                audit("tool.denied", ctx, "tool=" + call.name() + " reason=approval-declined");
+                return StructuredToolResult.of(ToolResult.error("the user declined to run '" + call.name() + "'"));
+            }
+            audit("tool.approved", ctx, "tool=" + call.name() + " via=human");
         }
         Optional<String> invalid = toolArgumentValidator.validate(tool.spec(), call.argumentsJson());
         if (invalid.isPresent()) {
@@ -390,6 +416,7 @@ public final class DefaultAgent implements Agent {
         private ToolArgumentValidator toolArgumentValidator;
         private ToolSelector toolSelector;
         private ToolExecutor toolExecutor;
+        private ApprovalHandler approvalHandler;
         private Supplier<Memory> memoryFactory;
         private ConversationStore conversationStore;
         private String systemPrompt;
@@ -455,6 +482,16 @@ public final class DefaultAgent implements Agent {
          */
         public Builder toolExecutor(ToolExecutor toolExecutor) {
             this.toolExecutor = toolExecutor;
+            return this;
+        }
+
+        /**
+         * Escalate an effectful tool the {@link #toolApprover} did not auto-approve to a human approver
+         * instead of hard-denying it. The runtime calls the handler inline (it may block awaiting a
+         * decision), so use it on a turn path that runs off the request thread. Default: none.
+         */
+        public Builder approvalHandler(ApprovalHandler approvalHandler) {
+            this.approvalHandler = approvalHandler;
             return this;
         }
 

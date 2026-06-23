@@ -7,6 +7,7 @@ import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ResilientModelPort;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.observe.RedactingObserver;
+import dev.vaijanath.aiagent.tool.ApprovalHandler;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprover;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
@@ -58,6 +59,9 @@ public final class ProductionAgentRuntime implements Agent {
                 .frameToolResults(true)
                 .maxSteps(b.maxSteps)
                 .systemPrompt(b.systemPrompt);
+        if (b.approvalHandler != null) {
+            core.approvalHandler(b.approvalHandler);
+        }
         b.tools.forEach(core::tool);
         // Content policy runs inside the conversation transaction so only governed input/output is
         // persisted. The outer seam below owns the hard deadline and lifecycle audit only.
@@ -89,6 +93,7 @@ public final class ProductionAgentRuntime implements Agent {
         private AuditSink auditSink;
         private ToolArgumentValidator argumentValidator;
         private ToolApprover toolApprover = ToolApprovers.denyEffectful();
+        private ApprovalHandler approvalHandler;
         private final List<Tool> tools = new ArrayList<>();
         private final List<Guardrail> guardrails = new ArrayList<>();
         private final List<AgentObserver> observers = new ArrayList<>();
@@ -106,6 +111,8 @@ public final class ProductionAgentRuntime implements Agent {
         public Builder auditSink(AuditSink sink) { this.auditSink = sink; return this; }
         public Builder argumentValidator(ToolArgumentValidator validator) { this.argumentValidator = validator; return this; }
         public Builder toolApprover(ToolApprover approver) { this.toolApprover = approver; return this; }
+        /** Escalate an unapproved effectful tool to a human approver instead of hard-denying it. */
+        public Builder approvalHandler(ApprovalHandler handler) { this.approvalHandler = handler; return this; }
         public Builder tool(Tool tool) { this.tools.add(tool); return this; }
         public Builder guardrail(Guardrail guardrail) { this.guardrails.add(guardrail); return this; }
         /** Content is redacted before this observer sees it. */

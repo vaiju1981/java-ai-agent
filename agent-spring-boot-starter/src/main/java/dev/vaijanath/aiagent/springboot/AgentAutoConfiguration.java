@@ -10,6 +10,7 @@ import dev.vaijanath.aiagent.memory.InMemoryConversationStore;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.springboot.metrics.MicrometerAgentObserver;
+import dev.vaijanath.aiagent.tool.ApprovalHandler;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolArgumentValidator;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
@@ -70,8 +71,11 @@ public class AgentAutoConfiguration {
             AgentProperties properties,
             ObjectProvider<Tool> tools,
             ObjectProvider<Guardrail> guardrails,
-            ObjectProvider<AgentObserver> observers) {
-        return newBuilder(model, conversationStore, auditSink, argumentValidator, properties, tools, guardrails, observers)
+            ObjectProvider<AgentObserver> observers,
+            ObjectProvider<ApprovalHandler> approvalHandler) {
+        return newBuilder(
+                        model, conversationStore, auditSink, argumentValidator, properties,
+                        tools, guardrails, observers, approvalHandler)
                 .build();
     }
 
@@ -91,9 +95,11 @@ public class AgentAutoConfiguration {
             AgentProperties properties,
             ObjectProvider<Tool> tools,
             ObjectProvider<Guardrail> guardrails,
-            ObjectProvider<AgentObserver> observers) {
+            ObjectProvider<AgentObserver> observers,
+            ObjectProvider<ApprovalHandler> approvalHandler) {
         return perRequestObserver -> newBuilder(
-                        model, conversationStore, auditSink, argumentValidator, properties, tools, guardrails, observers)
+                        model, conversationStore, auditSink, argumentValidator, properties,
+                        tools, guardrails, observers, approvalHandler)
                 .observer(perRequestObserver)
                 .build();
     }
@@ -131,7 +137,8 @@ public class AgentAutoConfiguration {
             AgentProperties properties,
             ObjectProvider<Tool> tools,
             ObjectProvider<Guardrail> guardrails,
-            ObjectProvider<AgentObserver> observers) {
+            ObjectProvider<AgentObserver> observers,
+            ObjectProvider<ApprovalHandler> approvalHandler) {
         ProductionAgentRuntime.Builder builder = ProductionAgentRuntime.builder()
                 .model(model)
                 .conversationStore(conversationStore)
@@ -146,6 +153,8 @@ public class AgentAutoConfiguration {
         tools.orderedStream().forEach(builder::tool);
         guardrails.orderedStream().forEach(builder::guardrail);
         observers.orderedStream().forEach(builder::observer);
+        // Optional: an ApprovalHandler bean enables human-in-the-loop approval of effectful tools.
+        approvalHandler.ifAvailable(builder::approvalHandler);
         return builder;
     }
 }
