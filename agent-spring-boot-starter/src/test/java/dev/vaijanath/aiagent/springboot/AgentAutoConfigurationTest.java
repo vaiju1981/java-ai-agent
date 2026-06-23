@@ -9,6 +9,9 @@ import dev.vaijanath.aiagent.audit.AuditSink;
 import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelResponse;
+import dev.vaijanath.aiagent.springboot.metrics.MicrometerAgentObserver;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -53,5 +56,18 @@ class AgentAutoConfigurationTest {
                 .withBean("customAgent", Agent.class, () -> custom)
                 .run(context -> assertThat(context.getBean(Agent.class).run(new AgentRequest("x")).output())
                         .isEqualTo("custom"));
+    }
+
+    @Test
+    void wiresTheMicrometerObserverWhenAMeterRegistryIsPresent() {
+        runner.withBean("model", ModelPort.class, () -> STUB_MODEL)
+                .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
+                .run(context -> assertThat(context).hasSingleBean(MicrometerAgentObserver.class));
+    }
+
+    @Test
+    void omitsTheMicrometerObserverWithoutAMeterRegistry() {
+        runner.withBean("model", ModelPort.class, () -> STUB_MODEL)
+                .run(context -> assertThat(context).doesNotHaveBean(MicrometerAgentObserver.class));
     }
 }

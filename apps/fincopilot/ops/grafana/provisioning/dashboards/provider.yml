@@ -1,0 +1,10 @@
+# Loads the dashboards mounted at /var/lib/grafana/dashboards (see compose.observability.yml).
+apiVersion: 1
+providers:
+  - name: fincopilot
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -3,6 +3,7 @@ package dev.vaijanath.aiagent.springboot.web;
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
+import dev.vaijanath.aiagent.agent.RequestContext;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import java.io.IOException;
 import java.util.Map;
@@ -60,14 +61,14 @@ public final class AgentTurns {
         };
     }
 
-    /** Runs one synchronous turn, correlating logs by trace id and mapping the outcome to a status. */
+    /** Runs one synchronous turn, correlating logs by request context and mapping the outcome to a status. */
     public static ResponseEntity<AgentResponse> run(Agent agent, AgentRequest request) {
-        MDC.put("traceId", request.context().traceId());
+        putContext(request.context());
         try {
             AgentResponse response = agent.run(request);
             return ResponseEntity.status(httpStatus(response)).body(response);
         } finally {
-            MDC.remove("traceId");
+            clearContext();
         }
     }
 
@@ -84,7 +85,7 @@ public final class AgentTurns {
         SseEmitter emitter = new SseEmitter(emitterTimeoutMillis);
         Agent agent = streamingAgentFactory.apply(new SseAgentObserver(emitter));
         executor.execute(() -> {
-            MDC.put("traceId", request.context().traceId());
+            putContext(request.context());
             try {
                 AgentResponse response = agent.run(request);
                 emitter.send(SseEmitter.event().name("final").data(response, MediaType.APPLICATION_JSON));
@@ -98,9 +99,29 @@ public final class AgentTurns {
                 }
                 emitter.complete();
             } finally {
-                MDC.remove("traceId");
+                clearContext();
             }
         });
         return emitter;
+    }
+
+    /**
+     * Binds the request's identity to the logging {@link MDC} so every log line emitted during the turn
+     * carries the same trace, session, principal, and tenant — turning scattered lines into a coherent,
+     * filterable trail. Always paired with {@link #clearContext()} in a finally block so nothing leaks
+     * to the next task on a pooled thread.
+     */
+    private static void putContext(RequestContext context) {
+        MDC.put("traceId", context.traceId());
+        MDC.put("sessionId", context.sessionId());
+        MDC.put("principal", context.principal());
+        MDC.put("tenant", context.tenant());
+    }
+
+    private static void clearContext() {
+        MDC.remove("traceId");
+        MDC.remove("sessionId");
+        MDC.remove("principal");
+        MDC.remove("tenant");
     }
 }
