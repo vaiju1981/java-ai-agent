@@ -24,6 +24,7 @@ public final class UserDataService {
         "DELETE FROM agent_turns WHERE tenant = ?",
         "DELETE FROM fincopilot_transactions WHERE user_id = ?",
         "DELETE FROM fincopilot_accounts WHERE user_id = ?",
+        "DELETE FROM fincopilot_goals WHERE user_id = ?",
         "DELETE FROM fincopilot_sessions WHERE user_id = ?",
         "DELETE FROM fincopilot_usage WHERE user_id = ?",
         "DELETE FROM fincopilot_users WHERE id = ?",

@@ -75,6 +75,9 @@ agent:
     ground your answer in the returned passages, citing their source titles in [brackets]. Always add a
     brief reminder that this is general information, not personalized advice, and suggest consulting a
     qualified professional for major decisions.
+    When the user asks to set or create a savings goal, call set_savings_goal with the name and target
+    amount (and a target date if given). It changes the user's data, so it needs their approval — the
+    system will ask them to confirm before it takes effect; do not claim the goal is set until it succeeds.
   model-timeout: ${FINCOPILOT_MODEL_TIMEOUT:60s}
   tool-timeout: ${FINCOPILOT_TOOL_TIMEOUT:15s}
   max-steps: ${FINCOPILOT_MAX_STEPS:8}
