@@ -50,4 +50,7 @@ export const S = {
   code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', background: '#0f172a', padding: '1px 5px', borderRadius: 4, fontSize: 13 },
   dataCard: { alignSelf: 'flex-start', maxWidth: '85%', padding: '10px 14px', borderRadius: 12, background: '#0b3a52', border: '1px solid #334155' },
   dataTitle: { fontSize: 12, color: '#94a3b8', marginBottom: 8 },
+  markdown: { whiteSpace: 'normal', lineHeight: 1.45 },
+  mdHeading: { fontSize: 15, margin: '6px 0 4px', color: '#cbd5e1' },
+  mdPre: { background: '#0f172a', padding: 10, borderRadius: 8, overflowX: 'auto', margin: '6px 0' },
 };
