@@ -17,10 +17,12 @@ class SseAgentObserverTest {
             // Before completion the emitter buffers events; nothing escapes.
             observer.onToolCall(new ToolCall("c1", "lookup", "{}"));
             observer.onToolResult("lookup", ToolResult.ok("raw"));
+            observer.onToolData("lookup", "{\"rows\":3}");
             // After completion further sends are swallowed rather than thrown.
             emitter.complete();
             observer.onToolCall(new ToolCall("c2", "calc", "{}"));
             observer.onToolResult("calc", ToolResult.error("boom"));
+            observer.onToolData("calc", "{\"x\":1}");
         });
     }
 }
