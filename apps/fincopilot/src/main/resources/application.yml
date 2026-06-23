@@ -49,6 +49,8 @@ fincopilot:
   daily-request-quota: ${FINCOPILOT_DAILY_REQUEST_QUOTA:200}
   # Ollama embedding model for semantic retrieval; blank uses the offline hashing embedder.
   embed-model: ${FINCOPILOT_EMBED_MODEL:nomic-embed-text-v2-moe}
+  # Per-IP throttle on the public auth endpoints, per minute (0 disables).
+  auth-attempts-per-minute: ${FINCOPILOT_AUTH_ATTEMPTS_PER_MINUTE:20}
 
 # The governed agent's own knobs (agent-spring-boot-starter).
 agent:
