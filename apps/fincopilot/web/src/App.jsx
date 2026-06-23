@@ -7,7 +7,13 @@ import { S } from './styles.js';
 const VIEWS = ['chat', 'dashboard', 'data', 'history'];
 const SESSION_KEY = 'fincopilot.session';
 
-const newSessionId = () => 's-' + Math.random().toString(36).slice(2, 10);
+// Conversation ids are tenant-scoped (history is filtered by user id, not by guessing the id), but use
+// the Web Crypto API anyway — unguessable and collision-resistant, and avoids weak-randomness warnings.
+function newSessionId() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return 's-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 function currentSessionId() {
   let id = localStorage.getItem(SESSION_KEY);
