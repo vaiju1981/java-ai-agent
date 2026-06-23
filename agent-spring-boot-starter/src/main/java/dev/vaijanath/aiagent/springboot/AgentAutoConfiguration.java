@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.springboot;
 
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.ProductionAgentRuntime;
+import dev.vaijanath.aiagent.annotation.Internal;
 import dev.vaijanath.aiagent.audit.AuditSink;
 import dev.vaijanath.aiagent.audit.InMemoryAuditSink;
 import dev.vaijanath.aiagent.guardrail.Guardrail;
@@ -37,7 +38,13 @@ import org.springframework.context.annotation.Configuration;
  * <p>The agent is assembled with {@link ProductionAgentRuntime}: durable-store + audit + argument
  * validation, model/tool timeouts, deny-effectful tool authorization, and a hard per-turn deadline.
  * For production, override the in-memory store and audit sink with durable beans.
+ *
+ * <p>{@code @Internal}: the supported contract is the <em>beans this produces</em> and the {@code agent.*}
+ * properties — not these {@code @Bean} factory-method signatures, which Spring calls reflectively and which
+ * evolve (e.g. to inject new optional beans). Its behaviour is covered by the autoconfiguration tests, so
+ * the API-compatibility check skips it.
  */
+@Internal
 @AutoConfiguration
 @EnableConfigurationProperties(AgentProperties.class)
 public class AgentAutoConfiguration {
