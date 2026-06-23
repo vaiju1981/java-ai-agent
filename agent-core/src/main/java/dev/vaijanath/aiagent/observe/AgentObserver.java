@@ -34,6 +34,12 @@ public interface AgentObserver {
 
     default void onToolResult(String toolName, ToolResult result) {}
 
+    /**
+     * A {@link dev.vaijanath.aiagent.tool.StructuredTool} produced a structured JSON payload alongside its
+     * {@link #onToolResult} text. For UIs and recorders only — this payload is never sent to the model.
+     */
+    default void onToolData(String toolName, String dataJson) {}
+
     default void onTurnEnd(AgentResponse response) {}
 
     /**
