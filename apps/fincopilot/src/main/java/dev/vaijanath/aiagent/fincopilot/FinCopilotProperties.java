@@ -12,7 +12,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("fincopilot")
 public record FinCopilotProperties(
-        String ollamaBaseUrl, String model, int historyTurns, Duration requestTimeout, String auditFile) {
+        String ollamaBaseUrl,
+        String model,
+        int historyTurns,
+        Duration requestTimeout,
+        String auditFile,
+        int dailyRequestQuota) {
 
     public FinCopilotProperties {
         ollamaBaseUrl = blankTo(ollamaBaseUrl, "http://localhost:11434");
@@ -20,6 +25,7 @@ public record FinCopilotProperties(
         historyTurns = historyTurns > 0 ? historyTurns : 20;
         requestTimeout = positiveOr(requestTimeout, Duration.ofSeconds(90));
         auditFile = blankTo(auditFile, "var/audit/fincopilot-events.log");
+        dailyRequestQuota = Math.max(0, dailyRequestQuota); // 0 disables the per-user quota
     }
 
     private static String blankTo(String value, String fallback) {

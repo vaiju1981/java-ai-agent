@@ -46,7 +46,9 @@ class AuthConfiguration {
                 "/api/accounts/*",
                 "/api/transactions",
                 "/api/transactions/*",
-                "/api/analytics/*");
+                "/api/analytics/*",
+                "/api/me",
+                "/api/me/*");
         registration.setOrder(10);
         return registration;
     }

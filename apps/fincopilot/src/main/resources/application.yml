@@ -45,6 +45,8 @@ fincopilot:
   history-turns: ${FINCOPILOT_HISTORY_TURNS:20}
   request-timeout: ${FINCOPILOT_REQUEST_TIMEOUT:90s}
   audit-file: ${FINCOPILOT_AUDIT_FILE:var/audit/fincopilot-events.log}
+  # Per-user daily request quota on the chat endpoints (0 disables).
+  daily-request-quota: ${FINCOPILOT_DAILY_REQUEST_QUOTA:200}
 
 # The governed agent's own knobs (agent-spring-boot-starter).
 agent:
