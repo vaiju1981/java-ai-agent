@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 440" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect x="0" y="0" width="900" height="440" rx="14" fill="#0f172a"/>
+
+  <!-- Header -->
+  <line x1="0" y1="52" x2="900" y2="52" stroke="#1e293b"/>
+  <text x="24" y="33" fill="#38bdf8" font-size="16" font-weight="700">FinCopilot</text>
+  <rect x="360" y="14" width="56" height="26" rx="8" fill="#0b3a52" stroke="#38bdf8"/>
+  <text x="388" y="31" fill="#e2e8f0" font-size="12" text-anchor="middle">Chat</text>
+  <text x="876" y="31" fill="#94a3b8" font-size="12" text-anchor="end">Sign out</text>
+
+  <!-- User bubble (right) -->
+  <rect x="350" y="74" width="526" height="40" rx="12" fill="#38bdf8"/>
+  <text x="858" y="99" fill="#0f172a" font-size="13.5" text-anchor="end">Set a savings goal of $5,000 for an emergency fund by Dec 31.</text>
+
+  <!-- Assistant bubble (left) -->
+  <rect x="24" y="128" width="430" height="44" rx="12" fill="#1e293b"/>
+  <text x="44" y="155" fill="#e2e8f0" font-size="13.5">Sure — I'll set that up. Please confirm below.</text>
+
+  <!-- Approval card (amber) -->
+  <rect x="24" y="196" width="600" height="120" rx="10" fill="#3b2f1a" stroke="#f59e0b"/>
+  <text x="44" y="226" fill="#fde68a" font-size="14">FinCopilot wants to run <tspan font-weight="700">set_savings_goal</tspan></text>
+  <text x="44" y="248" fill="#fde68a" font-size="12.5" opacity="0.9">with {"name":"emergency fund","targetAmount":5000,"targetDate":"2026-12-31"}.</text>
+  <text x="44" y="270" fill="#fde68a" font-size="13.5">Approve?</text>
+  <rect x="44" y="282" width="110" height="30" rx="8" fill="#38bdf8"/>
+  <text x="99" y="302" fill="#0f172a" font-size="13" font-weight="600" text-anchor="middle">Approve</text>
+  <rect x="166" y="282" width="100" height="30" rx="8" fill="none" stroke="#334155"/>
+  <text x="216" y="302" fill="#e2e8f0" font-size="13" text-anchor="middle">Reject</text>
+
+  <text x="24" y="352" fill="#64748b" font-size="11.5">The model proposed an effectful tool; the governed runtime paused the turn and is waiting on you.</text>
+  <text x="24" y="372" fill="#64748b" font-size="11.5">Nothing is written until you approve — enforced by the framework's ApprovalHandler, not the app.</text>
+
+  <!-- Composer -->
+  <rect x="24" y="392" width="760" height="36" rx="8" fill="#1e293b" stroke="#334155"/>
+  <text x="40" y="415" fill="#64748b" font-size="13">Message FinCopilot…</text>
+  <rect x="796" y="392" width="80" height="36" rx="8" fill="#38bdf8"/>
+  <text x="836" y="415" fill="#0f172a" font-size="13.5" font-weight="600" text-anchor="middle">Send</text>
+</svg>

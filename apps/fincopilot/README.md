@@ -3,10 +3,32 @@
 The v0.2.0 flagship application — a **grounded finance copilot** for individuals and small businesses,
 built on `java-ai-agent`. See [docs/V0.2.0-PLAN.md](../../docs/V0.2.0-PLAN.md) for the full plan.
 
-> **Status: M0 complete; M1 (Analyst) landing.** Login → streaming chat → `docker compose up`, plus
-> per-user transactions, a grounded Analyst, and a dashboard. The grounded Advisor (M2) follows.
+> **Status: a complete, usable product** (v0.2.x). Login → streaming chat → `docker compose up`: a grounded
+> Analyst + Advisor over your own data, savings goals with human-approved actions, conversation history,
+> dashboards, metrics/health, and an eval suite.
 
-## What works today (M0)
+## Screens
+
+| Grounded chat with inline analytics | Human-in-the-loop approval |
+|---|---|
+| ![FinCopilot chat rendering a tool's structured result inline as a chart](docs/img/chat.svg) | ![FinCopilot pausing for the user to approve an effectful action](docs/img/approval.svg) |
+
+The chat streams answers, renders a tool's **structured result inline** (a chart, not just text), and
+**pauses for your approval** before any action that changes your data.
+
+## How a turn works — powered by `java-ai-agent`
+
+![One FinCopilot chat turn flowing through the governed agent runtime](docs/img/agentic-flow.svg)
+
+Every box above is **framework code from this repo**, not the app — FinCopilot just wires beans and the
+`agent-spring-boot-starter` assembles a governed `ProductionAgentRuntime`. Guardrails screen input and
+output; the model's tool calls are authorized by a `ToolApprover`; **effectful** tools are gated behind
+human approval (`ApprovalHandler`); tools return both model text and a structured payload for the UI
+(`StructuredTool`); and the whole turn streams to the browser (`SseAgentObserver`) while persisting to the
+`ConversationStore` and `AuditSink`. The app's job is the finance domain; the framework makes the agent
+safe, observable, and governable.
+
+## What works today
 
 - **Consumer auth** — `POST /api/auth/{signup,login,logout}`: BCrypt-hashed accounts + opaque
   server-side sessions. The chat API requires a `Bearer` session token.
