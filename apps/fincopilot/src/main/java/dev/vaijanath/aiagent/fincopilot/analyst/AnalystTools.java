@@ -7,13 +7,17 @@ import dev.vaijanath.aiagent.fincopilot.analyst.Analytics.CategorySpend;
 import dev.vaijanath.aiagent.fincopilot.analyst.Analytics.MonthFlow;
 import dev.vaijanath.aiagent.fincopilot.analyst.Analytics.Summary;
 import dev.vaijanath.aiagent.tool.ContextualTool;
+import dev.vaijanath.aiagent.tool.StructuredTool;
+import dev.vaijanath.aiagent.tool.StructuredToolResult;
 import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolInvocation;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The Analyst's READ_ONLY tools over a user's transactions. Each is a {@link ContextualTool}: it reads
@@ -65,8 +69,8 @@ public final class AnalystTools {
         }
     }
 
-    /** Expense totals by category over an optional date range. */
-    public static final class SpendingByCategoryTool implements ContextualTool {
+    /** Expense totals by category over an optional date range; also emits a structured payload for the UI. */
+    public static final class SpendingByCategoryTool implements StructuredTool {
 
         private final Analytics analytics;
 
@@ -84,23 +88,28 @@ public final class AnalystTools {
         }
 
         @Override
-        public ToolResult invoke(ToolInvocation invocation) {
+        public StructuredToolResult invokeStructured(ToolInvocation invocation) {
             JsonNode args = parse(invocation.argumentsJson());
             List<CategorySpend> spend =
                     analytics.spendingByCategory(invocation.context().principal(), date(args, "from"), date(args, "to"));
             if (spend.isEmpty()) {
-                return ToolResult.ok("No expenses found for that period.");
+                return StructuredToolResult.of(ToolResult.ok("No expenses found for that period."));
             }
             StringBuilder sb = new StringBuilder("Spending by category:");
             for (CategorySpend c : spend) {
                 sb.append("\n- ").append(c.category()).append(": ").append(c.spent().toPlainString());
             }
-            return ToolResult.ok(sb.toString());
+            String dataJson = json(Map.of(
+                    "type",
+                    "spending_by_category",
+                    "items",
+                    spend.stream().map(c -> new Bar(c.category(), c.spent())).toList()));
+            return new StructuredToolResult(ToolResult.ok(sb.toString()), dataJson);
         }
     }
 
-    /** Income vs. expense per calendar month. */
-    public static final class MonthlyCashflowTool implements ContextualTool {
+    /** Income vs. expense per calendar month; also emits a structured payload for the UI. */
+    public static final class MonthlyCashflowTool implements StructuredTool {
 
         private final Analytics analytics;
 
@@ -118,10 +127,10 @@ public final class AnalystTools {
         }
 
         @Override
-        public ToolResult invoke(ToolInvocation invocation) {
+        public StructuredToolResult invokeStructured(ToolInvocation invocation) {
             List<MonthFlow> flow = analytics.monthlyCashflow(invocation.context().principal());
             if (flow.isEmpty()) {
-                return ToolResult.ok("No transactions recorded yet.");
+                return StructuredToolResult.of(ToolResult.ok("No transactions recorded yet."));
             }
             StringBuilder sb = new StringBuilder("Monthly cashflow (income / expense):");
             for (MonthFlow m : flow) {
@@ -132,7 +141,27 @@ public final class AnalystTools {
                         .append(" / ")
                         .append(m.expense().toPlainString());
             }
-            return ToolResult.ok(sb.toString());
+            String dataJson = json(Map.of(
+                    "type",
+                    "monthly_cashflow",
+                    "items",
+                    flow.stream().map(m -> new MonthBar(m.month().toString(), m.income(), m.expense())).toList()));
+            return new StructuredToolResult(ToolResult.ok(sb.toString()), dataJson);
+        }
+    }
+
+    /** A category/amount pair for the structured spending payload. */
+    private record Bar(String label, BigDecimal value) {}
+
+    /** A month's income/expense for the structured cashflow payload. */
+    private record MonthBar(String month, BigDecimal income, BigDecimal expense) {}
+
+    /** Serialize a structured payload to JSON, or null if it can't be serialized (no payload then). */
+    private static String json(Object payload) {
+        try {
+            return MAPPER.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            return null;
         }
     }
 

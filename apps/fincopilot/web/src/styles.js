@@ -13,7 +13,7 @@ export const S = {
   app: { display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f172a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid #1e293b' },
   brandSmall: { color: '#38bdf8', fontWeight: 700 },
-  nav: { display: 'flex', gap: 6 },
+  nav: { display: 'flex', gap: 6, flexWrap: 'wrap' },
   navBtn: { padding: '6px 14px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: 13 },
   navBtnActive: { padding: '6px 14px', borderRadius: 8, border: '1px solid #38bdf8', background: '#0b3a52', color: '#e2e8f0', cursor: 'pointer', fontSize: 13 },
   link: { background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 13 },
@@ -45,4 +45,7 @@ export const S = {
   hintSmall: { fontSize: 12, color: '#64748b' },
   sessionRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', cursor: 'pointer', textAlign: 'left', font: 'inherit' },
   approvalCard: { display: 'flex', flexDirection: 'column', gap: 10, margin: '0 16px 8px', padding: 14, borderRadius: 10, border: '1px solid #f59e0b', background: '#3b2f1a', color: '#fde68a' },
+  code: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', background: '#0f172a', padding: '1px 5px', borderRadius: 4, fontSize: 13 },
+  dataCard: { alignSelf: 'flex-start', maxWidth: '85%', padding: '10px 14px', borderRadius: 12, background: '#0b3a52', border: '1px solid #334155' },
+  dataTitle: { fontSize: 12, color: '#94a3b8', marginBottom: 8 },
 };

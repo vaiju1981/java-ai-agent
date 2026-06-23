@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   approveAction,
+  getGoals,
   getSessionMessages,
   getSessions,
   getToken,
@@ -13,7 +14,7 @@ import Dashboard from './Dashboard.jsx';
 import Data from './Data.jsx';
 import { S } from './styles.js';
 
-const VIEWS = ['chat', 'dashboard', 'data', 'history'];
+const VIEWS = ['chat', 'dashboard', 'data', 'goals', 'history'];
 const SESSION_KEY = 'fincopilot.session';
 
 // Conversation ids are tenant-scoped (history is filtered by user id, not by guessing the id), but use
@@ -75,6 +76,7 @@ export default function App() {
       {view === 'chat' && <Chat key={sessionId} sessionId={sessionId} onNewChat={startNewChat} />}
       {view === 'dashboard' && <Dashboard />}
       {view === 'data' && <Data />}
+      {view === 'goals' && <Goals />}
       {view === 'history' && <History onOpen={openSession} />}
     </div>
   );
@@ -152,6 +154,12 @@ function Chat({ sessionId, onNewChat }) {
       await streamTurn(sessionId, text, (event, data) => {
         if (event === 'tool') {
           tools.push(data.name);
+        } else if (event === 'tool_data') {
+          try {
+            setMessages((m) => [...m, { role: 'tool_data', payload: JSON.parse(data.data) }]);
+          } catch {
+            // ignore an unparseable payload
+          }
         } else if (event === 'approval_required') {
           setPending({ approvalId: data.approvalId, name: data.name, args: data.arguments });
         } else if (event === 'final') {
@@ -191,12 +199,16 @@ function Chat({ sessionId, onNewChat }) {
       </div>
       <main style={S.messages}>
         {messages.length === 0 && <p style={S.hint}>Ask about your finances — e.g. “How much did I spend on groceries?”</p>}
-        {messages.map((m, i) => (
-          <div key={i} style={m.role === 'user' ? S.user : S.assistant}>
-            {m.tools && m.tools.length > 0 && <div style={S.tools}>used: {m.tools.join(', ')}</div>}
-            <div style={m.error ? S.errText : undefined}>{m.text}</div>
-          </div>
-        ))}
+        {messages.map((m, i) =>
+          m.role === 'tool_data' ? (
+            <ToolDataCard key={i} payload={m.payload} />
+          ) : (
+            <div key={i} style={m.role === 'user' ? S.user : S.assistant}>
+              {m.tools && m.tools.length > 0 && <div style={S.tools}>used: {m.tools.join(', ')}</div>}
+              <div style={m.error ? S.errText : undefined}>{formatInline(m.text)}</div>
+            </div>
+          ),
+        )}
         {busy && !pending && <div style={S.assistant}><em>thinking…</em></div>}
       </main>
       {pending && (
@@ -249,4 +261,108 @@ function History({ onOpen }) {
         ))}
     </main>
   );
+}
+
+function Goals() {
+  const [goals, setGoals] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    getGoals()
+      .then(setGoals)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  return (
+    <main style={S.content}>
+      <h2 style={S.sectionTitle}>Savings goals</h2>
+      {error && <div style={S.error}>{error}</div>}
+      {!error && goals === null && <p style={S.hint}>Loading…</p>}
+      {!error && goals !== null && goals.length === 0 && (
+        <p style={S.hint}>No goals yet. Ask FinCopilot in chat to set one — you’ll be asked to approve it.</p>
+      )}
+      {goals &&
+        goals.map((g) => (
+          <div key={g.id} style={S.statCard}>
+            <div style={S.statLabel}>
+              {g.name}
+              {g.targetDate ? ` · by ${g.targetDate}` : ''}
+            </div>
+            <div style={S.statValue}>{fmt(g.targetAmount)}</div>
+          </div>
+        ))}
+    </main>
+  );
+}
+
+// Minimal, XSS-safe inline formatting: **bold** and `code`. Newlines render via white-space:pre-wrap.
+function formatInline(text) {
+  const parts = String(text == null ? '' : text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={i} style={S.code}>
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
+function fmt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(value);
+}
+
+// Renders a StructuredTool's payload (tool_data SSE event) inline in the chat — see FW-3.
+function ToolDataCard({ payload }) {
+  if (!payload || !Array.isArray(payload.items) || payload.items.length === 0) {
+    return null;
+  }
+  if (payload.type === 'spending_by_category') {
+    const max = Math.max(...payload.items.map((it) => Math.abs(Number(it.value) || 0)), 1);
+    return (
+      <div style={S.dataCard}>
+        <div style={S.dataTitle}>Spending by category</div>
+        {payload.items.map((it, i) => (
+          <div key={i} style={S.chartRow}>
+            <span style={S.barLabel}>{it.label}</span>
+            <span
+              style={{ ...S.bar, width: `${(Math.abs(Number(it.value) || 0) / max) * 60 + 2}%`, background: '#38bdf8' }} />
+            <span style={S.barValue}>{fmt(it.value)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (payload.type === 'monthly_cashflow') {
+    return (
+      <div style={S.dataCard}>
+        <div style={S.dataTitle}>Monthly cashflow</div>
+        <table style={S.table}>
+          <thead>
+            <tr>
+              <th style={S.th}>Month</th>
+              <th style={S.th}>Income</th>
+              <th style={S.th}>Expense</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payload.items.map((m, i) => (
+              <tr key={i}>
+                <td style={S.td}>{m.month}</td>
+                <td style={S.td}>{fmt(m.income)}</td>
+                <td style={S.td}>{fmt(m.expense)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return null;
 }
