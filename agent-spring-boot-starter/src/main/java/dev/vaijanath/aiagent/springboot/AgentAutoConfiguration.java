@@ -9,18 +9,22 @@ import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.memory.InMemoryConversationStore;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.observe.AgentObserver;
+import dev.vaijanath.aiagent.springboot.metrics.MicrometerAgentObserver;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolArgumentValidator;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 /**
  * Autoconfigures a governed {@link Agent} once the application provides a {@link ModelPort} bean (from
@@ -99,6 +103,24 @@ public class AgentAutoConfiguration {
     @ConditionalOnMissingBean
     public ExecutorService agentStreamExecutor() {
         return Executors.newVirtualThreadPerTaskExecutor();
+    }
+
+    /**
+     * Metrics: when Micrometer is on the classpath and a {@link MeterRegistry} bean exists (e.g. via
+     * {@code spring-boot-starter-actuator}), publish agent meters on {@code /actuator/prometheus}. As an
+     * {@link AgentObserver} bean it is discovered and wired into the agent automatically; an application
+     * overrides it by declaring its own {@link MicrometerAgentObserver}.
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(MeterRegistry.class)
+    static class AgentMetricsConfiguration {
+
+        @Bean
+        @ConditionalOnBean(MeterRegistry.class)
+        @ConditionalOnMissingBean
+        MicrometerAgentObserver micrometerAgentObserver(MeterRegistry registry) {
+            return new MicrometerAgentObserver(registry);
+        }
     }
 
     private static ProductionAgentRuntime.Builder newBuilder(

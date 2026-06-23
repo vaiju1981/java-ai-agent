@@ -57,3 +57,14 @@ Ollama runs on the host by default (`OLLAMA_BASE_URL=http://host.docker.internal
 | `DATABASE_URL` / `DATABASE_USER` / `DATABASE_PASSWORD` | local-dev defaults | Postgres connection |
 
 Build just this module: `./gradlew :apps:fincopilot:build`.
+
+## Operations
+
+Deploying and running FinCopilot — full config reference, health/readiness, metrics, structured logging,
+load testing, backup/restore, and troubleshooting — is documented in the
+[Operations Runbook](docs/OPERATIONS.md). For metrics dashboards, bring up the observability overlay:
+
+```bash
+docker compose -f compose.yml -f compose.observability.yml up --build
+# Grafana → http://localhost:3001 (dashboard auto-provisioned), Prometheus → http://localhost:9090
+```

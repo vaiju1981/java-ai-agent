@@ -8,6 +8,7 @@ import dev.vaijanath.aiagent.guardrail.PiiScrubGuardrail;
 import dev.vaijanath.aiagent.langchain4j.OllamaModelPorts;
 import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.model.ModelPort;
+import dev.vaijanath.aiagent.springboot.health.ModelEndpointHealthIndicator;
 import dev.vaijanath.aiagent.store.jdbc.JdbcConversationStore;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -58,5 +59,15 @@ class AgentConfiguration {
     @Bean
     Guardrail piiScrubGuardrail() {
         return new PiiScrubGuardrail();
+    }
+
+    /**
+     * Readiness reflects Ollama reachability (contributes to the {@code readiness} group as "ollama"): if
+     * the model backend is down the instance reports not-ready so a load balancer drains it instead of
+     * serving turns that would fail.
+     */
+    @Bean
+    ModelEndpointHealthIndicator ollamaHealthIndicator(FinCopilotProperties properties) {
+        return new ModelEndpointHealthIndicator(properties.ollamaBaseUrl());
     }
 }

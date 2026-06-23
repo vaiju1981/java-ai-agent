@@ -26,7 +26,9 @@ server:
 
 logging:
   pattern:
-    level: "%5p [trace=%X{traceId:-}]"
+    # traceId/sessionId/principal/tenant are bound to the MDC per turn (see AgentTurns). For JSON logs
+    # set LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs (or logstash); the MDC fields are then emitted as fields.
+    level: "%5p [trace=%X{traceId:-} session=%X{sessionId:-} user=%X{principal:-}]"
 
 management:
   endpoints:
@@ -37,6 +39,17 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    group:
+      # Readiness drains an instance from the load balancer when the DB or Ollama backend is unreachable.
+      readiness:
+        include: readinessState,db,ollama
+  metrics:
+    distribution:
+      # Publish a latency histogram for HTTP requests so dashboards can compute p95/p99 (scoped to this
+      # one meter to keep cardinality in check).
+      percentiles-histogram:
+        http.server.requests: true
 
 fincopilot:
   # LLM substrate: Ollama, one model for all roles (see the v0.2.0 plan).
