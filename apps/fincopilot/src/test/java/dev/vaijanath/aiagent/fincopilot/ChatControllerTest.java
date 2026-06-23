@@ -39,7 +39,7 @@ class ChatControllerTest {
             return AgentResponse.completed("streamed answer");
         };
         FinCopilotProperties properties =
-                new FinCopilotProperties(null, null, 0, Duration.ofSeconds(90), null, 0);
+                new FinCopilotProperties(null, null, 0, Duration.ofSeconds(90), null, 0, null);
         // Run the streaming turn synchronously so the SSE assertions are deterministic.
         mvc = standaloneSetup(new ChatController(agent, streamingFactory, Runnable::run, properties)).build();
     }

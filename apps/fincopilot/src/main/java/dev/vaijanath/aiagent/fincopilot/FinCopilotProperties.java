@@ -17,7 +17,8 @@ public record FinCopilotProperties(
         int historyTurns,
         Duration requestTimeout,
         String auditFile,
-        int dailyRequestQuota) {
+        int dailyRequestQuota,
+        String embedModel) {
 
     public FinCopilotProperties {
         ollamaBaseUrl = blankTo(ollamaBaseUrl, "http://localhost:11434");
@@ -26,6 +27,8 @@ public record FinCopilotProperties(
         requestTimeout = positiveOr(requestTimeout, Duration.ofSeconds(90));
         auditFile = blankTo(auditFile, "var/audit/fincopilot-events.log");
         dailyRequestQuota = Math.max(0, dailyRequestQuota); // 0 disables the per-user quota
+        // Blank -> the offline hashing embedder; otherwise an Ollama embedding model (semantic retrieval).
+        embedModel = embedModel == null ? "" : embedModel.strip();
     }
 
     private static String blankTo(String value, String fallback) {
