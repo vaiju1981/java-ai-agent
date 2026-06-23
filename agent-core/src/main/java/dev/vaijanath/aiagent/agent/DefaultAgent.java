@@ -17,6 +17,8 @@ import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.ContextualTool;
+import dev.vaijanath.aiagent.tool.StructuredTool;
+import dev.vaijanath.aiagent.tool.StructuredToolResult;
 import dev.vaijanath.aiagent.tool.Tool;
 import dev.vaijanath.aiagent.tool.ToolApprover;
 import dev.vaijanath.aiagent.tool.ToolApprovers;
@@ -184,13 +186,18 @@ public final class DefaultAgent implements Agent {
                     notify(o -> o.onToolCall(call));
                     // A configured executor (e.g. ReplayToolExecutor) overrides real execution;
                     // otherwise authorize and invoke the real tool.
-                    ToolResult raw = (toolExecutor != null)
-                            ? toolExecutor.execute(call.name(), call.argumentsJson())
+                    StructuredToolResult raw = (toolExecutor != null)
+                            ? StructuredToolResult.of(toolExecutor.execute(call.name(), call.argumentsJson()))
                             : invokeWithPolicy(call, activeByName, ctx);
                     // Cap once so observers/recorders and the model all see the same bounded result.
                     ToolResult result =
-                            new ToolResult(capped(raw.content(), maxToolResultChars), raw.error());
+                            new ToolResult(capped(raw.result().content(), maxToolResultChars), raw.result().error());
                     notify(o -> o.onToolResult(call.name(), result));
+                    // A structured payload (if any) goes to observers/UIs only — never into the model's context.
+                    if (raw.hasData()) {
+                        String dataJson = raw.dataJson();
+                        notify(o -> o.onToolData(call.name(), dataJson));
+                    }
                     String forModel = frameToolResults
                             ? frame(call.name(), result.content())
                             : result.content();
@@ -268,12 +275,12 @@ public final class DefaultAgent implements Agent {
      * turn cannot be invoked — even if the model names it (hallucination or prompt injection) — and a
      * denied call becomes a result the model can react to rather than an execution.
      */
-    private ToolResult invokeWithPolicy(ToolCall call, Map<String, Tool> available, RequestContext ctx) {
+    private StructuredToolResult invokeWithPolicy(ToolCall call, Map<String, Tool> available, RequestContext ctx) {
         Tool tool = available.get(call.name());
         if (tool == null) {
             log.info("tool '{}' not available this turn", call.name());
             audit("tool.denied", ctx, "tool=" + call.name() + " reason=not-available");
-            return ToolResult.error("tool '" + call.name() + "' is not available");
+            return StructuredToolResult.of(ToolResult.error("tool '" + call.name() + "' is not available"));
         }
         ToolCallContext callContext = new ToolCallContext(
                 tool.spec(), call.argumentsJson(), ctx.principal(), ctx.tenant(),
@@ -282,26 +289,28 @@ public final class DefaultAgent implements Agent {
         if (!decision.allowed()) {
             log.info("tool '{}' denied: {}", call.name(), decision.reason());
             audit("tool.denied", ctx, "tool=" + call.name() + " reason=" + decision.reason());
-            return ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason());
+            return StructuredToolResult.of(
+                    ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason()));
         }
         Optional<String> invalid = toolArgumentValidator.validate(tool.spec(), call.argumentsJson());
         if (invalid.isPresent()) {
             log.info("tool '{}' arguments invalid: {}", call.name(), invalid.get());
             audit("tool.invalid", ctx, "tool=" + call.name() + " reason=" + invalid.get());
-            return ToolResult.error("tool '" + call.name() + "' arguments invalid: " + invalid.get());
+            return StructuredToolResult.of(
+                    ToolResult.error("tool '" + call.name() + "' arguments invalid: " + invalid.get()));
         }
         audit("tool.allowed", ctx, "tool=" + call.name() + " effect=" + tool.spec().effect());
-        ToolResult result = safeInvoke(tool, call, callContext);
-        audit("tool.result", ctx, "tool=" + call.name() + " error=" + result.error());
+        StructuredToolResult result = safeInvoke(tool, call, callContext);
+        audit("tool.result", ctx, "tool=" + call.name() + " error=" + result.result().error());
         return result;
     }
 
-    private ToolResult safeInvoke(Tool tool, ToolCall call, ToolCallContext context) {
+    private StructuredToolResult safeInvoke(Tool tool, ToolCall call, ToolCallContext context) {
         if (toolTimeout == null) {
             return invokeDirect(tool, call, context);
         }
         // Bound the call on a virtual thread so a hung tool cannot stall the turn forever.
-        FutureTask<ToolResult> task = new FutureTask<>(() -> invokeDirect(tool, call, context));
+        FutureTask<StructuredToolResult> task = new FutureTask<>(() -> invokeDirect(tool, call, context));
         Thread worker = Thread.ofVirtual().name("tool-" + tool.name()).start(task);
         try {
             return task.get(toolTimeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -309,25 +318,30 @@ public final class DefaultAgent implements Agent {
             task.cancel(true);
             worker.interrupt();
             log.warn("tool '{}' timed out after {}", tool.name(), toolTimeout);
-            return ToolResult.error("tool '" + tool.name() + "' timed out after " + toolTimeout);
+            return StructuredToolResult.of(
+                    ToolResult.error("tool '" + tool.name() + "' timed out after " + toolTimeout));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return ToolResult.error("tool '" + tool.name() + "' was interrupted");
+            return StructuredToolResult.of(ToolResult.error("tool '" + tool.name() + "' was interrupted"));
         } catch (ExecutionException e) {
             log.warn("tool '{}' threw", tool.name(), e.getCause());
-            return ToolResult.error("tool '" + tool.name() + "' failed");
+            return StructuredToolResult.of(ToolResult.error("tool '" + tool.name() + "' failed"));
         }
     }
 
-    private ToolResult invokeDirect(Tool tool, ToolCall call, ToolCallContext context) {
+    private StructuredToolResult invokeDirect(Tool tool, ToolCall call, ToolCallContext context) {
         try {
-            return tool instanceof ContextualTool contextual
+            if (tool instanceof StructuredTool structured) {
+                return structured.invokeStructured(new ToolInvocation(call, context));
+            }
+            ToolResult result = tool instanceof ContextualTool contextual
                     ? contextual.invoke(new ToolInvocation(call, context))
                     : tool.invoke(call.argumentsJson());
+            return StructuredToolResult.of(result);
         } catch (RuntimeException e) {
             // The exception detail goes to the log, never into the model's context.
             log.warn("tool '{}' threw", tool.name(), e);
-            return ToolResult.error("tool '" + tool.name() + "' failed");
+            return StructuredToolResult.of(ToolResult.error("tool '" + tool.name() + "' failed"));
         }
     }
 

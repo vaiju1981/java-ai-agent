@@ -10,8 +10,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * An {@link AgentObserver} that forwards a turn's tool lifecycle to one SSE client — a {@code tool}
- * event per tool call and a {@code tool_result} event (name + ok flag only) per result, never raw
- * model content. Shared by agent web apps so the streaming contract is defined once.
+ * event per tool call, a {@code tool_result} event (name + ok flag only) per result, and a
+ * {@code tool_data} event carrying a {@link dev.vaijanath.aiagent.tool.StructuredTool}'s structured JSON
+ * payload (for the UI to render) — never raw model content. Shared by agent web apps so the streaming
+ * contract is defined once.
  */
 public final class SseAgentObserver implements AgentObserver {
 
@@ -29,6 +31,12 @@ public final class SseAgentObserver implements AgentObserver {
     @Override
     public void onToolResult(String toolName, ToolResult result) {
         send("tool_result", Map.of("name", toolName, "ok", !result.error()));
+    }
+
+    @Override
+    public void onToolData(String toolName, String dataJson) {
+        // 'data' is raw JSON carried as a string; the client parses it. Keeps the starter Jackson-free.
+        send("tool_data", Map.of("name", toolName, "data", dataJson));
     }
 
     private void send(String event, Object data) {
