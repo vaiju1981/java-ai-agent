@@ -6,7 +6,6 @@ import dev.vaijanath.aiagent.guardrail.CrisisGuardrail;
 import dev.vaijanath.aiagent.guardrail.Guardrail;
 import dev.vaijanath.aiagent.guardrail.PiiScrubGuardrail;
 import dev.vaijanath.aiagent.langchain4j.OllamaModelPorts;
-import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.springboot.health.ModelEndpointHealthIndicator;
 import dev.vaijanath.aiagent.store.jdbc.JdbcConversationStore;
@@ -21,7 +20,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * FinCopilot's application beans. The governed agent itself — plus the streaming-agent factory and the
  * stream executor — is assembled by the agent-spring-boot-starter from the {@link ModelPort},
- * {@link ConversationStore}, audit sink, and {@link Guardrail} beans declared here; the system prompt,
+ * {@code ConversationStore}, audit sink, and {@link Guardrail} beans declared here; the system prompt,
  * timeouts, and step budget come from {@code agent.*} properties.
  *
  * <p>M0 declares no domain tools (the "empty" walking skeleton); the Analyst tools and the
@@ -37,8 +36,10 @@ class AgentConfiguration {
     }
 
     @Bean
-    ConversationStore conversationStore(DataSource dataSource, FinCopilotProperties properties) {
-        // Flyway owns schema (V1 ships in agent-store-jdbc); this constructor performs no DDL.
+    JdbcConversationStore conversationStore(DataSource dataSource, FinCopilotProperties properties) {
+        // Flyway owns schema (V1 ships in agent-store-jdbc); this constructor performs no DDL. The concrete
+        // type is exposed so it satisfies both ConversationStore (serve turns) and ConversationHistory
+        // (browse past conversations) injection points.
         return new JdbcConversationStore(dataSource::getConnection, properties.historyTurns());
     }
 

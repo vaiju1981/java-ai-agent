@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.vaijanath.aiagent.model.Message;
+import java.util.List;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 
@@ -45,5 +46,44 @@ class InMemoryConversationStoreTest {
 
         int size = store.withMemory("t", "s", m -> m.history().size());
         assertEquals(200, size, "concurrent same-session writes must serialize on one memory, not split");
+    }
+
+    @Test
+    void listsOnlyTheTenantsSessionsMostRecentFirst() {
+        InMemoryConversationStore store = new InMemoryConversationStore();
+        store.withMemory("t", "a", m -> {
+            m.add(Message.user("hi"));
+            return null;
+        });
+        store.withMemory("t", "b", m -> {
+            m.add(Message.user("yo"));
+            m.add(Message.assistant("hey"));
+            return null;
+        });
+        store.withMemory("other", "c", m -> {
+            m.add(Message.user("nope"));
+            return null;
+        });
+
+        List<ConversationHistory.SessionSummary> sessions = store.listSessions("t");
+        assertEquals(2, sessions.size(), "only this tenant's sessions are listed");
+        assertEquals("b", sessions.get(0).sessionId(), "most-recently-active session is first");
+        assertEquals(2, sessions.get(0).messageCount());
+    }
+
+    @Test
+    void readsSessionMessagesAndIsolatesByTenant() {
+        InMemoryConversationStore store = new InMemoryConversationStore();
+        store.withMemory("t", "s", m -> {
+            m.add(Message.user("hi"));
+            m.add(Message.assistant("hello"));
+            return null;
+        });
+
+        List<Message> messages = store.messages("t", "s");
+        assertEquals(2, messages.size());
+        assertEquals("hi", messages.get(0).content());
+        assertTrue(store.messages("t", "missing").isEmpty(), "an unknown session reads empty");
+        assertTrue(store.messages("other", "s").isEmpty(), "another tenant cannot read the session");
     }
 }

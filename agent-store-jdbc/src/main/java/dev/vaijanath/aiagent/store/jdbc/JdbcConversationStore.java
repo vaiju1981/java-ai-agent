@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.store.jdbc;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.vaijanath.aiagent.memory.ConversationHistory;
 import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.memory.Memory;
 import dev.vaijanath.aiagent.model.Message;
@@ -13,6 +14,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -35,7 +37,7 @@ import java.util.function.Function;
  * replayable turns, {@link #withConflictRetries} re-runs the turn against fresh history a bounded
  * number of times before surfacing the conflict.
  */
-public final class JdbcConversationStore implements ConversationStore {
+public final class JdbcConversationStore implements ConversationStore, ConversationHistory {
 
     private static final int STRIPES = 64;
     private static final long DEFAULT_CONFLICT_BACKOFF_MILLIS = 20;
@@ -194,6 +196,51 @@ public final class JdbcConversationStore implements ConversationStore {
         return new Message(
                 role, rs.getString("content"), toolCalls,
                 rs.getString("tool_call_id"), rs.getString("tool_name"));
+    }
+
+    @Override
+    public List<SessionSummary> listSessions(String tenant) {
+        // Constant SQL with a bound parameter — the whole persisted history, not the replay window.
+        String sql = "SELECT session_id, COUNT(*) AS message_count, MAX(created_at) AS last_activity "
+                + "FROM agent_messages WHERE tenant = ? GROUP BY session_id ORDER BY last_activity DESC";
+        List<SessionSummary> sessions = new ArrayList<>();
+        try (Connection c = connections.get();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, tenant);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    sessions.add(new SessionSummary(
+                            rs.getString("session_id"),
+                            rs.getLong("message_count"),
+                            Instant.ofEpochMilli(rs.getLong("last_activity"))));
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("failed to list sessions for tenant " + tenant, e);
+        }
+        return sessions;
+    }
+
+    @Override
+    public List<Message> messages(String tenant, String sessionId) {
+        // The full ordered history (every turn), independent of the replay window used to serve turns.
+        String sql = "SELECT seq, role, content, tool_call_id, tool_name, tool_calls "
+                + "FROM agent_messages WHERE tenant = ? AND session_id = ? ORDER BY seq";
+        List<Message> messages = new ArrayList<>();
+        try (Connection c = connections.get();
+                PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, tenant);
+            ps.setString(2, sessionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    messages.add(toMessage(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(
+                    "failed to read messages for " + tenant + "/" + sessionId, e);
+        }
+        return messages;
     }
 
     private void createSchema() {

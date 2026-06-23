@@ -15,12 +15,15 @@ built on `java-ai-agent`. See [docs/V0.2.0-PLAN.md](../../docs/V0.2.0-PLAN.md) f
   - `POST /api/chat/turn` — synchronous; returns the guarded `AgentResponse`.
   - `POST /api/chat/stream` — Server-Sent Events: `tool` / `tool_result` events, then a single guarded
     `final` event. (Raw model tokens are never streamed — output guardrails run on the final answer.)
+  - `GET /api/chat/sessions` · `GET /api/chat/sessions/{id}` — browse your past conversations and replay
+    one (read through the platform's `ConversationHistory` seam, scoped to your user id).
 - **Ledger + Analyst** (M1): per-user accounts & transactions (manual entry + CSV import,
   `/api/accounts` · `/api/transactions`); the Analyst answers grounded finance questions over your own
   data via READ_ONLY tools (spending-by-category, monthly cashflow, summary); `/api/analytics/*` powers
   the dashboard charts.
-- A **React SPA** (`web/`) — sign-up/login, a streaming **Chat**, a **Dashboard** (spending-by-category
-  and monthly-cashflow charts + summary), and a **Data** view (manual entry + CSV import) — served by nginx.
+- A **React SPA** (`web/`) — sign-up/login, a streaming **Chat** (sessions persist; "New chat" starts a
+  fresh one), a **Dashboard** (spending-by-category and monthly-cashflow charts + summary), a **Data** view
+  (manual entry + CSV import), and a **History** view to revisit past conversations — served by nginx.
 
 ## Run it
 
