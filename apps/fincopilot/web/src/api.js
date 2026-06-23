@@ -46,6 +46,40 @@ export function logout() {
   }).catch(() => {});
 }
 
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 401) {
+    setToken(null);
+    throw new Error('Your session expired — please sign in again.');
+  }
+  if (!res.ok) {
+    let detail = '';
+    try {
+      detail = (await res.json()).message || '';
+    } catch {
+      // no JSON body
+    }
+    throw new Error(detail || `Request failed (${res.status}).`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// Analytics (dashboard).
+export const getSummary = () => api('GET', '/api/analytics/summary');
+export const getSpendingByCategory = () => api('GET', '/api/analytics/spending-by-category');
+export const getMonthlyCashflow = () => api('GET', '/api/analytics/monthly-cashflow');
+
+// Ledger (data).
+export const listAccounts = () => api('GET', '/api/accounts');
+export const createAccount = (name, type) => api('POST', '/api/accounts', { name, type });
+export const addTransaction = (txn) => api('POST', '/api/transactions', txn);
+export const importCsv = (accountId, csv) => api('POST', '/api/transactions/import', { accountId, csv });
+export const listTransactions = () => api('GET', '/api/transactions');
+
 /**
  * Streams one chat turn, invoking onEvent(name, data) for each SSE event
  * ('tool', 'tool_result', 'final', 'error'). Throws on auth/transport failure.

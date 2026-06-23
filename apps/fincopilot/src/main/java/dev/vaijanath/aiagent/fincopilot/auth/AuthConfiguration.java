@@ -41,7 +41,12 @@ class AuthConfiguration {
                 new FilterRegistrationBean<>(new SessionAuthenticationFilter(authService));
         // Guard the authenticated resources (exact + wildcard); /api/auth/* stays public.
         registration.addUrlPatterns(
-                "/api/chat/*", "/api/accounts", "/api/accounts/*", "/api/transactions", "/api/transactions/*");
+                "/api/chat/*",
+                "/api/accounts",
+                "/api/accounts/*",
+                "/api/transactions",
+                "/api/transactions/*",
+                "/api/analytics/*");
         registration.setOrder(10);
         return registration;
     }
