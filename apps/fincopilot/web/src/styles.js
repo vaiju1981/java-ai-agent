@@ -41,4 +41,7 @@ export const S = {
   th: { textAlign: 'left', color: '#94a3b8', borderBottom: '1px solid #334155', padding: '6px 8px' },
   td: { borderBottom: '1px solid #1e293b', padding: '6px 8px' },
   msg: { color: '#34d399', fontSize: 13, marginBottom: 10 },
+  chatBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', borderBottom: '1px solid #1e293b' },
+  hintSmall: { fontSize: 12, color: '#64748b' },
+  sessionRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: '1px solid #334155', background: '#1e293b', color: '#e2e8f0', cursor: 'pointer', textAlign: 'left', font: 'inherit' },
 };
