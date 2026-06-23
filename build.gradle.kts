@@ -13,6 +13,11 @@ plugins {
     id("com.diffplug.spotless") version "8.7.0"
 }
 
+// japicmp CLI version — run via JavaExec for the per-module API-compatibility guardrail (see subprojects).
+// Defined here (not the version catalog) because the type-safe `libs` accessor isn't available inside the
+// root `subprojects {}` block.
+val japicmpVersion = "0.26.1"
+
 allprojects {
     group = "io.github.vaiju1981"
     // Releases set RELEASE_VERSION (derived from the git tag) in CI; everything else is a snapshot.
@@ -131,6 +136,50 @@ subprojects {
         }
         tasks.named("check") {
             dependsOn(tasks.withType<JacocoCoverageVerification>())
+        }
+
+        // API-compatibility guardrail: diff each library module's public API against its last published
+        // release on Maven Central and fail on binary-incompatible changes to non-@Internal API. This is
+        // the enforcement behind the "deprecate, don't remove" policy (docs/API-STABILITY.md). Override the
+        // baseline with -PjapicmpBaseline=<version>; bump it after a release once it lands on Central.
+        val japicmpBaselineVersion =
+            (project.findProperty("japicmpBaseline") as String?)?.takeIf(String::isNotBlank) ?: "0.1.2"
+        val japicmpTool = configurations.create("japicmpTool") { isCanBeConsumed = false }
+        val japicmpBaseline = configurations.create("japicmpBaseline") {
+            isCanBeConsumed = false
+            // Only the baseline jar is diffed; its transitive deps are resolved leniently at compare time.
+            isTransitive = false
+        }
+        dependencies {
+            add("japicmpTool", "com.github.siom79.japicmp:japicmp:$japicmpVersion:jar-with-dependencies")
+            add("japicmpBaseline", "${project.group}:${project.name}:$japicmpBaselineVersion")
+        }
+        val japicmpReport = layout.buildDirectory.file("reports/japicmp/${project.name}.html")
+        val japicmpCheck = tasks.register<JavaExec>("japicmpCheck") {
+            description = "Checks public API binary compatibility against $japicmpBaselineVersion (Maven Central)."
+            group = "verification"
+            val jarTask = tasks.named("jar")
+            dependsOn(jarTask)
+            inputs.files(japicmpBaseline).withPropertyName("baseline")
+            outputs.file(japicmpReport)
+            classpath = japicmpTool
+            mainClass.set("japicmp.JApiCmp")
+            doFirst {
+                japicmpReport.get().asFile.parentFile.mkdirs()
+                args = listOf(
+                    "--old", japicmpBaseline.singleFile.absolutePath,
+                    "--new", jarTask.get().outputs.files.singleFile.absolutePath,
+                    "-a", "public",
+                    "--only-modified",
+                    "--ignore-missing-classes",
+                    "--error-on-binary-incompatibility",
+                    "--exclude", "@dev.vaijanath.aiagent.annotation.Internal",
+                    "--html-file", japicmpReport.get().asFile.absolutePath,
+                )
+            }
+        }
+        tasks.named("check") {
+            dependsOn(japicmpCheck)
         }
 
         apply(plugin = "maven-publish")
