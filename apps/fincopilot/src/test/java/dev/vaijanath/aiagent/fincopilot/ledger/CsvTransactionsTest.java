@@ -49,4 +49,10 @@ class CsvTransactionsTest {
         assertEquals(0, CsvTransactions.parse("").size());
         assertEquals(0, CsvTransactions.parse(null).size());
     }
+
+    @Test
+    void rejectsTooManyRows() {
+        String csv = "date,amount\n" + "2026-01-01,-1.00\n".repeat(10_001);
+        assertThrows(IllegalArgumentException.class, () -> CsvTransactions.parse(csv));
+    }
 }

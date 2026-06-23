@@ -2,6 +2,7 @@ package dev.vaijanath.aiagent.fincopilot.auth;
 
 import java.time.Duration;
 import javax.sql.DataSource;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -50,6 +51,16 @@ class AuthConfiguration {
                 "/api/me",
                 "/api/me/*");
         registration.setOrder(10);
+        return registration;
+    }
+
+    @Bean
+    FilterRegistrationBean<AuthThrottleFilter> authThrottleFilter(
+            @Value("${fincopilot.auth-attempts-per-minute:20}") int attemptsPerMinute) {
+        FilterRegistrationBean<AuthThrottleFilter> registration =
+                new FilterRegistrationBean<>(new AuthThrottleFilter(attemptsPerMinute));
+        registration.addUrlPatterns("/api/auth/*");
+        registration.setOrder(5); // before the session filter; throttles login/signup brute-forcing
         return registration;
     }
 }

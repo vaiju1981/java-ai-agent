@@ -27,6 +27,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api")
 class LedgerController {
 
+    private static final int MAX_CSV_CHARS = 1_000_000;
+
     private final AccountStore accounts;
     private final TransactionStore transactions;
 
@@ -80,6 +82,9 @@ class LedgerController {
             @RequestAttribute(SessionAuthenticationFilter.PRINCIPAL_ATTRIBUTE) String principal) {
         if (body == null || body.accountId() == null || body.csv() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "accountId and csv are required");
+        }
+        if (body.csv().length() > MAX_CSV_CHARS) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "csv exceeds " + MAX_CSV_CHARS + " characters");
         }
         requireOwnedAccount(principal, body.accountId());
         List<CsvTransactions.Row> rows;
