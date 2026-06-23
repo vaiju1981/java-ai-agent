@@ -5,8 +5,8 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Read-side seam for browsing stored conversations: list a tenant's sessions and read one session's
- * messages. It is kept separate from {@link ConversationStore} (the write/serve seam) so a store opts
+ * Seam for browsing and managing stored conversations: list a tenant's sessions, read one session's
+ * messages, and delete a session. It is kept separate from {@link ConversationStore} (the serve seam) so a store opts
  * into history browsing by implementing this <em>additional</em> interface — the core contract is
  * unchanged, and a store that cannot enumerate (for example an opaque remote one) simply doesn't
  * implement it. Both {@link InMemoryConversationStore} and the JDBC store do.
@@ -21,6 +21,9 @@ public interface ConversationHistory {
 
     /** The full, ordered message history of one session — empty if it has none. */
     List<Message> messages(String tenant, String sessionId);
+
+    /** Permanently deletes one session's stored history for a tenant; a no-op if it doesn't exist. */
+    void delete(String tenant, String sessionId);
 
     /** A session at a glance: its id, how many messages it holds, and when it was last active. */
     record SessionSummary(String sessionId, long messageCount, Instant lastActivity) {}

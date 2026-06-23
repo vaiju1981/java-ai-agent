@@ -297,6 +297,26 @@ class JdbcConversationStoreTest {
         assertTrue(store.messages("other", "s1").isEmpty(), "another tenant cannot read the session");
     }
 
+    @Test
+    void deleteRemovesASessionsHistory(@TempDir Path dir) {
+        JdbcConversationStore store = JdbcConversationStore.fromJdbcUrl(url(dir));
+        store.withMemory("acme", "s1", m -> {
+            m.add(Message.user("hi"));
+            m.add(Message.assistant("hello"));
+            return null;
+        });
+        store.withMemory("acme", "s2", m -> {
+            m.add(Message.user("keep me"));
+            return null;
+        });
+
+        store.delete("acme", "s1");
+
+        assertTrue(store.messages("acme", "s1").isEmpty(), "the deleted session has no messages");
+        assertEquals(1, store.listSessions("acme").size(), "only the deleted session is gone");
+        assertEquals(List.of("keep me"), store.messages("acme", "s2").stream().map(Message::content).toList());
+    }
+
     private static List<Message> historyOf(dev.vaijanath.aiagent.memory.Memory memory) {
         return memory.history();
     }

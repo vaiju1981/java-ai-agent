@@ -86,4 +86,18 @@ class InMemoryConversationStoreTest {
         assertTrue(store.messages("t", "missing").isEmpty(), "an unknown session reads empty");
         assertTrue(store.messages("other", "s").isEmpty(), "another tenant cannot read the session");
     }
+
+    @Test
+    void deleteRemovesASessionsHistory() {
+        InMemoryConversationStore store = new InMemoryConversationStore();
+        store.withMemory("t", "s", m -> {
+            m.add(Message.user("hi"));
+            return null;
+        });
+
+        store.delete("t", "s");
+
+        assertTrue(store.messages("t", "s").isEmpty(), "the deleted session has no messages");
+        assertTrue(store.listSessions("t").isEmpty(), "the deleted session is no longer listed");
+    }
 }
