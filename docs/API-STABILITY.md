@@ -40,7 +40,19 @@ ships a `docs/MIGRATION-<version>.md` note.
 While the project is `0.x`, the public API is still stabilizing. We minimize breaking changes, apply the
 deprecation lifecycle where practical, and document anything notable in the per-release migration notes.
 
-## Enforcement (planned)
+## Enforcement
 
-A binary-compatibility check (japicmp) against the previous release is planned as a CI guardrail, so an
-accidental break of the stable surface fails the build rather than shipping.
+Every library module runs a **binary-compatibility check (japicmp)** as part of `check` (so it runs in
+CI on every PR): the freshly built jar is diffed against the module's last published release on Maven
+Central, and a **binary-incompatible change to non-`@Internal`, public API fails the build**. This is the
+enforcement behind "deprecate, don't remove" — an accidental removal or signature change is caught before
+it ships, not after.
+
+- **Run it locally:** `./gradlew japicmpCheck` (or `:<module>:japicmpCheck`). A text + HTML report is
+  written to each module's `build/reports/japicmp/`.
+- **Baseline:** the last released version (currently `0.1.2`). Override with `-PjapicmpBaseline=<version>`;
+  **bump the default in the root build after each release** once the artifacts are live on Central.
+- **Scope:** only `public` API is compared, and elements annotated `@Internal` are excluded — so internal
+  evolution never trips the gate. Additive changes (new types/methods) are always compatible.
+- **Intentional break (major release only):** when a removal is deliberate, perform it in a major version
+  and bump the baseline; the deprecation lifecycle above must have run first.
