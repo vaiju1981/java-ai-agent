@@ -79,8 +79,9 @@ System.out.println(agent.run(new AgentRequest("Name one benefit of the JVM.")).o
 ```
 
 That's the whole "hello agent." From there you add **tools** (plain annotated methods via
-`agent-tools-annotations`), wrap the agent in **`Trust.govern(...)`** for guardrails + tool
-authorization, persist conversations with `agent-store-jdbc`, or compose **multi-agent** systems —
+`agent-tools-annotations`), expose it as a typed **`@AiService`** interface, wrap the agent in
+**`Trust.govern(...)`** for guardrails + tool authorization, persist conversations with
+`agent-store-jdbc`, or compose **multi-agent** systems —
 every recipe is in the **[Cookbook](docs/COOKBOOK.md)**.
 
 ---
