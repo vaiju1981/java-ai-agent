@@ -1,0 +1,44 @@
+name: Dependency submission
+
+# Submits the Gradle dependency graph to GitHub so Dependabot can flag vulnerable
+# (including transitive) dependencies. Runs ONLY on push to the default branch:
+# the graph is consumed from the default branch alone, so submitting on pull_request
+# events adds no value -- it only exposes every PR to a known, intermittent internal
+# error in the dependency-graph plugin ("Failed to notify build listener. > Index -1
+# out of bounds for length 0"), which showed up as a spurious red X on PRs.
+#
+# This replaces GitHub's built-in "Automatic dependency submission" feature, which
+# runs on both push and pull_request and cannot be restricted to the default branch.
+# That feature must be turned off for this workflow to be the single source of the
+# graph: Settings -> Advanced Security -> Dependency graph -> "Automatic dependency
+# submission" -> Disabled.
+
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: dependency-submission-${{ github.ref }}
+  cancel-in-progress: true
+
+# Submitting a dependency snapshot writes to the repository's dependency graph.
+permissions:
+  contents: write
+
+jobs:
+  submit:
+    name: Submit Gradle dependency graph
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21 (matches the build baseline)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Resolves the build's dependencies and submits the graph via the Dependency
+      # Submission API. Bundles its own Gradle setup, so no separate setup-gradle step.
+      - name: Generate and submit dependency graph
+        uses: gradle/actions/dependency-submission@v6
