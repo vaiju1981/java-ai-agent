@@ -15,7 +15,3 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.launcher)
 }
-
-// No published baseline on Maven Central until this module's first release; enable the API-compat
-// check after that lands (see the japicmp config in the root build).
-tasks.matching { it.name == "japicmpCheck" }.configureEach { enabled = false }
