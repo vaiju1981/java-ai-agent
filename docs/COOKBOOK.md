@@ -247,6 +247,36 @@ guardrails.add(new InjectionGuardrail());                                       
 guardrails.forEach(builder::guardrail);
 ```
 
+## 8b. Token accounting & cost (`agent-core`)
+
+`TokenAccountingObserver` sums token usage across a run, broken down per model — so a multi-model
+setup (a supervisor on a large model, workers on a small one) shows where the spend went. Share one
+observer across the agents to pool their usage.
+
+```java
+TokenAccountingObserver acct = new TokenAccountingObserver();
+Agent agent = DefaultAgent.builder().model(model).observer(acct).build();
+agent.run(new AgentRequest("…"));
+
+acct.totalTokens();      // aggregate across the run
+acct.tokensByModel();    // Map<model name, Usage> — per-model breakdown
+```
+
+Turn tokens into cost with a **bring-your-own** price table — the library ships no prices (list prices
+go stale and many accounts bill at negotiated rates). Models with no registered price are free, which
+is the right default for local models (Ollama).
+
+```java
+Pricing pricing = new Pricing(Map.of(
+    "openai:gpt-4o", new TokenPrice(2.50, 10.00),            // $/1M input, $/1M output
+    "anthropic:claude-sonnet-4-6", new TokenPrice(3.00, 15.00)));
+double cost = pricing.total(acct.tokensByModel());
+```
+
+To enforce a ceiling rather than just measure it, wrap the model in a `BudgetModelPort(model, new
+TokenBudget(limit))`; once spent, the turn ends with `stopReason=budget_exceeded` (distinct from a
+model outage).
+
 ## 9. Spring Boot (`agent-spring-boot-starter`)
 
 Declare a `ModelPort` bean; the starter autoconfigures a governed `Agent` (override any default by

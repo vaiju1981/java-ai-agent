@@ -191,6 +191,7 @@ public final class DefaultAgent implements Agent {
             }
             Duration modelLatency = Duration.ofNanos(System.nanoTime() - modelStart);
             notify(o -> o.onModelResponse(resp, modelLatency));
+            notify(o -> o.onUsage(model.name(), resp.usage()));
 
             if (resp.hasToolCalls()) {
                 handleToolCalls(resp, activeByName, ctx, memory);
