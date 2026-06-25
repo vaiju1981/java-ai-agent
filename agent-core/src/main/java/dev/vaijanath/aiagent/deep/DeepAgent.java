@@ -10,7 +10,9 @@ import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,10 +26,16 @@ import org.slf4j.LoggerFactory;
  * A deep agent: <b>plan → run sub-agents (one per subtask) → synthesize</b>. Implements
  * {@link Agent}, so a deep agent can itself be used as a sub-agent of another.
  *
- * <p>Subtasks run concurrently on a virtual-thread-per-task executor (Loom, GA in Java 21) — each
- * worker is a fresh {@link Agent} from the supplied factory, so there is no shared mutable state.
- * A {@code StructuredTaskScope} variant can replace this once that API is stable without requiring
- * preview.
+ * <p>The plan is a DAG. Each {@link PlanStep} may declare {@link PlanStep#dependsOn() dependencies};
+ * steps run in <b>waves</b> — a step becomes eligible once all its dependencies are {@code DONE}, and
+ * eligible steps run concurrently on a virtual-thread-per-task executor (Loom, GA in Java 21). A
+ * dependent step receives its upstream steps' results injected into its instruction, so step B can
+ * build on step A's output. A flat plan (no dependencies) is just the degenerate case: one wave with
+ * everything in it, exactly the previous fan-out behavior.
+ *
+ * <p>Each worker is a fresh {@link Agent} from the supplied factory, so there is no shared mutable
+ * state. A {@code StructuredTaskScope} variant can replace the executor once that API is stable
+ * without requiring preview.
  */
 public final class DeepAgent implements Agent {
 
@@ -62,50 +70,83 @@ public final class DeepAgent implements Agent {
             log.warn("planner produced no steps; synthesizing directly");
             return AgentResponse.completed(synthesize(task, List.of()));
         }
+        Dag.validate(plan.steps());
         workspace.write("plan.md", plan.render());
         log.info("deep agent: {} subtask(s), parallel={}", plan.steps().size(), parallel);
 
-        if (parallel) {
-            runParallel(plan, ctx);
-        } else {
-            runSequential(plan, ctx);
-        }
+        runDag(plan, ctx);
 
         workspace.write("plan.md", plan.render()); // statuses are now resolved
         return AgentResponse.completed(synthesize(task, plan.steps()));
     }
 
-    private void runParallel(Plan plan, RequestContext ctx) {
-        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<AgentResponse>> futures = new ArrayList<>();
-            for (PlanStep step : plan.steps()) {
-                step.status(PlanStep.Status.RUNNING);
-                futures.add(pool.submit(() ->
-                        workerFactory.get().run(new AgentRequest(step.description(), ctx.childSession()))));
+    /** Runs the plan wave by wave: each pass executes the steps whose dependencies are all done. */
+    private void runDag(Plan plan, RequestContext ctx) {
+        List<PlanStep> steps = plan.steps();
+        Map<Integer, PlanStep> byIndex = new LinkedHashMap<>();
+        for (PlanStep step : steps) {
+            byIndex.put(step.index(), step);
+        }
+        List<PlanStep> wave;
+        while (!(wave = Dag.ready(steps)).isEmpty()) {
+            runWave(wave, byIndex, ctx);
+        }
+        // No more eligible steps: any still PENDING are blocked by a failed dependency.
+        for (PlanStep step : steps) {
+            if (step.status() == PlanStep.Status.PENDING) {
+                skip(step);
             }
-            for (int i = 0; i < plan.steps().size(); i++) {
-                PlanStep step = plan.steps().get(i);
-                Future<AgentResponse> future = futures.get(i);
+        }
+    }
+
+    private void runWave(List<PlanStep> wave, Map<Integer, PlanStep> byIndex, RequestContext ctx) {
+        if (parallel) {
+            try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+                List<Future<AgentResponse>> futures = new ArrayList<>();
+                for (PlanStep step : wave) {
+                    step.status(PlanStep.Status.RUNNING);
+                    String input = instruction(step, byIndex);
+                    futures.add(pool.submit(() ->
+                            workerFactory.get().run(new AgentRequest(input, ctx.childSession()))));
+                }
+                for (int i = 0; i < wave.size(); i++) {
+                    PlanStep step = wave.get(i);
+                    Future<AgentResponse> future = futures.get(i);
+                    try {
+                        complete(step, future.get(stepTimeout.toMillis(), TimeUnit.MILLISECONDS).output());
+                    } catch (Exception e) {
+                        future.cancel(true);
+                        fail(step, e);
+                    }
+                }
+            }
+        } else {
+            for (PlanStep step : wave) {
+                step.status(PlanStep.Status.RUNNING);
                 try {
-                    complete(step, future.get(stepTimeout.toMillis(), TimeUnit.MILLISECONDS).output());
-                } catch (Exception e) {
-                    future.cancel(true);
+                    complete(step, workerFactory.get()
+                            .run(new AgentRequest(instruction(step, byIndex), ctx.childSession())).output());
+                } catch (RuntimeException e) {
                     fail(step, e);
                 }
             }
         }
     }
 
-    private void runSequential(Plan plan, RequestContext ctx) {
-        for (PlanStep step : plan.steps()) {
-            step.status(PlanStep.Status.RUNNING);
-            try {
-                complete(step, workerFactory.get()
-                        .run(new AgentRequest(step.description(), ctx.childSession())).output());
-            } catch (RuntimeException e) {
-                fail(step, e);
+    /** A step's input: its description, plus the results of any steps it depends on. */
+    private static String instruction(PlanStep step, Map<Integer, PlanStep> byIndex) {
+        if (step.dependsOn().isEmpty()) {
+            return step.description();
+        }
+        StringBuilder sb = new StringBuilder(step.description());
+        sb.append("\n\nContext from prior steps:");
+        for (int dep : step.dependsOn()) {
+            PlanStep upstream = byIndex.get(dep);
+            if (upstream != null) {
+                sb.append("\n- ").append(upstream.description()).append(": ").append(upstream.result());
             }
         }
+        return sb.toString();
     }
 
     private void complete(PlanStep step, String output) {
@@ -117,6 +158,13 @@ public final class DeepAgent implements Agent {
     private void fail(PlanStep step, Exception e) {
         log.warn("subtask {} failed: {}", step.index(), e.toString());
         step.result("(failed: " + e.getMessage() + ")");
+        step.status(PlanStep.Status.FAILED);
+        workspace.write("step-" + step.index() + ".txt", step.result());
+    }
+
+    private void skip(PlanStep step) {
+        log.warn("subtask {} skipped: a dependency failed", step.index());
+        step.result("(skipped: a dependency failed)");
         step.status(PlanStep.Status.FAILED);
         workspace.write("step-" + step.index() + ".txt", step.result());
     }
