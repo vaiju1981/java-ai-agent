@@ -9,6 +9,7 @@ import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.memory.InMemoryConversationStore;
 import dev.vaijanath.aiagent.memory.InMemoryMemory;
 import dev.vaijanath.aiagent.memory.Memory;
+import dev.vaijanath.aiagent.model.BudgetExceededException;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelPorts;
@@ -187,6 +188,15 @@ public final class DefaultAgent implements Agent {
                 resp = streamRawTokens
                         ? ModelPorts.stream(model, req, this::emitToken)
                         : model.chat(req);
+            } catch (BudgetExceededException e) {
+                // A token-budget cap is a distinct, expected outcome — not a model outage. Keep it
+                // separate so operators can tell "we hit the cost ceiling" from "the model is down".
+                log.warn("token budget exhausted; ending turn", e);
+                notify(o -> o.onError("budget", e));
+                audit("error", ctx, "token budget exceeded");
+                auditTurn("turn.end", ctx, "budget_exceeded");
+                return finish(AgentResponse.stopped(
+                        "This request reached its token budget.", "budget_exceeded"), startNanos);
             } catch (RuntimeException e) {
                 // Graceful failure: surface it, never crash out of run().
                 log.warn("model call failed; ending turn gracefully", e);
