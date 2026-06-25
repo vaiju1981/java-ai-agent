@@ -65,7 +65,15 @@ public final class AnthropicModelPort implements ModelPort {
     }
 
     public static AnthropicModelPort fromEnv(String model) {
+        requireApiKey(System.getenv("ANTHROPIC_API_KEY"), "ANTHROPIC_API_KEY");
         return new AnthropicModelPort(AnthropicOkHttpClient.fromEnv(), model, DEFAULT_MAX_TOKENS);
+    }
+
+    static void requireApiKey(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(name + " is not set — export it, or build the port with the "
+                    + "AnthropicModelPort(client, model) constructor and a pre-configured client.");
+        }
     }
 
     @Override

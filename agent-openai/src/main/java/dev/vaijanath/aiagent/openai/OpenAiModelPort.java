@@ -67,7 +67,15 @@ public final class OpenAiModelPort implements ModelPort {
     }
 
     public static OpenAiModelPort fromEnv(String model) {
+        requireApiKey(System.getenv("OPENAI_API_KEY"), "OPENAI_API_KEY");
         return new OpenAiModelPort(OpenAIOkHttpClient.fromEnv(), model);
+    }
+
+    static void requireApiKey(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(name + " is not set — export it, or build the port with the "
+                    + "OpenAiModelPort(client, model) constructor and a pre-configured client.");
+        }
     }
 
     @Override
