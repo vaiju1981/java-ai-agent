@@ -34,13 +34,13 @@ is a default; **`agent-core` has zero framework dependencies**.
 
 ## Install
 
-On **Maven Central** under `io.github.vaiju1981` (latest **0.3.0**; compiles to a Java 21 baseline).
+On **Maven Central** under `io.github.vaiju1981` (latest **0.4.0**; compiles to a Java 21 baseline).
 Add the core plus one model adapter:
 
 ```kotlin
 // build.gradle.kts
-implementation("io.github.vaiju1981:agent-core:0.3.0")
-implementation("io.github.vaiju1981:agent-anthropic:0.3.0")   // talk to Claude directly
+implementation("io.github.vaiju1981:agent-core:0.4.0")
+implementation("io.github.vaiju1981:agent-anthropic:0.4.0")   // talk to Claude directly
 // …or agent-langchain4j (Ollama, OpenAI, …) or agent-spring-ai (any Spring AI ChatModel)
 ```
 
@@ -49,7 +49,7 @@ implementation("io.github.vaiju1981:agent-anthropic:0.3.0")   // talk to Claude 
 <dependency>
   <groupId>io.github.vaiju1981</groupId>
   <artifactId>agent-core</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
 </dependency>
 ```
 
