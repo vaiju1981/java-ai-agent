@@ -55,7 +55,12 @@ agent:
   model-timeout: ${AGENT_MODEL_TIMEOUT:60s}
   tool-timeout: ${AGENT_TOOL_TIMEOUT:15s}
   audit-file: ${AGENT_AUDIT_FILE:var/audit/agent-events.log}
-  # Edge protection. api-keys is a comma-separated list (empty = unauthenticated, with a warning).
-  api-keys: ${AGENT_API_KEYS:}
+  # Edge protection. api-keys maps each key to the tenant it authenticates, so the tenant is bound to the
+  # credential rather than asserted by a client header (empty = unauthenticated, with a startup warning;
+  # required under the 'prod' profile). Configure as a YAML map, e.g.:
+  #   api-keys:
+  #     "key-for-acme": "acme"
+  #     "key-for-globex": "globex"
+  api-keys: {}
   rate-limit-per-minute: ${AGENT_RATE_LIMIT_PER_MINUTE:120}
   max-request-bytes: ${AGENT_MAX_REQUEST_BYTES:65536}
