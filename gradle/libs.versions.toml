@@ -67,8 +67,6 @@ spring-boot-flyway = { module = "org.springframework.boot:spring-boot-starter-fl
 spring-boot-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 # Autoconfiguration for the Spring Boot starter (version managed by the Spring Boot BOM).
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure" }
-# Standalone password hashing (BCrypt) for FinCopilot consumer auth; version managed by the Spring Boot BOM.
-spring-security-crypto = { module = "org.springframework.security:spring-security-crypto" }
 # Prometheus scrape endpoint for actuator metrics (version managed by the Spring Boot BOM).
 micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus" }
 # Micrometer core (MeterRegistry) — compile-only in the starter for optional metrics autoconfig.

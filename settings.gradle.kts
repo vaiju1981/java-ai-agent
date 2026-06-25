@@ -33,7 +33,6 @@ include(
     "demos",
     "downstream-smoke",
     "production-reference",
-    "apps:fincopilot",
 )
 
 nmcpSettings {
