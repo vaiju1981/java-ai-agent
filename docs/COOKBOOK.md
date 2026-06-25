@@ -108,6 +108,19 @@ Agent swarm = HandoffAgent.builder()
 // Share a ConversationStore across the agents for true handoff continuity (each peer sees the history).
 ```
 
+For a **group chat** — several agents sharing one transcript, taking turns (the AutoGen pattern) — use
+`GroupChatAgent`: a `SpeakerSelector` picks who speaks next; every agent sees the whole conversation.
+
+```java
+Agent panel = GroupChatAgent.builder()
+        .agent("optimist", "argues for the idea", optimistAgent)
+        .agent("skeptic", "argues against it", skepticAgent)
+        .agent("judge", "weighs both and concludes", judgeAgent)
+        .selector(new LlmSpeakerSelector(model))  // or RoundRobinSelector; LLM can end with DONE
+        .maxRounds(6)
+        .build();
+```
+
 ## 6b. Agents as tools — agents calling agents (`agent-core`)
 
 Wrap an `Agent` as a `Tool` and the calling model decides, per turn, which specialist to invoke and
