@@ -16,6 +16,7 @@ langchain4j = "1.16.3"
 springboot = "4.1.0"
 postgresql = "42.7.11"
 anthropic = "2.34.0"
+openai = "4.41.0"
 testcontainers = "2.0.5"
 
 [libraries]
@@ -46,6 +47,9 @@ spring-ai-client-chat = { module = "org.springframework.ai:spring-ai-client-chat
 
 # Anthropic Java SDK — a direct, first-party L0 substrate adapter (no intermediary framework).
 anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
+
+# Official OpenAI Java SDK — a direct, first-party L0 substrate adapter (Chat Completions API).
+openai-java = { module = "com.openai:openai-java", version.ref = "openai" }
 
 # Google ADK — wrapped as an Agent-as-component (a full agent framework, consumed one level up).
 google-adk = { module = "com.google.adk:google-adk", version.ref = "googleadk" }

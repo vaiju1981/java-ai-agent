@@ -55,13 +55,14 @@ if (result.present()) {
 }
 ```
 
-## 4. Talk to Claude directly (`agent-anthropic`)
+## 4. Talk to Claude or OpenAI directly (`agent-anthropic` / `agent-openai`)
 
-A first-party `ModelPort` over the official Anthropic SDK — no intermediary framework. Reads
-`ANTHROPIC_API_KEY` and defaults to the latest Claude model.
+First-party `ModelPort`s over the official Anthropic and OpenAI SDKs — no intermediary framework. Each
+reads its API key from the environment and defaults to a current model.
 
 ```java
-ModelPort model = AnthropicModelPort.fromEnv();            // or fromEnv("claude-opus-4-8")
+ModelPort claude = AnthropicModelPort.fromEnv();   // ANTHROPIC_API_KEY; or fromEnv("claude-opus-4-8")
+ModelPort openai = OpenAiModelPort.fromEnv();       // OPENAI_API_KEY;    or fromEnv("gpt-4o")
 ```
 
 ## 5. Retrieval-augmented answers (RAG)

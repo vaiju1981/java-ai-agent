@@ -16,6 +16,7 @@ dependencies {
         api(project(":agent-langchain4j"))
         api(project(":agent-spring-ai"))
         api(project(":agent-anthropic"))
+        api(project(":agent-openai"))
         api(project(":agent-spring-boot-starter"))
         api(project(":agent-adk"))
         api(project(":agent-mcp"))

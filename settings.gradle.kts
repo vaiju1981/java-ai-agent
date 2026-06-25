@@ -26,6 +26,7 @@ include(
     "agent-tools-jsonschema",
     "agent-tools-annotations",
     "agent-anthropic",
+    "agent-openai",
     "agent-spring-boot-starter",
     "examples",
     "demos",
