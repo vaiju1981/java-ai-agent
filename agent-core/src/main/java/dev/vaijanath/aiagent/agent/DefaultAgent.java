@@ -76,6 +76,7 @@ public final class DefaultAgent implements Agent {
     private static final Logger log = LoggerFactory.getLogger(DefaultAgent.class);
     private static final String TOOL_PREFIX = "tool '"; // start of "tool '<name>'" in messages
     private static final String AUDIT_TOOL_DENIED = "tool.denied";
+    private static final String AUDIT_TOOL = "tool="; // audit-detail key for the tool name
 
     private final ModelPort model;
     private final List<Guardrail> guardrails;
@@ -181,12 +182,7 @@ public final class DefaultAgent implements Agent {
             final ModelResponse resp;
             long modelStart = System.nanoTime();
             try {
-                // Raw tokens are pre-guardrail and therefore unsafe, so they are NOT streamed by
-                // default — the turn's result is delivered only after output guardrails run. A caller
-                // that explicitly accepts an unguarded live stream opts in with streamRawTokens(true).
-                resp = streamRawTokens
-                        ? ModelPorts.stream(model, req, this::emitToken)
-                        : model.chat(req);
+                resp = callModel(req);
             } catch (RuntimeException e) {
                 // Graceful failure: surface it, never crash out of run().
                 log.warn("model call failed; ending turn gracefully", e);
@@ -200,36 +196,11 @@ public final class DefaultAgent implements Agent {
             notify(o -> o.onModelResponse(resp, modelLatency));
 
             if (resp.hasToolCalls()) {
-                List<ToolCall> calls = resp.toolCalls();
-                memory.add(Message.assistant(resp.text(), calls));
-                // Announce every call before running any, so observers see the full fan-out up front.
-                for (ToolCall call : calls) {
-                    notify(o -> o.onToolCall(call));
-                }
-                // Execute (concurrently when safe — see executeCalls), then record results in call
-                // order so the transcript and observers stay deterministic regardless of finish order.
-                List<Timed> raws = executeCalls(calls, activeByName, ctx);
-                for (int i = 0; i < calls.size(); i++) {
-                    ToolCall call = calls.get(i);
-                    StructuredToolResult raw = raws.get(i).result();
-                    Duration toolLatency = raws.get(i).latency();
-                    // Cap once so observers/recorders and the model all see the same bounded result.
-                    ToolResult result =
-                            new ToolResult(capped(raw.result().content(), maxToolResultChars), raw.result().error());
-                    notify(o -> o.onToolResult(call.name(), result, toolLatency));
-                    // A structured payload (if any) goes to observers/UIs only — never into the model.
-                    if (raw.hasData()) {
-                        String dataJson = raw.dataJson();
-                        notify(o -> o.onToolData(call.name(), dataJson));
-                    }
-                    String forModel =
-                            frameToolResults ? frame(call.name(), result.content()) : result.content();
-                    memory.add(Message.toolResult(call.id(), call.name(), forModel));
-                }
+                handleToolCalls(resp, activeByName, ctx, memory);
                 continue; // let the model react to the tool results
             }
 
-            finalText = (resp.text() == null) ? "" : resp.text();
+            finalText = Objects.requireNonNullElse(resp.text(), "");
             break;
         }
 
@@ -241,6 +212,11 @@ public final class DefaultAgent implements Agent {
                     "max_steps"), startNanos);
         }
 
+        return finalizeTurn(ctx, finalText, memory, startNanos);
+    }
+
+    /** Runs output guardrails and returns the turn's final (possibly blocked) response. */
+    private AgentResponse finalizeTurn(RequestContext ctx, String finalText, Memory memory, long startNanos) {
         // Output guardrails — nothing unsafe reaches the user.
         GuardrailDecision out = applyGuardrails(GuardrailStage.OUTPUT, finalText);
         memory.add(Message.assistant(out.content()));
@@ -252,6 +228,49 @@ public final class DefaultAgent implements Agent {
         }
         auditTurn("turn.end", ctx, "completed");
         return finish(AgentResponse.completed(out.content()), startNanos);
+    }
+
+    /** Announces, executes, and records one step's tool calls back into memory. */
+    private void handleToolCalls(
+            ModelResponse resp, Map<String, Tool> activeByName, RequestContext ctx, Memory memory) {
+        List<ToolCall> calls = resp.toolCalls();
+        memory.add(Message.assistant(resp.text(), calls));
+        // Announce every call before running any, so observers see the full fan-out up front.
+        for (ToolCall call : calls) {
+            notify(o -> o.onToolCall(call));
+        }
+        // Execute (concurrently when safe — see executeCalls), then record results in call order so the
+        // transcript and observers stay deterministic regardless of finish order.
+        recordToolResults(calls, executeCalls(calls, activeByName, ctx), memory);
+    }
+
+    /** Records each tool result (capped) to observers and memory, in call order. */
+    private void recordToolResults(List<ToolCall> calls, List<Timed> raws, Memory memory) {
+        for (int i = 0; i < calls.size(); i++) {
+            ToolCall call = calls.get(i);
+            StructuredToolResult raw = raws.get(i).result();
+            Duration toolLatency = raws.get(i).latency();
+            // Cap once so observers/recorders and the model all see the same bounded result.
+            ToolResult result =
+                    new ToolResult(capped(raw.result().content(), maxToolResultChars), raw.result().error());
+            notify(o -> o.onToolResult(call.name(), result, toolLatency));
+            // A structured payload (if any) goes to observers/UIs only — never into the model.
+            if (raw.hasData()) {
+                String dataJson = raw.dataJson();
+                notify(o -> o.onToolData(call.name(), dataJson));
+            }
+            String forModel = frameToolResults ? frame(call.name(), result.content()) : result.content();
+            memory.add(Message.toolResult(call.id(), call.name(), forModel));
+        }
+    }
+
+    /**
+     * One model call. Raw tokens are pre-guardrail and therefore unsafe, so they are NOT streamed by
+     * default — the turn's result is delivered only after output guardrails run. A caller that explicitly
+     * accepts an unguarded live stream opts in with {@code streamRawTokens(true)}.
+     */
+    private ModelResponse callModel(ModelRequest req) {
+        return streamRawTokens ? ModelPorts.stream(model, req, this::emitToken) : model.chat(req);
     }
 
     private boolean deadlineExceeded(RequestContext ctx) {
@@ -301,8 +320,6 @@ public final class DefaultAgent implements Agent {
      * {@code approvalHandler} (approvals must be prompted one at a time). Otherwise they run
      * sequentially. Results are positional either way, so the transcript stays stable.
      */
-    // Virtual threads suit I/O-bound tool calls; on JDK 24+ synchronized no longer pins them (S6906).
-    @SuppressWarnings("java:S6906")
     private List<Timed> executeCalls(
             List<ToolCall> calls, Map<String, Tool> activeByName, RequestContext ctx) {
         // Bound the per-step fan-out: beyond the ceiling, calls are not executed — each comes back as an
@@ -314,33 +331,14 @@ public final class DefaultAgent implements Agent {
                     + "(maxToolCallsPerStep={})", calls.size(), limit, maxToolCallsPerStep);
         }
 
-        List<Timed> results = new ArrayList<>(calls.size());
         boolean canParallel =
                 parallelToolCalls && toRun.size() > 1 && toolExecutor == null && approvalHandler == null;
-        if (!canParallel) {
+        List<Timed> results = new ArrayList<>(calls.size());
+        if (canParallel) {
+            results.addAll(runParallel(toRun, activeByName, ctx));
+        } else {
             for (ToolCall call : toRun) {
                 results.add(timedExecute(call, activeByName, ctx));
-            }
-        } else {
-            try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
-                List<Future<Timed>> futures = new ArrayList<>(toRun.size());
-                for (ToolCall call : toRun) {
-                    futures.add(pool.submit(Mdc.propagate(() -> timedExecute(call, activeByName, ctx))));
-                }
-                for (Future<Timed> future : futures) {
-                    try {
-                        results.add(future.get());
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        results.add(new Timed(
-                                StructuredToolResult.of(ToolResult.error("tool execution was interrupted")),
-                                Duration.ZERO));
-                    } catch (ExecutionException e) {
-                        log.warn("parallel tool execution failed", e.getCause());
-                        results.add(new Timed(
-                                StructuredToolResult.of(ToolResult.error("tool execution failed")), Duration.ZERO));
-                    }
-                }
             }
         }
         for (int i = limit; i < calls.size(); i++) {
@@ -348,6 +346,34 @@ public final class DefaultAgent implements Agent {
                     StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + calls.get(i).name()
                             + "' skipped: exceeded the per-step tool-call limit of " + maxToolCallsPerStep)),
                     Duration.ZERO));
+        }
+        return results;
+    }
+
+    // Virtual threads suit I/O-bound tool calls; on JDK 24+ synchronized no longer pins them (S6906).
+    @SuppressWarnings("java:S6906")
+    private List<Timed> runParallel(
+            List<ToolCall> toRun, Map<String, Tool> activeByName, RequestContext ctx) {
+        List<Timed> results = new ArrayList<>(toRun.size());
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Timed>> futures = new ArrayList<>(toRun.size());
+            for (ToolCall call : toRun) {
+                futures.add(pool.submit(Mdc.propagate(() -> timedExecute(call, activeByName, ctx))));
+            }
+            for (Future<Timed> future : futures) {
+                try {
+                    results.add(future.get());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    results.add(new Timed(
+                            StructuredToolResult.of(ToolResult.error("tool execution was interrupted")),
+                            Duration.ZERO));
+                } catch (ExecutionException e) {
+                    log.warn("parallel tool execution failed", e.getCause());
+                    results.add(new Timed(
+                            StructuredToolResult.of(ToolResult.error("tool execution failed")), Duration.ZERO));
+                }
+            }
         }
         return results;
     }
@@ -377,7 +403,7 @@ public final class DefaultAgent implements Agent {
         Tool tool = available.get(call.name());
         if (tool == null) {
             log.info("tool '{}' not available this turn", call.name());
-            audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=not-available");
+            audit(AUDIT_TOOL_DENIED, ctx, AUDIT_TOOL + call.name() + " reason=not-available");
             return StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + call.name() + "' is not available"));
         }
         ToolCallContext callContext = new ToolCallContext(
@@ -392,7 +418,7 @@ public final class DefaultAgent implements Agent {
                 log.warn("tool '{}' denied by policy ({}) — returning an error to the model. If it has no "
                         + "side effects mark it READ_ONLY; otherwise allow-list it via the ToolApprover.",
                         call.name(), decision.reason());
-                audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=" + decision.reason());
+                audit(AUDIT_TOOL_DENIED, ctx, AUDIT_TOOL + call.name() + " reason=" + decision.reason());
                 return StructuredToolResult.of(
                         ToolResult.error(TOOL_PREFIX + call.name() + "' not permitted: " + decision.reason()));
             }
@@ -403,26 +429,26 @@ public final class DefaultAgent implements Agent {
                 approved = approvalHandler.requestApproval(request);
             } catch (RuntimeException e) {
                 log.warn("approval handler failed for tool '{}'", call.name(), e);
-                audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=approval-error");
+                audit(AUDIT_TOOL_DENIED, ctx, AUDIT_TOOL + call.name() + " reason=approval-error");
                 return StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + call.name() + "' approval failed"));
             }
             if (!approved) {
                 log.info("tool '{}' declined by the approver", call.name());
-                audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=approval-declined");
+                audit(AUDIT_TOOL_DENIED, ctx, AUDIT_TOOL + call.name() + " reason=approval-declined");
                 return StructuredToolResult.of(ToolResult.error("the user declined to run '" + call.name() + "'"));
             }
-            audit("tool.approved", ctx, "tool=" + call.name() + " via=human");
+            audit("tool.approved", ctx, AUDIT_TOOL + call.name() + " via=human");
         }
         Optional<String> invalid = toolArgumentValidator.validate(tool.spec(), call.argumentsJson());
         if (invalid.isPresent()) {
             log.info("tool '{}' arguments invalid: {}", call.name(), invalid.get());
-            audit("tool.invalid", ctx, "tool=" + call.name() + " reason=" + invalid.get());
+            audit("tool.invalid", ctx, AUDIT_TOOL + call.name() + " reason=" + invalid.get());
             return StructuredToolResult.of(
                     ToolResult.error(TOOL_PREFIX + call.name() + "' arguments invalid: " + invalid.get()));
         }
-        audit("tool.allowed", ctx, "tool=" + call.name() + " effect=" + tool.spec().effect());
+        audit("tool.allowed", ctx, AUDIT_TOOL + call.name() + " effect=" + tool.spec().effect());
         StructuredToolResult result = safeInvoke(tool, call, callContext);
-        audit("tool.result", ctx, "tool=" + call.name() + " error=" + result.result().error());
+        audit("tool.result", ctx, AUDIT_TOOL + call.name() + " error=" + result.result().error());
         return result;
     }
 
