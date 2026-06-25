@@ -35,6 +35,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 @Configuration
 @EnableConfigurationProperties(AgentProperties.class)
@@ -155,23 +156,35 @@ class AgentConfiguration {
         return registration;
     }
 
-    /** Surfaces insecure-by-default configuration loudly at startup instead of failing silently. */
+    /**
+     * Surfaces insecure-by-default configuration. Under the {@code prod} profile this <b>fails startup</b>
+     * (an insecure prod deployment should not come up); otherwise it logs loud warnings for local/dev use.
+     */
     @Bean
     ApplicationRunner configurationWarnings(
-            AgentProperties properties, @Value("${spring.datasource.password:}") String dbPassword) {
+            AgentProperties properties,
+            Environment environment,
+            @Value("${spring.datasource.password:}") String dbPassword) {
         return args -> {
+            List<String> problems = new ArrayList<>();
             if (properties.apiKeys().isEmpty()) {
-                log.warn("SECURITY: no agent.api-keys configured — /api is UNAUTHENTICATED. Set "
-                        + "agent.api-keys, or terminate auth at a trusted gateway, before exposing this service.");
+                problems.add("no agent.api-keys configured — /api would be UNAUTHENTICATED");
             }
             if ("agent".equals(dbPassword)) {
-                log.warn("SECURITY: datasource is using the insecure default password 'agent'. Set "
-                        + "DATABASE_PASSWORD for any non-local deployment.");
+                problems.add("the datasource is using the insecure default password 'agent'");
             }
             if (!properties.hasGuardModel()) {
-                log.warn("SAFETY: no agent.guard-model configured — running with crisis + PII guardrails "
-                        + "only. Set agent.guard-model (e.g. llama-guard3:1b) to enable the Llama Guard classifier.");
+                problems.add("no agent.guard-model configured — only the crisis + PII guardrails are active");
             }
+            if (problems.isEmpty()) {
+                return;
+            }
+            if (environment.matchesProfiles("prod")) {
+                throw new IllegalStateException("refusing to start under the 'prod' profile with insecure "
+                        + "configuration: " + String.join("; ", problems) + ". Set agent.api-keys, "
+                        + "DATABASE_PASSWORD, and agent.guard-model — or run without the 'prod' profile.");
+            }
+            problems.forEach(p -> log.warn("SECURITY/SAFETY: {} (this fails startup under the 'prod' profile)", p));
         };
     }
 }
