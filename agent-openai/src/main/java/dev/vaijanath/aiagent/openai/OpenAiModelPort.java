@@ -10,6 +10,9 @@ import com.openai.models.FunctionDefinition;
 import com.openai.models.FunctionParameters;
 import com.openai.models.chat.completions.ChatCompletion;
 import com.openai.models.chat.completions.ChatCompletionAssistantMessageParam;
+import com.openai.models.chat.completions.ChatCompletionContentPart;
+import com.openai.models.chat.completions.ChatCompletionContentPartImage;
+import com.openai.models.chat.completions.ChatCompletionContentPartText;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
 import com.openai.models.chat.completions.ChatCompletionFunctionTool;
 import com.openai.models.chat.completions.ChatCompletionMessageFunctionToolCall;
@@ -19,6 +22,7 @@ import com.openai.models.chat.completions.ChatCompletionSystemMessageParam;
 import com.openai.models.chat.completions.ChatCompletionTool;
 import com.openai.models.chat.completions.ChatCompletionToolMessageParam;
 import com.openai.models.chat.completions.ChatCompletionUserMessageParam;
+import dev.vaijanath.aiagent.model.Media;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
@@ -84,8 +88,7 @@ public final class OpenAiModelPort implements ModelPort {
             switch (m.role()) {
                 case SYSTEM -> builder.addMessage(ChatCompletionMessageParam.ofSystem(
                         ChatCompletionSystemMessageParam.builder().content(m.content()).build()));
-                case USER -> builder.addMessage(ChatCompletionMessageParam.ofUser(
-                        ChatCompletionUserMessageParam.builder().content(m.content()).build()));
+                case USER -> builder.addMessage(ChatCompletionMessageParam.ofUser(user(m)));
                 case ASSISTANT -> builder.addMessage(ChatCompletionMessageParam.ofAssistant(assistant(m)));
                 case TOOL -> builder.addMessage(ChatCompletionMessageParam.ofTool(
                         ChatCompletionToolMessageParam.builder()
@@ -98,6 +101,30 @@ public final class OpenAiModelPort implements ModelPort {
             builder.addTool(toTool(spec));
         }
         return builder.build();
+    }
+
+    private static ChatCompletionUserMessageParam user(Message m) {
+        if (!m.hasMedia()) {
+            return ChatCompletionUserMessageParam.builder().content(m.content()).build();
+        }
+        // Vision: text + image parts. Inline bytes go as a data: URL; a referenced URL is used as-is.
+        List<ChatCompletionContentPart> parts = new ArrayList<>();
+        if (!m.content().isBlank()) {
+            parts.add(ChatCompletionContentPart.ofText(
+                    ChatCompletionContentPartText.builder().text(m.content()).build()));
+        }
+        for (Media media : m.media()) {
+            if (media.kind() != Media.Kind.IMAGE) {
+                continue; // only images are sent to the Chat Completions API here
+            }
+            String url = media.isUrl()
+                    ? media.url()
+                    : "data:" + media.mimeType() + ";base64," + media.base64Data();
+            parts.add(ChatCompletionContentPart.ofImageUrl(ChatCompletionContentPartImage.builder()
+                    .imageUrl(ChatCompletionContentPartImage.ImageUrl.builder().url(url).build())
+                    .build()));
+        }
+        return ChatCompletionUserMessageParam.builder().contentOfArrayOfContentParts(parts).build();
     }
 
     private static ChatCompletionAssistantMessageParam assistant(Message m) {

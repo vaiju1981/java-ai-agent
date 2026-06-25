@@ -82,6 +82,19 @@ ModelPort claude = AnthropicModelPort.fromEnv();   // ANTHROPIC_API_KEY; or from
 ModelPort openai = OpenAiModelPort.fromEnv();       // OPENAI_API_KEY;    or fromEnv("gpt-4o")
 ```
 
+### Multimodal: send an image to a vision model
+
+Attach `Media` (images/audio) to a user turn with `Message.user(text, media)`. The first-party Anthropic
+and OpenAI adapters translate images to provider image blocks (inline base64 or a URL); text-only models
+ignore media. Audio is carried in the model for adapters that support it.
+
+```java
+byte[] png = Files.readAllBytes(Path.of("chart.png"));
+ModelResponse answer = claude.chat(ModelRequest.of(List.of(
+        Message.user("What trend does this chart show?", List.of(Media.image("image/png", png))))));
+// or by reference: Media.imageUrl("https://example.com/chart.png")
+```
+
 ## 5. Retrieval-augmented answers (RAG)
 
 Ground the agent in retrieved context. Use the in-memory store for small corpora, or `JdbcVectorStore`
