@@ -6,6 +6,7 @@ import dev.vaijanath.aiagent.guardrail.Guardrail;
 import dev.vaijanath.aiagent.guardrail.GuardrailDecision;
 import dev.vaijanath.aiagent.guardrail.GuardrailStage;
 import dev.vaijanath.aiagent.guardrail.Guardrails;
+import dev.vaijanath.aiagent.observe.Mdc;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -109,7 +110,7 @@ public final class PolicyEnforcingAgent implements Agent {
         if (remainingMillis <= 0) {
             return null;
         }
-        FutureTask<AgentResponse> task = new FutureTask<>(work::get);
+        FutureTask<AgentResponse> task = new FutureTask<>(Mdc.propagate(work::get));
         Thread worker = Thread.ofVirtual().name("governed-turn").start(task);
         try {
             return task.get(remainingMillis, TimeUnit.MILLISECONDS);
