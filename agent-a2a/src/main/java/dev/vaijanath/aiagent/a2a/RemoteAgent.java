@@ -11,6 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -67,8 +68,9 @@ public final class RemoteAgent implements Agent {
     @Override
     public AgentResponse run(AgentRequest request) {
         RequestContext ctx = request.context();
+        Long deadline = ctx.deadlineAt().map(Instant::toEpochMilli).orElse(null);
         A2aRequest body = new A2aRequest(
-                request.input(), ctx.sessionId(), ctx.principal(), ctx.tenant(), ctx.traceId());
+                request.input(), ctx.sessionId(), ctx.principal(), ctx.tenant(), ctx.traceId(), deadline);
         try {
             HttpResponse<String> response = http.send(
                     HttpRequest.newBuilder(endpoint)

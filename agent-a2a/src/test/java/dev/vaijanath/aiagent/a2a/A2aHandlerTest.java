@@ -38,12 +38,14 @@ class A2aHandlerTest {
 
         new A2aHandler(capturing, "bot", "d")
                 .handle("{\"input\":\"x\",\"sessionId\":\"s1\",\"principal\":\"alice\","
-                        + "\"tenant\":\"acme\",\"traceId\":\"t1\"}");
+                        + "\"tenant\":\"acme\",\"traceId\":\"t1\",\"deadlineEpochMillis\":1900000000000}");
 
         assertEquals("s1", seen.get().sessionId());
         assertEquals("alice", seen.get().principal());
         assertEquals("acme", seen.get().tenant());
         assertEquals("t1", seen.get().traceId());
+        assertTrue(seen.get().deadlineAt().isPresent(), "the deadline survives the hop");
+        assertEquals(1900000000000L, seen.get().deadlineAt().get().toEpochMilli());
     }
 
     @Test

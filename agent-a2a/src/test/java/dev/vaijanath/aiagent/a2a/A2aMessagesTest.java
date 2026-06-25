@@ -17,6 +17,7 @@ class A2aMessagesTest {
         assertNull(r.principal());
         assertNull(r.tenant());
         assertNull(r.traceId());
+        assertNull(r.deadlineEpochMillis());
     }
 
     @Test
