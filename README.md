@@ -31,6 +31,59 @@ is a default; **`agent-core` has zero framework dependencies**.
 
 ---
 
+## Install
+
+On **Maven Central** under `io.github.vaiju1981` (latest **0.2.0**; compiles to a Java 21 baseline).
+Add the core plus one model adapter:
+
+```kotlin
+// build.gradle.kts
+implementation("io.github.vaiju1981:agent-core:0.2.0")
+implementation("io.github.vaiju1981:agent-anthropic:0.2.0")   // talk to Claude directly
+// …or agent-langchain4j (Ollama, OpenAI, …) or agent-spring-ai (any Spring AI ChatModel)
+```
+
+```xml
+<!-- Maven -->
+<dependency>
+  <groupId>io.github.vaiju1981</groupId>
+  <artifactId>agent-core</artifactId>
+  <version>0.2.0</version>
+</dependency>
+```
+
+**Spring Boot?** Add `io.github.vaiju1981:agent-spring-boot-starter` and inject a governed `Agent` —
+autoconfiguration wires the runtime, streaming, and executor for you.
+
+## Quickstart
+
+```java
+import dev.vaijanath.aiagent.agent.Agent;
+import dev.vaijanath.aiagent.agent.AgentRequest;
+import dev.vaijanath.aiagent.agent.DefaultAgent;
+import dev.vaijanath.aiagent.anthropic.AnthropicModelPort;
+import dev.vaijanath.aiagent.model.ModelPort;
+
+// 1. pick a model — Claude here (reads ANTHROPIC_API_KEY); or Ollama/OpenAI via agent-langchain4j
+ModelPort model = AnthropicModelPort.fromEnv();
+
+// 2. build an agent
+Agent agent = DefaultAgent.builder()
+        .model(model)
+        .systemPrompt("You are a concise, accurate assistant.")
+        .build();
+
+// 3. run a turn
+System.out.println(agent.run(new AgentRequest("Name one benefit of the JVM.")).output());
+```
+
+That's the whole "hello agent." From there you add **tools** (plain annotated methods via
+`agent-tools-annotations`), wrap the agent in **`Trust.govern(...)`** for guardrails + tool
+authorization, persist conversations with `agent-store-jdbc`, or compose **multi-agent** systems —
+every recipe is in the **[Cookbook](docs/COOKBOOK.md)**.
+
+---
+
 ## Why it exists
 
 The JVM agent ecosystem is fragmenting — LangChain4j, Spring AI, Google ADK, Embabel, Koog — and
@@ -196,6 +249,10 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
   (incl. local models via Ollama), with tool-calling.
 - **`agent-spring-ai`** — a second L0 adapter: a `ModelPort` backed by any Spring AI `ChatModel`,
   proving the runtime is vendor-neutral.
+- **`agent-anthropic`** — a first-party `ModelPort` over the official Anthropic Java SDK: talk to
+  Claude directly, no intermediary framework (`AnthropicModelPort.fromEnv()`).
+- **`agent-spring-boot-starter`** — Spring Boot autoconfiguration: drop it in and inject a governed
+  `Agent` (plus streaming + a request executor) — the path most Spring apps will use.
 - **`agent-adk`** — wraps a Google ADK agent as an `Agent` (agent-as-component): ADK is a full
   framework, so it's consumed one level up — the same seam later admits Embabel / Koog.
 - **`agent-mcp`** — exposes a Model Context Protocol server's tools as `Tool`s (`McpTools.from(client)`).
@@ -206,6 +263,11 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
   supports SQL analytics; see [agent-store-jdbc/README.md](agent-store-jdbc/README.md).
 - **`agent-tools-jsonschema`** — a `ToolArgumentValidator` that validates tool arguments against their
   JSON Schema before the tool runs, so malformed calls are rejected without side effects.
+- **`agent-tools-annotations`** — define tools as annotated methods (`@AgentTool` / `@ToolParam`); the
+  JSON schema is derived and arguments bound for you (`ReflectiveTools.from(obj)`) — no hand-written schemas.
+- **`agent-store-pgvector`** — a pgvector-backed vector store for embeddings-based semantic recall.
+- **`agent-store-sqlite`** — an embedded, zero-infra `CheckpointStore` for crash-resumable
+  orchestration (survives restarts). *(On `main`; ships in the next release.)*
 - **`examples`** — a graduated set of runnable agents, from `MinimalAgent` to the `StudyBuddy`
   capstone (which composes everything); see [examples/README.md](examples/README.md).
 - **`demos`** — deep, production-shaped applications (a flagship trust-layer tour, a data analyst, a
@@ -281,9 +343,9 @@ AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
 
 Current capabilities are listed at the top; project history is in git. Remaining work needs external
 systems or accounts, not design changes: live **ADK** / **MCP** end-to-end (a configured ADK model /
-a running MCP server), richer MCP parameter schemas, and the **Maven Central** release (publication
-config is done and verified locally — see [PUBLISHING.md](PUBLISHING.md)). Architecture and rationale
-are in [DESIGN.md](DESIGN.md).
+a running MCP server) and richer MCP parameter schemas. Releases are published to **Maven Central**
+under `io.github.vaiju1981` (see [PUBLISHING.md](PUBLISHING.md)). Architecture and rationale are in
+[DESIGN.md](DESIGN.md).
 
 ## License
 
