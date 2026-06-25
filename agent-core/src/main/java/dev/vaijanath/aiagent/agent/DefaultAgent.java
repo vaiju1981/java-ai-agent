@@ -189,22 +189,14 @@ public final class DefaultAgent implements Agent {
                         ? ModelPorts.stream(model, req, this::emitToken)
                         : model.chat(req);
             } catch (BudgetExceededException e) {
-                // A token-budget cap is a distinct, expected outcome — not a model outage. Keep it
-                // separate so operators can tell "we hit the cost ceiling" from "the model is down".
-                log.warn("token budget exhausted; ending turn", e);
-                notify(o -> o.onError("budget", e));
-                audit("error", ctx, "token budget exceeded");
-                auditTurn("turn.end", ctx, "budget_exceeded");
-                return finish(AgentResponse.stopped(
-                        "This request reached its token budget.", "budget_exceeded"), startNanos);
+                // A token-budget cap is a distinct, expected outcome — not a model outage — so operators
+                // can tell "we hit the cost ceiling" from "the model is down".
+                return modelFailure(ctx, e, "budget", "token budget exceeded", "budget_exceeded",
+                        "This request reached its token budget.", startNanos);
             } catch (RuntimeException e) {
                 // Graceful failure: surface it, never crash out of run().
-                log.warn("model call failed; ending turn gracefully", e);
-                notify(o -> o.onError("model", e));
-                audit("error", ctx, "model call failed");
-                auditTurn("turn.end", ctx, "model_error");
-                return finish(AgentResponse.stopped(
-                        "I ran into a problem reaching the model. Please try again.", "model_error"), startNanos);
+                return modelFailure(ctx, e, "model", "model call failed", "model_error",
+                        "I ran into a problem reaching the model. Please try again.", startNanos);
             }
             Duration modelLatency = Duration.ofNanos(System.nanoTime() - modelStart);
             notify(o -> o.onModelResponse(resp, modelLatency));
@@ -282,6 +274,16 @@ public final class DefaultAgent implements Agent {
         if (turnAudit) {
             audit(type, ctx, detail);
         }
+    }
+
+    /** Ends a turn gracefully on a model-side failure: log, observe, audit, and return a stopped result. */
+    private AgentResponse modelFailure(RequestContext ctx, RuntimeException error, String stage,
+            String auditDetail, String stopReason, String message, long startNanos) {
+        log.warn("{}; ending turn gracefully", auditDetail, error);
+        notify(o -> o.onError(stage, error));
+        audit("error", ctx, auditDetail);
+        auditTurn("turn.end", ctx, stopReason);
+        return finish(AgentResponse.stopped(message, stopReason), startNanos);
     }
 
     private AgentResponse finish(AgentResponse response, long startNanos) {
