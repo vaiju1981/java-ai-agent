@@ -251,6 +251,8 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
   proving the runtime is vendor-neutral.
 - **`agent-anthropic`** — a first-party `ModelPort` over the official Anthropic Java SDK: talk to
   Claude directly, no intermediary framework (`AnthropicModelPort.fromEnv()`).
+- **`agent-openai`** — a first-party `ModelPort` over the official OpenAI Java SDK: talk to GPT models
+  directly via the Chat Completions API (`OpenAiModelPort.fromEnv()`).
 - **`agent-spring-boot-starter`** — Spring Boot autoconfiguration: drop it in and inject a governed
   `Agent` (plus streaming + a request executor) — the path most Spring apps will use.
 - **`agent-adk`** — wraps a Google ADK agent as an `Agent` (agent-as-component): ADK is a full
