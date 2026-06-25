@@ -6,6 +6,7 @@ import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
 import dev.vaijanath.aiagent.agent.RequestContext;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -60,8 +61,11 @@ public final class A2aHandler {
         String session = (request.sessionId() == null || request.sessionId().isBlank())
                 ? UUID.randomUUID().toString()
                 : request.sessionId();
+        Instant deadline = request.deadlineEpochMillis() == null
+                ? null
+                : Instant.ofEpochMilli(request.deadlineEpochMillis());
         return new RequestContext(
-                session, request.principal(), request.tenant(), request.traceId(), null, Map.of());
+                session, request.principal(), request.tenant(), request.traceId(), deadline, Map.of());
     }
 
     private String write(Object value) {
