@@ -3,14 +3,67 @@
 Notable changes to java-ai-agent. Format loosely follows [Keep a Changelog](https://keepachangelog.com);
 versioning is [SemVer](https://semver.org). (Commit history has the fine-grained detail.)
 
-## [Unreleased]
+## [0.4.0] — 2026-06-25
+
+The **hardening** release: production-rigor and observability across the runtime and the reference,
+driven by a pair of code reviews. Almost entirely additive — the one breaking change is a new component
+on the A2A request record (see [docs/MIGRATION-0.4.md](docs/MIGRATION-0.4.md)).
+
+### Added
+
+- **Tool-execution safety** (`agent-core`) — `DefaultAgent.maxToolCallsPerStep` bounds a step's tool
+  fan-out (`0` = unlimited; `ProductionAgentRuntime` defaults to 16). Beyond the ceiling each call still
+  comes back as an error result, so the transcript stays valid. Policy-denied tools now log a **WARN**
+  with the fix instead of a silent INFO.
+- **Observer timing** (`agent-core`, `agent-spring-boot-starter`) — additive `AgentObserver` default
+  methods carry latency: `onModelResponse` / `onToolResult` / `onTurnEnd(…, Duration)`.
+  `MicrometerAgentObserver` records `agent.{model,tool,turn}.latency` timers.
+- **Per-model token accounting & cost** (`agent-core`) — `AgentObserver.onUsage(model, usage)`;
+  `TokenAccountingObserver.tokensByModel()` for a per-model breakdown; and a **bring-your-own**
+  `TokenPrice` + `Pricing` to turn tokens into cost. No price table is bundled (list prices go stale;
+  unpriced models are free, the right default for local models).
+- **Error taxonomy** (`agent-core`) — `StopReason`, a closed enum (`Category` + `retryable()`), plus
+  `AgentResponse.reason()` / `retryable()`. A distinct `BUDGET_EXCEEDED` reports a hit token budget
+  separately from a model outage (`model_error`).
+- **Turn-level idempotency** (`agent-core`, `agent-store-jdbc`) — an `IdempotencyStore` seam +
+  `IdempotentAgent` that replays a key's non-retryable result instead of re-running the turn, with an
+  `InMemoryIdempotencyStore` and a durable `JdbcIdempotencyStore`.
+- **Tracing context across virtual threads** — MDC (traceId/tenant) now propagates across the runtime's
+  virtual-thread boundaries, so parallel/async work keeps its log context. `OtelAgentObserver` makes the
+  turn span current (proper nesting) and sets ERROR status + records the exception on a failed turn.
+- **A2A deadline propagation** (`agent-a2a`) — `A2aRequest` carries the caller's remaining deadline so a
+  remote turn is bounded server-side rather than running on after the caller has timed out. (See
+  **Changed**.)
 
 ### Changed
 
+- **`production-reference` hardening:**
+  - **Fail-fast** under the `prod` profile on insecure configuration (no `agent.api-keys`, the default DB
+    password, no guard model) — an unsafe prod deployment refuses to start, rather than only warning.
+  - **Tenant is bound to the API key**, not trusted from the `X-Tenant-Id` header, closing a
+    tenant-spoofing gap when authentication is enabled.
+  - **Rate limiter** is bounded (LRU, no unbounded growth), keyed by credential/address, and requires
+    `Content-Length` (returns 411 otherwise).
+  - **Turn idempotency is now enforced** — the `Idempotency-Key` header (already accepted) deduplicates
+    via `IdempotentAgent` + `JdbcIdempotencyStore` (new `V2__agent_idempotency.sql` migration).
+- **Ops / DX** — Trivy gates PRs on fixable HIGH/CRITICAL findings; `AnthropicModelPort.fromEnv()` /
+  `OpenAiModelPort.fromEnv()` give a friendly, actionable error on a missing key; the cookbook gains a
+  "which builder?" table and a "token accounting & cost" section.
+- **(Breaking)** `A2aRequest` gained a `deadlineEpochMillis` component, changing its **canonical
+  constructor**. Prefer `A2aRequest.of(input)` or add the trailing argument; callers that use
+  `RemoteAgent` / `A2aServer` are unaffected. Excluded from the japicmp gate for this release. See
+  [docs/MIGRATION-0.4.md](docs/MIGRATION-0.4.md).
 - The **FinCopilot** reference application moved to its own repository
   ([vaiju1981/fincopilot](https://github.com/vaiju1981/fincopilot)) and now consumes the published
-  `io.github.vaiju1981:agent-*` 0.3.0 artifacts. This repository is now library-only (plus the runnable
-  `examples/` and `demos/`). No library API changed.
+  `io.github.vaiju1981:agent-*` artifacts. This repository is now library-only (plus the runnable
+  `examples/` and `demos/`).
+
+### Notes
+
+- `DefaultAgent.converse` / `executeCalls` were refactored below the cognitive-complexity gate — a pure,
+  behavior-preserving change with no API or semantic impact.
+- Every change above is additive against the 0.3.0 API except the `A2aRequest` constructor; the japicmp
+  baseline remains 0.3.0 for this release.
 
 ## [0.3.0] — 2026-06-25
 
