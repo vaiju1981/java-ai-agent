@@ -130,6 +130,7 @@ public final class DefaultAgent implements Agent {
 
     @Override
     public AgentResponse run(AgentRequest request) {
+        long startNanos = System.nanoTime();
         RequestContext ctx = request.context();
 
         // 1. Input guardrails first, so observers and audit only ever see post-guardrail (e.g.
@@ -141,17 +142,17 @@ public final class DefaultAgent implements Agent {
             log.info("input blocked: {}", in.reason());
             audit("guardrail.block", ctx, "stage=INPUT reason=" + in.reason());
             auditTurn("turn.end", ctx, "blocked");
-            return finish(AgentResponse.blocked(in.content(), in.reason()));
+            return finish(AgentResponse.blocked(in.content(), in.reason()), startNanos);
         }
 
         // 2. Run with the session's memory held, so the entry can't be evicted mid-turn and
         //    concurrent requests for the same session serialize; different sessions run concurrently.
         return conversations.withMemory(
-                ctx.tenant(), ctx.sessionId(), memory -> converse(ctx, in.content(), memory));
+                ctx.tenant(), ctx.sessionId(), memory -> converse(ctx, in.content(), memory, startNanos));
     }
 
     /** The model/tool loop for one turn, holding the session's memory lock. */
-    private AgentResponse converse(RequestContext ctx, String userContent, Memory memory) {
+    private AgentResponse converse(RequestContext ctx, String userContent, Memory memory, long startNanos) {
         if (memory.history().isEmpty() && systemPrompt != null && !systemPrompt.isBlank()) {
             memory.add(Message.system(systemPrompt));
         }
@@ -172,11 +173,12 @@ public final class DefaultAgent implements Agent {
                 log.info("turn deadline exceeded for session {}", ctx.sessionId());
                 auditTurn("turn.end", ctx, "deadline_exceeded");
                 return finish(AgentResponse.stopped(
-                        "I ran out of time on this request.", "deadline_exceeded"));
+                        "I ran out of time on this request.", "deadline_exceeded"), startNanos);
             }
             ModelRequest req = new ModelRequest(memory.history(), toolSpecs);
             notify(o -> o.onModelCall(req));
             final ModelResponse resp;
+            long modelStart = System.nanoTime();
             try {
                 // Raw tokens are pre-guardrail and therefore unsafe, so they are NOT streamed by
                 // default — the turn's result is delivered only after output guardrails run. A caller
@@ -191,9 +193,10 @@ public final class DefaultAgent implements Agent {
                 audit("error", ctx, "model call failed");
                 auditTurn("turn.end", ctx, "model_error");
                 return finish(AgentResponse.stopped(
-                        "I ran into a problem reaching the model. Please try again.", "model_error"));
+                        "I ran into a problem reaching the model. Please try again.", "model_error"), startNanos);
             }
-            notify(o -> o.onModelResponse(resp));
+            Duration modelLatency = Duration.ofNanos(System.nanoTime() - modelStart);
+            notify(o -> o.onModelResponse(resp, modelLatency));
 
             if (resp.hasToolCalls()) {
                 List<ToolCall> calls = resp.toolCalls();
@@ -204,14 +207,15 @@ public final class DefaultAgent implements Agent {
                 }
                 // Execute (concurrently when safe — see executeCalls), then record results in call
                 // order so the transcript and observers stay deterministic regardless of finish order.
-                List<StructuredToolResult> raws = executeCalls(calls, activeByName, ctx);
+                List<Timed> raws = executeCalls(calls, activeByName, ctx);
                 for (int i = 0; i < calls.size(); i++) {
                     ToolCall call = calls.get(i);
-                    StructuredToolResult raw = raws.get(i);
+                    StructuredToolResult raw = raws.get(i).result();
+                    Duration toolLatency = raws.get(i).latency();
                     // Cap once so observers/recorders and the model all see the same bounded result.
                     ToolResult result =
                             new ToolResult(capped(raw.result().content(), maxToolResultChars), raw.result().error());
-                    notify(o -> o.onToolResult(call.name(), result));
+                    notify(o -> o.onToolResult(call.name(), result, toolLatency));
                     // A structured payload (if any) goes to observers/UIs only — never into the model.
                     if (raw.hasData()) {
                         String dataJson = raw.dataJson();
@@ -233,7 +237,7 @@ public final class DefaultAgent implements Agent {
             auditTurn("turn.end", ctx, "max_steps");
             return finish(AgentResponse.stopped(
                     "I couldn't finish that within my step budget. Please try rephrasing.",
-                    "max_steps"));
+                    "max_steps"), startNanos);
         }
 
         // Output guardrails — nothing unsafe reaches the user.
@@ -243,10 +247,10 @@ public final class DefaultAgent implements Agent {
             log.info("output blocked: {}", out.reason());
             audit("guardrail.block", ctx, "stage=OUTPUT reason=" + out.reason());
             auditTurn("turn.end", ctx, "blocked");
-            return finish(AgentResponse.blocked(out.content(), out.reason()));
+            return finish(AgentResponse.blocked(out.content(), out.reason()), startNanos);
         }
         auditTurn("turn.end", ctx, "completed");
-        return finish(AgentResponse.completed(out.content()));
+        return finish(AgentResponse.completed(out.content()), startNanos);
     }
 
     private boolean deadlineExceeded(RequestContext ctx) {
@@ -269,8 +273,9 @@ public final class DefaultAgent implements Agent {
         }
     }
 
-    private AgentResponse finish(AgentResponse response) {
-        notify(o -> o.onTurnEnd(response));
+    private AgentResponse finish(AgentResponse response, long startNanos) {
+        Duration turnLatency = Duration.ofNanos(System.nanoTime() - startNanos);
+        notify(o -> o.onTurnEnd(response, turnLatency));
         return response;
     }
 
@@ -297,7 +302,7 @@ public final class DefaultAgent implements Agent {
      */
     // Virtual threads suit I/O-bound tool calls; on JDK 24+ synchronized no longer pins them (S6906).
     @SuppressWarnings("java:S6906")
-    private List<StructuredToolResult> executeCalls(
+    private List<Timed> executeCalls(
             List<ToolCall> calls, Map<String, Tool> activeByName, RequestContext ctx) {
         // Bound the per-step fan-out: beyond the ceiling, calls are not executed — each comes back as an
         // error result (the model still gets a result per call, so the transcript stays valid).
@@ -308,38 +313,52 @@ public final class DefaultAgent implements Agent {
                     + "(maxToolCallsPerStep={})", calls.size(), limit, maxToolCallsPerStep);
         }
 
-        List<StructuredToolResult> results = new ArrayList<>(calls.size());
+        List<Timed> results = new ArrayList<>(calls.size());
         boolean canParallel =
                 parallelToolCalls && toRun.size() > 1 && toolExecutor == null && approvalHandler == null;
         if (!canParallel) {
             for (ToolCall call : toRun) {
-                results.add(executeOne(call, activeByName, ctx));
+                results.add(timedExecute(call, activeByName, ctx));
             }
         } else {
             try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
-                List<Future<StructuredToolResult>> futures = new ArrayList<>(toRun.size());
+                List<Future<Timed>> futures = new ArrayList<>(toRun.size());
                 for (ToolCall call : toRun) {
-                    futures.add(pool.submit(() -> executeOne(call, activeByName, ctx)));
+                    futures.add(pool.submit(() -> timedExecute(call, activeByName, ctx)));
                 }
-                for (Future<StructuredToolResult> future : futures) {
+                for (Future<Timed> future : futures) {
                     try {
                         results.add(future.get());
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        results.add(StructuredToolResult.of(ToolResult.error("tool execution was interrupted")));
+                        results.add(new Timed(
+                                StructuredToolResult.of(ToolResult.error("tool execution was interrupted")),
+                                Duration.ZERO));
                     } catch (ExecutionException e) {
                         log.warn("parallel tool execution failed", e.getCause());
-                        results.add(StructuredToolResult.of(ToolResult.error("tool execution failed")));
+                        results.add(new Timed(
+                                StructuredToolResult.of(ToolResult.error("tool execution failed")), Duration.ZERO));
                     }
                 }
             }
         }
         for (int i = limit; i < calls.size(); i++) {
-            results.add(StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + calls.get(i).name()
-                    + "' skipped: exceeded the per-step tool-call limit of " + maxToolCallsPerStep)));
+            results.add(new Timed(
+                    StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + calls.get(i).name()
+                            + "' skipped: exceeded the per-step tool-call limit of " + maxToolCallsPerStep)),
+                    Duration.ZERO));
         }
         return results;
     }
+
+    private Timed timedExecute(ToolCall call, Map<String, Tool> activeByName, RequestContext ctx) {
+        long start = System.nanoTime();
+        StructuredToolResult result = executeOne(call, activeByName, ctx);
+        return new Timed(result, Duration.ofNanos(System.nanoTime() - start));
+    }
+
+    /** A tool result paired with the wall-clock latency of producing it. */
+    private record Timed(StructuredToolResult result, Duration latency) {}
 
     /** Replay executor when configured (deterministic), otherwise the authorize-then-invoke path. */
     private StructuredToolResult executeOne(ToolCall call, Map<String, Tool> activeByName, RequestContext ctx) {

@@ -8,6 +8,7 @@ import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.tool.ApprovalRequest;
 import dev.vaijanath.aiagent.tool.ToolResult;
+import java.time.Duration;
 
 /**
  * The observability seam. The runtime emits these lifecycle events; implementations trace, meter,
@@ -31,9 +32,26 @@ public interface AgentObserver {
 
     default void onModelResponse(ModelResponse response) {}
 
+    /**
+     * The model responded, with the wall-clock {@code latency} of that call. The runtime invokes this
+     * timed variant; it defaults to the untimed {@link #onModelResponse(ModelResponse)}, so existing
+     * observers keep working and timing-aware ones override this instead.
+     */
+    default void onModelResponse(ModelResponse response, Duration latency) {
+        onModelResponse(response);
+    }
+
     default void onToolCall(ToolCall call) {}
 
     default void onToolResult(String toolName, ToolResult result) {}
+
+    /**
+     * A tool finished, with the wall-clock {@code latency} of that call. The runtime invokes this timed
+     * variant; it defaults to the untimed {@link #onToolResult(String, ToolResult)}.
+     */
+    default void onToolResult(String toolName, ToolResult result, Duration latency) {
+        onToolResult(toolName, result);
+    }
 
     /**
      * A {@link dev.vaijanath.aiagent.tool.StructuredTool} produced a structured JSON payload alongside its
@@ -50,6 +68,14 @@ public interface AgentObserver {
     default void onApprovalRequired(ApprovalRequest request) {}
 
     default void onTurnEnd(AgentResponse response) {}
+
+    /**
+     * The turn ended, with its total wall-clock {@code duration}. The runtime invokes this timed
+     * variant; it defaults to the untimed {@link #onTurnEnd(AgentResponse)}.
+     */
+    default void onTurnEnd(AgentResponse response, Duration duration) {
+        onTurnEnd(response);
+    }
 
     /**
      * A raw, <b>pre-guardrail</b> output chunk streamed from the model — unsafe to surface directly,
