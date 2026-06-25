@@ -14,6 +14,7 @@ dependencyResolutionManagement {
 
 include(
     "agent-core",
+    "agent-bom",
     "agent-langchain4j",
     "agent-spring-ai",
     "agent-adk",
