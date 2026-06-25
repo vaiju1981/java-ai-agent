@@ -140,7 +140,9 @@ class AnthropicModelPortTest {
         if (key == null || key.isBlank()) {
             assertThrows(IllegalStateException.class, AnthropicModelPort::fromEnv);
         } else {
-            assertDoesNotThrow(AnthropicModelPort::fromEnv); // key present → builds a client (no network)
+            assertDoesNotThrow(() -> {
+                AnthropicModelPort.fromEnv(); // key present → builds a client (no network)
+            });
         }
     }
 }

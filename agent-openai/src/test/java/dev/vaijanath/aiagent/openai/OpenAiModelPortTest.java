@@ -121,7 +121,9 @@ class OpenAiModelPortTest {
         if (key == null || key.isBlank()) {
             assertThrows(IllegalStateException.class, OpenAiModelPort::fromEnv);
         } else {
-            assertDoesNotThrow(OpenAiModelPort::fromEnv); // key present → builds a client (no network)
+            assertDoesNotThrow(() -> {
+                OpenAiModelPort.fromEnv(); // key present → builds a client (no network)
+            });
         }
     }
 }
