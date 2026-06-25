@@ -7,7 +7,9 @@ import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 import java.util.Objects;
 
 /**
@@ -15,13 +17,17 @@ import java.util.Objects;
  * with model/tool/guardrail steps as span events and token usage as attributes (following the
  * {@code gen_ai.*} semantic-convention naming).
  *
- * <p>Span state is held per-thread, so concurrent (sub-)agents each get their own span. Only the
+ * <p>The turn span is made <em>current</em> for its duration, so it nests under an enclosing span (e.g.
+ * an incoming HTTP server span) and synchronous sub-agent turns nest under it. A failed or blocked turn
+ * gets {@code ERROR} status and any exception is recorded, so error traces surface in the usual way.
+ * Span state is held per-thread, so concurrent (sub-)agents each get their own span. Only the
  * OpenTelemetry <em>API</em> is required; the consumer supplies the SDK and exporter.
  */
 public final class OtelAgentObserver implements AgentObserver {
 
     private final Tracer tracer;
     private final ThreadLocal<Span> currentSpan = new ThreadLocal<>();
+    private final ThreadLocal<Scope> currentScope = new ThreadLocal<>();
     private final ThreadLocal<long[]> tokens = ThreadLocal.withInitial(() -> new long[2]);
 
     public OtelAgentObserver(Tracer tracer) {
@@ -30,7 +36,9 @@ public final class OtelAgentObserver implements AgentObserver {
 
     @Override
     public void onTurnStart(String input) {
-        currentSpan.set(tracer.spanBuilder("agent.turn").startSpan());
+        Span span = tracer.spanBuilder("agent.turn").startSpan();
+        currentSpan.set(span);
+        currentScope.set(span.makeCurrent()); // nest under any enclosing span; children nest under this
         tokens.set(new long[2]);
     }
 
@@ -62,6 +70,16 @@ public final class OtelAgentObserver implements AgentObserver {
         }
     }
 
+    /** A recoverable failure (e.g. the model call threw): record it and mark the span as errored. */
+    @Override
+    public void onError(String stage, Throwable error) {
+        Span span = currentSpan.get();
+        if (span != null) {
+            span.recordException(error);
+            span.setStatus(StatusCode.ERROR, stage);
+        }
+    }
+
     @Override
     public void onTurnEnd(AgentResponse response) {
         Span span = currentSpan.get();
@@ -71,9 +89,19 @@ public final class OtelAgentObserver implements AgentObserver {
             span.setAttribute("gen_ai.usage.output_tokens", t[1]);
             span.setAttribute("agent.blocked", response.blocked());
             span.setAttribute("agent.stop_reason", response.stopReason());
+            // A non-completion that isn't a deliberate guardrail block (model_error, deadline_exceeded,
+            // max_steps) is an error, so it shows up under the usual trace error filter.
+            if (!response.blocked() && !"completed".equals(response.stopReason())) {
+                span.setStatus(StatusCode.ERROR, response.stopReason());
+            }
+            Scope scope = currentScope.get();
+            if (scope != null) {
+                scope.close();
+            }
             span.end();
         }
         currentSpan.remove();
+        currentScope.remove();
         tokens.remove();
     }
 }
