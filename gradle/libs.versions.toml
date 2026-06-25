@@ -3,6 +3,7 @@
 
 [versions]
 slf4j = "2.0.18"
+logback = "1.5.18"
 junit = "6.1.0"
 jackson = "2.22.0"
 opentelemetry = "1.63.0"
@@ -22,6 +23,8 @@ testcontainers = "2.0.5"
 [libraries]
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+# A real SLF4J provider (with a working MDCAdapter) for tests that exercise MDC propagation.
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 
 # Used by adapters/examples to parse JSON tool arguments and parameter schemas (not by agent-core).
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }

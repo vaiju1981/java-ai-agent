@@ -1,5 +1,6 @@
 package dev.vaijanath.aiagent.model;
 
+import dev.vaijanath.aiagent.observe.Mdc;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -62,7 +63,7 @@ public final class ResilientModelPort implements ModelPort {
         RuntimeException last = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             // One fresh virtual thread per attempt — nothing long-lived to leak or shut down.
-            FutureTask<ModelResponse> task = new FutureTask<>(() -> delegate.chat(request));
+            FutureTask<ModelResponse> task = new FutureTask<>(Mdc.propagate(() -> delegate.chat(request)));
             Thread worker = Thread.ofVirtual().name("resilient-model").start(task);
             try {
                 return task.get(timeout.toMillis(), TimeUnit.MILLISECONDS);

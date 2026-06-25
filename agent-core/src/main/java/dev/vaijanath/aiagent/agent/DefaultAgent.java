@@ -16,6 +16,7 @@ import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
+import dev.vaijanath.aiagent.observe.Mdc;
 import dev.vaijanath.aiagent.tool.ApprovalHandler;
 import dev.vaijanath.aiagent.tool.ApprovalRequest;
 import dev.vaijanath.aiagent.tool.ContextualTool;
@@ -324,7 +325,7 @@ public final class DefaultAgent implements Agent {
             try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
                 List<Future<Timed>> futures = new ArrayList<>(toRun.size());
                 for (ToolCall call : toRun) {
-                    futures.add(pool.submit(() -> timedExecute(call, activeByName, ctx)));
+                    futures.add(pool.submit(Mdc.propagate(() -> timedExecute(call, activeByName, ctx))));
                 }
                 for (Future<Timed> future : futures) {
                     try {
