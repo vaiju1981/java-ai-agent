@@ -73,6 +73,8 @@ import org.slf4j.LoggerFactory;
 public final class DefaultAgent implements Agent {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultAgent.class);
+    private static final String TOOL_PREFIX = "tool '"; // start of "tool '<name>'" in messages
+    private static final String AUDIT_TOOL_DENIED = "tool.denied";
 
     private final ModelPort model;
     private final List<Guardrail> guardrails;
@@ -341,8 +343,8 @@ public final class DefaultAgent implements Agent {
         Tool tool = available.get(call.name());
         if (tool == null) {
             log.info("tool '{}' not available this turn", call.name());
-            audit("tool.denied", ctx, "tool=" + call.name() + " reason=not-available");
-            return StructuredToolResult.of(ToolResult.error("tool '" + call.name() + "' is not available"));
+            audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=not-available");
+            return StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + call.name() + "' is not available"));
         }
         ToolCallContext callContext = new ToolCallContext(
                 tool.spec(), call.argumentsJson(), ctx.principal(), ctx.tenant(),
@@ -353,9 +355,9 @@ public final class DefaultAgent implements Agent {
             // is configured; otherwise it is hard-denied (the safe default).
             if (approvalHandler == null || tool.spec().effect() != ToolEffect.EFFECTFUL) {
                 log.info("tool '{}' denied: {}", call.name(), decision.reason());
-                audit("tool.denied", ctx, "tool=" + call.name() + " reason=" + decision.reason());
+                audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=" + decision.reason());
                 return StructuredToolResult.of(
-                        ToolResult.error("tool '" + call.name() + "' not permitted: " + decision.reason()));
+                        ToolResult.error(TOOL_PREFIX + call.name() + "' not permitted: " + decision.reason()));
             }
             ApprovalRequest request = new ApprovalRequest(UUID.randomUUID().toString(), call, callContext);
             notify(o -> o.onApprovalRequired(request));
@@ -364,12 +366,12 @@ public final class DefaultAgent implements Agent {
                 approved = approvalHandler.requestApproval(request);
             } catch (RuntimeException e) {
                 log.warn("approval handler failed for tool '{}'", call.name(), e);
-                audit("tool.denied", ctx, "tool=" + call.name() + " reason=approval-error");
-                return StructuredToolResult.of(ToolResult.error("tool '" + call.name() + "' approval failed"));
+                audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=approval-error");
+                return StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + call.name() + "' approval failed"));
             }
             if (!approved) {
                 log.info("tool '{}' declined by the approver", call.name());
-                audit("tool.denied", ctx, "tool=" + call.name() + " reason=approval-declined");
+                audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=approval-declined");
                 return StructuredToolResult.of(ToolResult.error("the user declined to run '" + call.name() + "'"));
             }
             audit("tool.approved", ctx, "tool=" + call.name() + " via=human");
@@ -379,7 +381,7 @@ public final class DefaultAgent implements Agent {
             log.info("tool '{}' arguments invalid: {}", call.name(), invalid.get());
             audit("tool.invalid", ctx, "tool=" + call.name() + " reason=" + invalid.get());
             return StructuredToolResult.of(
-                    ToolResult.error("tool '" + call.name() + "' arguments invalid: " + invalid.get()));
+                    ToolResult.error(TOOL_PREFIX + call.name() + "' arguments invalid: " + invalid.get()));
         }
         audit("tool.allowed", ctx, "tool=" + call.name() + " effect=" + tool.spec().effect());
         StructuredToolResult result = safeInvoke(tool, call, callContext);
@@ -401,13 +403,13 @@ public final class DefaultAgent implements Agent {
             worker.interrupt();
             log.warn("tool '{}' timed out after {}", tool.name(), toolTimeout);
             return StructuredToolResult.of(
-                    ToolResult.error("tool '" + tool.name() + "' timed out after " + toolTimeout));
+                    ToolResult.error(TOOL_PREFIX + tool.name() + "' timed out after " + toolTimeout));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return StructuredToolResult.of(ToolResult.error("tool '" + tool.name() + "' was interrupted"));
+            return StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + tool.name() + "' was interrupted"));
         } catch (ExecutionException e) {
             log.warn("tool '{}' threw", tool.name(), e.getCause());
-            return StructuredToolResult.of(ToolResult.error("tool '" + tool.name() + "' failed"));
+            return StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + tool.name() + "' failed"));
         }
     }
 
@@ -423,7 +425,7 @@ public final class DefaultAgent implements Agent {
         } catch (RuntimeException e) {
             // The exception detail goes to the log, never into the model's context.
             log.warn("tool '{}' threw", tool.name(), e);
-            return StructuredToolResult.of(ToolResult.error("tool '" + tool.name() + "' failed"));
+            return StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + tool.name() + "' failed"));
         }
     }
 
