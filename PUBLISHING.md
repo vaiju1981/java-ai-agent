@@ -1,8 +1,8 @@
 # Publishing
 
-The library modules (`agent-core`, `agent-langchain4j`, `agent-spring-ai`, `agent-adk`,
-`agent-observability-otel`) are configured for Maven publication with sources + javadoc jars and
-full POM metadata. The `examples` module is not published.
+All `java-library` modules (everything under `agent-*`) are published to Maven Central under
+`io.github.vaiju1981`, with sources + javadoc jars and full POM metadata. The `examples`, `demos`,
+`production-reference`, and `apps/*` modules are applications and are **not** published.
 
 ## Try it locally (works today)
 
@@ -20,20 +20,21 @@ dependencies {
 }
 ```
 
-## Publishing to Maven Central (remaining setup)
+## Publishing to Maven Central (live)
 
-Group `io.github.vaiju1981` is verifiable via the GitHub namespace on the
-[Central Portal](https://central.sonatype.com). To publish a release:
+Releases are on Maven Central under `io.github.vaiju1981` — currently **0.2.0** (plus 0.1.0–0.1.2).
+The namespace is verified, artifacts are signed, and a release is driven by the `release` GitHub
+Actions workflow on a version tag.
 
-1. **Verify the namespace** `io.github.vaiju1981` on the Central Portal (one-time).
-2. **Add signing** — Central requires signed artifacts. Add the `signing` plugin and a GPG key
-   (`signing.gnupg.keyName`), and sign the `maven` publication.
-3. **Add credentials** — a Central Portal user token, supplied via `~/.gradle/gradle.properties`
-   (never commit it).
-4. **Drop `-SNAPSHOT`** from the version for a release.
-5. **Publish** via the Central Portal (e.g. the `com.vanniktech.maven.publish` plugin, or the
-   Sonatype Central upload). 
+Per-release process:
 
-These steps need the author's Central account + signing key, so they're documented rather than
-wired in. The publication itself (coordinates, jars, POM) is already correct — confirmed by
-`publishToMavenLocal`.
+1. **Tag the release** — `RELEASE_VERSION` drives the build version (the default is `0.1.0-SNAPSHOT`
+   for local/dev builds).
+2. **CI builds, signs, and uploads** a deployment to the Central Portal (credentials from `CENTRAL_*`
+   secrets; GPG signing key in CI).
+3. **Publish the deployment** in the Central Portal UI — it is uploaded as `USER_MANAGED` (see the
+   `nmcpSettings` in `settings.gradle.kts`), so a human clicks **Publish** as the safe final gate.
+4. **After it lands**, bump the japicmp baseline (`-PjapicmpBaseline`) to the released version and
+   update the [CHANGELOG](CHANGELOG.md).
+
+Signing keys and Portal credentials live in CI secrets / `~/.gradle/gradle.properties`, never in the repo.
