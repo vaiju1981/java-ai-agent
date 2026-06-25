@@ -195,6 +195,26 @@ Agent manager = DefaultAgent.builder()
 manager.run(new AgentRequest("Research virtual threads and write a 3-line summary."));
 ```
 
+## 6c. Distributed agents over the network (A2A — `agent-a2a`)
+
+Expose an agent over HTTP and call it from another process. `A2aServer` serves one (governed) agent;
+`RemoteAgent` is a client that **implements `Agent`**, so a remote service drops into a `SupervisorAgent`,
+`GraphAgent`, `HandoffAgent`, or `Agents.asTool` exactly like a local agent — the turn's identity, tenant,
+and trace travel with the call.
+
+```java
+// Service side: expose a governed agent (put it behind a gateway for auth/TLS in production)
+A2aServer server = new A2aServer(governedAgent, "billing", "handles invoices and refunds", 8080);
+
+// Caller side: a remote agent is just an Agent
+Agent billing = new RemoteAgent("http://billing.internal:8080/");
+Agent desk = SupervisorAgent.builder()
+        .specialist("billing", "invoices, refunds", billing)   // a remote specialist
+        .specialist("weather", "forecasts", localWeatherAgent) // alongside a local one
+        .router(new LlmRouter(model))
+        .build();
+```
+
 ## 7. Smarter memory
 
 Bound context by tokens, or summarize older turns instead of dropping them.
