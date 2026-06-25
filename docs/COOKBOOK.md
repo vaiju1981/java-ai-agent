@@ -95,6 +95,19 @@ Agent supervisor = SupervisorAgent.builder()
 For a manager that loops (delegate → inspect → re-delegate) use `ManagerAgent`; for a task fanned
 out to parallel sub-agents with dependencies, use `DeepAgent` (a DAG with data flow).
 
+For the **Swarm** pattern — peers that hand control to one another (no central manager) — use
+`HandoffAgent`: a start agent handles the request, then a `Handoff` decides whether a peer takes over.
+
+```java
+Agent swarm = HandoffAgent.builder()
+        .agent("triage", "routes incoming requests", triageAgent)
+        .agent("billing", "billing, invoices, refunds", billingAgent)
+        .start("triage")
+        .handoff(new LlmHandoff(model))  // after each hop: transfer to a peer, or STAY
+        .build();
+// Share a ConversationStore across the agents for true handoff continuity (each peer sees the history).
+```
+
 ## 6b. Agents as tools — agents calling agents (`agent-core`)
 
 Wrap an `Agent` as a `Tool` and the calling model decides, per turn, which specialist to invoke and
