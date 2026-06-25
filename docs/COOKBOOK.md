@@ -91,6 +91,26 @@ Agent supervisor = SupervisorAgent.builder()
         .build();                        // unknown routes fall back to the first specialist
 ```
 
+For a manager that loops (delegate → inspect → re-delegate) use `ManagerAgent`; for a task fanned
+out to parallel sub-agents with dependencies, use `DeepAgent` (a DAG with data flow).
+
+## 6b. Agents as tools — agents calling agents (`agent-core`)
+
+Wrap an `Agent` as a `Tool` and the calling model decides, per turn, which specialist to invoke and
+with what request — peer agents collaborating, no extra orchestration code. The caller's
+identity/tenant/trace/deadline flow into the specialist, and its guardrails still apply.
+
+```java
+Agent manager = DefaultAgent.builder()
+        .model(model)
+        .systemPrompt("Coordinate the specialists to answer the user.")
+        .tool(Agents.asTool("research", "gathers and verifies facts", researchAgent))
+        .tool(Agents.asTool("write", "drafts prose", writerAgent, ToolEffect.READ_ONLY))
+        .build();
+
+manager.run(new AgentRequest("Research virtual threads and write a 3-line summary."));
+```
+
 ## 7. Smarter memory
 
 Bound context by tokens, or summarize older turns instead of dropping them.
