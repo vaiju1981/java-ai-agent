@@ -20,6 +20,7 @@ dependencies {
         api(project(":agent-spring-boot-starter"))
         api(project(":agent-adk"))
         api(project(":agent-mcp"))
+        api(project(":agent-a2a"))
         api(project(":agent-observability-otel"))
         api(project(":agent-store-jdbc"))
         api(project(":agent-store-pgvector"))

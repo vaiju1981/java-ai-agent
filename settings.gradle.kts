@@ -19,6 +19,7 @@ include(
     "agent-spring-ai",
     "agent-adk",
     "agent-mcp",
+    "agent-a2a",
     "agent-observability-otel",
     "agent-store-jdbc",
     "agent-store-pgvector",
