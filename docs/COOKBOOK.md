@@ -24,6 +24,23 @@ AgentResponse response = agent.run(new AgentRequest("Hello!"));
 System.out.println(response.output());
 ```
 
+## 1b. A typed interface over an agent (`@AiService`)
+
+Prefer a plain Java interface to a builder call site? Wrap any governed `Agent` as a typed service —
+each method becomes one agent turn (`{{...}}` placeholders fill from `@V` parameters).
+
+```java
+interface SupportBot {
+    String answer(String question);
+
+    @UserMessage("Summarize in {{words}} words:\n{{text}}")
+    String summarize(@V("text") String text, @V("words") int words);
+}
+
+SupportBot bot = AiServices.create(SupportBot.class, agent); // agent = any governed Agent
+String reply = bot.answer("How do refunds work?");
+```
+
 ## 2. Tools as plain methods (`agent-tools-annotations`)
 
 Annotate methods instead of hand-writing JSON schemas; `ReflectiveTools` derives the schema and binds
