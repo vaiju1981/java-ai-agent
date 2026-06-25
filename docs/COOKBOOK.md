@@ -112,6 +112,17 @@ Agent grounded = new RetrievalAugmentedAgent(agent, store); // retrieves top-k, 
 grounded.run(new AgentRequest("How long do I have to return something?"));
 ```
 
+**Ingesting longer documents.** Real sources are too big to embed whole. `DocumentSplitter` breaks text
+into overlapping, boundary-aware chunks and `Ingestor` writes them to any store (chunk ids are
+`"{docId}#{n}"`, the document's metadata rides along):
+
+```java
+Ingestor ingestor = new Ingestor(DocumentSplitter.ofChars(1000, 150)); // ~1000-char chunks, 150 overlap
+ingestor.ingest("default",
+        new Document("handbook", Files.readString(Path.of("handbook.md")), Map.of("source", "handbook.md")),
+        store::add); // any ChunkStore — here the InMemoryVectorStore above
+```
+
 ## 6. Route to specialists (supervisor / handoff)
 
 ```java
