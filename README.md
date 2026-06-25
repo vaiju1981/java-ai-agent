@@ -10,8 +10,9 @@
 **Status:** a working, tested framework — `./gradlew build` is green and most capabilities are
 verified live against a local model.
 
-- **Runtime** — a guardrail-wrapped agent loop; **deep agents** (plan → parallel sub-agents on
-  virtual threads → synthesize); **streaming**.
+- **Runtime** — a guardrail-wrapped agent loop with **parallel tool calls** (one step's tool calls run
+  concurrently on virtual threads); **deep agents** (plan → parallel sub-agents → synthesize);
+  **streaming**.
 - **Substrate** — LangChain4j and Spring AI as `ModelPort`s (both with **tool-calling**); Google ADK
   wrapped as an `Agent`; MCP servers' tools as `Tool`s.
 - **Trust & ops** — governance at the universal `Agent` seam (`Trust.govern`) so guardrails and the
