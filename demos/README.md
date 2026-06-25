@@ -32,6 +32,32 @@ A self-contained tour of the entire trust layer on one governed support-desk age
 
 Start here to see what "production usage" means; the analytical demos below put a live model to work.
 
+## MultiAgentNewsroomDemo — the multi-agent toolkit in one flow
+
+One integrated showcase of the 0.3.0 multi-agent features, every piece composing on the single `Agent`
+seam. A "newsroom" is modelled as a workflow **graph** whose nodes are themselves other orchestrators:
+
+```
+topic ─▶ [research]  an A2A REMOTE agent (served on loopback, called like a local Agent)
+        ─▶ [draft]   a writer whose specialist (a headline writer) is an AGENT-AS-TOOL
+        ─▶ [review]  a GROUP CHAT panel (editor + fact-checker)
+        ──▶ approved? publish (END) : back to [draft]      (a conditional EDGE → a revise cycle)
+```
+
+Five features in one pipeline — `GraphAgent` (the spine, with a conditional edge and revise cycle),
+`agent-a2a` (`A2aServer` + `RemoteAgent`), `Agents.asTool`, `GroupChatAgent`, and a typed `@AiService`
+facade (`AiServices`) over the whole graph. The review node preserves the article as the graph state and
+only tags it `REVISE:` when sending it back, so the final output is the published article.
+
+```bash
+export AGENT_MODEL=gemma4:31b-cloud   # one model serves every role
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.multiagent.MultiAgentNewsroomDemo \
+  --args="virtual threads in Java"
+```
+
+Without `AGENT_MODEL` an honest stub runs the full wiring (graph walk + A2A round-trip + group chat) with
+placeholder text — useful to see the flow without a model.
+
 ## DataAnalystDemo — a real exploratory data analyst
 
 A senior data analyst over a **multi-table e-commerce warehouse** (~1,500 customers, ~12,000 orders,
