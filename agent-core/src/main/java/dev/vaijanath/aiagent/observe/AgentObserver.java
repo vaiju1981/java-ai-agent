@@ -6,6 +6,7 @@ import dev.vaijanath.aiagent.guardrail.GuardrailStage;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ModelResponse;
 import dev.vaijanath.aiagent.model.ToolCall;
+import dev.vaijanath.aiagent.model.Usage;
 import dev.vaijanath.aiagent.tool.ApprovalRequest;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import java.time.Duration;
@@ -40,6 +41,14 @@ public interface AgentObserver {
     default void onModelResponse(ModelResponse response, Duration latency) {
         onModelResponse(response);
     }
+
+    /**
+     * Token usage for a single model call, tagged with the model that produced it
+     * ({@link dev.vaijanath.aiagent.model.ModelPort#name()}). Emitted once per call, right after
+     * {@link #onModelResponse}, so meters can attribute spend per model in multi-model setups. A
+     * {@link Usage#UNKNOWN} (0/0) value means the provider didn't report counts. Defaults to no-op.
+     */
+    default void onUsage(String model, Usage usage) {}
 
     default void onToolCall(ToolCall call) {}
 
