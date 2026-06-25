@@ -138,6 +138,22 @@ Agent panel = GroupChatAgent.builder()
         .build();
 ```
 
+For an explicit **workflow graph** with branches and loops, use `GraphAgent`: named nodes (each any
+`Agent`) joined by edges, walked until an edge reaches `END`. Conditional edges enable cycles
+(e.g. draft → review → back to draft until approved), and an optional `CheckpointStore` makes the
+walk crash-resumable.
+
+```java
+Agent flow = GraphAgent.builder()
+        .node("draft", draftAgent)
+        .node("review", reviewAgent)
+        .start("draft")
+        .edge("draft", "review")
+        .edge("review", state -> state.contains("APPROVED") ? GraphAgent.END : "draft") // loop back
+        .checkpoints(checkpointStore) // optional: resume mid-graph after a crash
+        .build();
+```
+
 ## 6b. Agents as tools — agents calling agents (`agent-core`)
 
 Wrap an `Agent` as a `Tool` and the calling model decides, per turn, which specialist to invoke and
