@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -39,16 +40,35 @@ class RateLimitFilterTest {
         RateLimitFilter filter = new RateLimitFilter(10, 1_000_000);
         MockFilterChain chain = new MockFilterChain();
 
-        filter.doFilter(new MockHttpServletRequest("POST", "/api/agent/turn"), new MockHttpServletResponse(), chain);
+        filter.doFilter(withBody(), new MockHttpServletResponse(), chain);
 
         assertNotNull(chain.getRequest());
     }
 
-    private static MockHttpServletResponse attempt(RateLimitFilter filter) throws Exception {
+    @Test
+    void rejectsBodyMethodWithoutContentLengthWith411() throws Exception {
+        RateLimitFilter filter = new RateLimitFilter(0, 1_000_000);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/agent/turn");
-        request.addHeader("X-Principal-Id", "user-1"); // same bucket key across attempts
+        // No content set -> Content-Length is unknown (-1), which could bypass the size cap via chunking.
         MockHttpServletResponse response = new MockHttpServletResponse();
-        filter.doFilter(request, response, new MockFilterChain());
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(411, response.getStatus());
+        assertNull(chain.getRequest());
+    }
+
+    private static MockHttpServletRequest withBody() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/agent/turn");
+        request.setContent("{}".getBytes(StandardCharsets.UTF_8)); // a declared Content-Length
+        return request;
+    }
+
+    private static MockHttpServletResponse attempt(RateLimitFilter filter) throws Exception {
+        // No API key and a shared default remote address -> the same bucket across attempts.
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilter(withBody(), response, new MockFilterChain());
         return response;
     }
 }
