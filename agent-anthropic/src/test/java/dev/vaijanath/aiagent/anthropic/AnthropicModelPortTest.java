@@ -1,6 +1,8 @@
 package dev.vaijanath.aiagent.anthropic;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.anthropic.models.messages.Base64ImageSource;
@@ -121,5 +123,14 @@ class AnthropicModelPortTest {
         assertTrue(
                 tool.inputSchema().required().isEmpty()
                         || tool.inputSchema().required().get().isEmpty());
+    }
+
+    @Test
+    void requireApiKeyRejectsAMissingKeyWithAClearMessage() {
+        assertThrows(
+                IllegalStateException.class, () -> AnthropicModelPort.requireApiKey(null, "ANTHROPIC_API_KEY"));
+        assertThrows(
+                IllegalStateException.class, () -> AnthropicModelPort.requireApiKey(" ", "ANTHROPIC_API_KEY"));
+        assertDoesNotThrow(() -> AnthropicModelPort.requireApiKey("sk-ant-x", "ANTHROPIC_API_KEY"));
     }
 }

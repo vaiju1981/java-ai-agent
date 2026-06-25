@@ -32,8 +32,9 @@ jobs:
           ignore-unfixed: true
           format: sarif
           output: trivy-results.sarif
-          # Report-only: findings surface in the Security tab; the job (a required check) stays green.
-          exit-code: '0'
+          # Gate the PR on FIXABLE critical/high findings (ignore-unfixed above); the SARIF still uploads
+          # to the Security tab via the always() step below even when this fails.
+          exit-code: '1'
 
       - name: Upload results to the Security tab
         if: always()
