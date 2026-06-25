@@ -3,7 +3,70 @@
 Notable changes to java-ai-agent. Format loosely follows [Keep a Changelog](https://keepachangelog.com);
 versioning is [SemVer](https://semver.org). (Commit history has the fine-grained detail.)
 
-## [Unreleased] — 0.1.0-SNAPSHOT
+## [Unreleased]
+
+_Nothing yet._
+
+## [0.3.0] — 2026-06-25
+
+The multi-agent + multimodal release: the library now drives end-to-end, **multi-agent** applications
+— agents that route, hand off, chat, and call one another in- and cross-process — and accepts
+**images**.
+
+### Added
+
+- **Multi-agent orchestration** (`agent-core`), all composing on the one `Agent` seam:
+  - `Agents.asTool(...)` — wrap any agent as a `Tool`, so a model invokes peers as tools.
+  - `HandoffAgent` — the **Swarm** pattern: peers hand control to one another, no central manager.
+  - `GroupChatAgent` — **AutoGen-style** multi-agent conversation with a speaker selector
+    (round-robin or LLM-chosen).
+  - `GraphAgent` — a **LangGraph-style** workflow graph: named nodes joined by conditional edges,
+    with cycles and optional crash-resume via a `CheckpointStore`.
+- **`agent-openai`** — a first-party `ModelPort` over the official OpenAI Java SDK (Chat Completions),
+  alongside the existing `agent-anthropic`.
+- **Parallel tool calls** — `DefaultAgent` runs a turn's tool calls concurrently on virtual threads
+  (`parallelToolCalls`, on by default).
+- **`@AiService`-style facade** — `AiServices.create(MyInterface.class, agent)` turns a plain Java
+  interface (with `@UserMessage` / `@V` templates) into an agent-backed implementation.
+- **Multimodal input** — a `Media` type (image/audio; inline base64 or URL) and
+  `Message.user(text, media)`; the OpenAI and Anthropic adapters send images to vision models. See
+  **Changed** below.
+- **RAG ingestion** (`agent-core`) — `DocumentSplitter` (boundary-aware, overlapping chunks) and
+  `Ingestor`, writing to any `ChunkStore` (e.g. `InMemoryVectorStore`, `JdbcVectorStore`).
+- **`agent-a2a`** — Agent-to-Agent over HTTP: `A2aServer` exposes an `Agent`; `RemoteAgent` (itself an
+  `Agent`) calls a remote one, so distributed agents compose like local ones. Dependency-light (JDK
+  sockets + `java.net.http`).
+- **`create-agent` starter** — a copy-out quickstart project under `examples/create-agent`.
+
+### Changed
+
+- **(Breaking)** `Message` gained a `media` component for multimodal input, changing its canonical
+  constructor. Construction via the factory methods (`Message.user(...)`, etc.) is unaffected; only
+  direct `new Message(...)` callers need the trailing `media` argument. See
+  [docs/MIGRATION-0.3.md](docs/MIGRATION-0.3.md).
+
+## [0.2.0] — 2026-06-22
+
+The first real product on the framework, built end to end.
+
+### Added
+
+- **FinCopilot** (`apps/fincopilot`) — a complete, deployable grounded finance copilot: an Analyst
+  (per-user data; an effectful savings-goal tool with human-in-the-loop approval) and a RAG-grounded
+  Advisor, a React UI, Docker Compose, and an Ollama substrate — the worked example for building a
+  real product on `java-ai-agent`.
+- **`agent-spring-boot-starter` capabilities** (additive) — also auto-configures a per-request
+  streaming-agent factory and a stream executor, and provides shared HTTP plumbing (`AgentTurns`,
+  `SseAgentObserver`) so a Spring Boot agent endpoint needs little boilerplate.
+- **API-stability policy** — an `@Internal` marker (`dev.vaijanath.aiagent.annotation.Internal`) and a
+  written [API stability policy](docs/API-STABILITY.md), plus a per-module japicmp binary-compatibility
+  gate. No existing type's visibility changed. See [docs/MIGRATION-0.2.md](docs/MIGRATION-0.2.md).
+
+## [0.1.0] — 2026-06-22
+
+Initial public release — the agent runtime, trust layer, adapters, cognition, and a durable
+conversation store — published to Maven Central under `io.github.vaiju1981`. (Patch releases 0.1.1 and
+0.1.2 followed the same day with CI/publishing fixes and no API changes.)
 
 ### Added
 
@@ -147,5 +210,3 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 
 - Live ADK/MCP end-to-end need a configured ADK model / a running MCP server; their adapters are
   built against the real APIs and unit-tested.
-- Not yet released to Maven Central — publication config is verified locally (see
-  [PUBLISHING.md](PUBLISHING.md)).
