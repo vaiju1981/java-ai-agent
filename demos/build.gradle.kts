@@ -7,6 +7,8 @@ description = "Real-world demos showing java-ai-agent's usefulness."
 dependencies {
     implementation(project(":agent-core"))
     implementation(project(":agent-langchain4j"))
+    // The multi-agent showcase reaches one specialist over Agent-to-Agent (HTTP).
+    implementation(project(":agent-a2a"))
     // The production trust layer the demos now run through: governed runtime, validation, durable store.
     implementation(project(":agent-tools-jsonschema"))
     implementation(project(":agent-store-jdbc"))
