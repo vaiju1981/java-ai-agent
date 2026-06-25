@@ -26,4 +26,11 @@ class MultiAgentNewsroomDemoTest {
             assertFalse(article.isBlank());
         }
     }
+
+    @Test
+    void mainRunsEndToEndOnTheStub() throws Exception {
+        // Exercises the full entry point (it builds and closes its own A2aServer) on the stub — no
+        // model and no key needed; completing without throwing is the assertion.
+        MultiAgentNewsroomDemo.main(new String[] {"virtual threads"});
+    }
 }
