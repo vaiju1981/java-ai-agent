@@ -193,9 +193,10 @@ public final class JdbcConversationStore implements ConversationStore, Conversat
                 throw new SQLException("corrupt tool_calls for a stored message", e);
             }
         }
+        // Media parts are not persisted by this store; replayed history is text + tool calls.
         return new Message(
                 role, rs.getString("content"), toolCalls,
-                rs.getString("tool_call_id"), rs.getString("tool_name"));
+                rs.getString("tool_call_id"), rs.getString("tool_name"), List.of());
     }
 
     @Override
