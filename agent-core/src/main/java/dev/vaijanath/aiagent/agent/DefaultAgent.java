@@ -188,15 +188,10 @@ public final class DefaultAgent implements Agent {
                 resp = streamRawTokens
                         ? ModelPorts.stream(model, req, this::emitToken)
                         : model.chat(req);
-            } catch (BudgetExceededException e) {
-                // A token-budget cap is a distinct, expected outcome — not a model outage — so operators
-                // can tell "we hit the cost ceiling" from "the model is down".
-                return modelFailure(ctx, e, "budget", "token budget exceeded", "budget_exceeded",
-                        "This request reached its token budget.", startNanos);
             } catch (RuntimeException e) {
-                // Graceful failure: surface it, never crash out of run().
-                return modelFailure(ctx, e, "model", "model call failed", "model_error",
-                        "I ran into a problem reaching the model. Please try again.", startNanos);
+                // Graceful failure: surface it, never crash out of run(). A token-budget cap is reported
+                // distinctly from a model outage (see modelFailure).
+                return modelFailure(ctx, e, startNanos);
             }
             Duration modelLatency = Duration.ofNanos(System.nanoTime() - modelStart);
             notify(o -> o.onModelResponse(resp, modelLatency));
@@ -276,12 +271,21 @@ public final class DefaultAgent implements Agent {
         }
     }
 
-    /** Ends a turn gracefully on a model-side failure: log, observe, audit, and return a stopped result. */
-    private AgentResponse modelFailure(RequestContext ctx, RuntimeException error, String stage,
-            String auditDetail, String stopReason, String message, long startNanos) {
-        log.warn("{}; ending turn gracefully", auditDetail, error);
+    /**
+     * Ends a turn gracefully on a model-side failure: log, observe, audit, and return a stopped result.
+     * A token-budget cap is surfaced distinctly from a model outage ({@code budget_exceeded} vs
+     * {@code model_error}) so operators can tell a cost ceiling from a down endpoint.
+     */
+    private AgentResponse modelFailure(RequestContext ctx, RuntimeException error, long startNanos) {
+        boolean budget = error instanceof BudgetExceededException;
+        String stage = budget ? "budget" : "model";
+        String stopReason = budget ? "budget_exceeded" : "model_error";
+        String message = budget
+                ? "This request reached its token budget."
+                : "I ran into a problem reaching the model. Please try again.";
+        log.warn("turn ending gracefully ({})", stopReason, error);
         notify(o -> o.onError(stage, error));
-        audit("error", ctx, auditDetail);
+        audit("error", ctx, stage + " error");
         auditTurn("turn.end", ctx, stopReason);
         return finish(AgentResponse.stopped(message, stopReason), startNanos);
     }
