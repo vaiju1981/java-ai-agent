@@ -285,17 +285,14 @@ public final class DefaultAgent implements Agent {
     }
 
     /**
-     * Enforces the selector, then authorizes, then runs the tool. A tool that was not presented this
-     * turn cannot be invoked — even if the model names it (hallucination or prompt injection) — and a
-     * denied call becomes a result the model can react to rather than an execution.
-     */
-    /**
      * Runs the turn's tool calls and returns their results in call order. Independent calls run
      * concurrently on virtual threads when {@code parallelToolCalls} is on and it is safe to do so —
      * more than one call, no replay {@code toolExecutor} (replay stays deterministic), and no human
      * {@code approvalHandler} (approvals must be prompted one at a time). Otherwise they run
      * sequentially. Results are positional either way, so the transcript stays stable.
      */
+    // Virtual threads suit I/O-bound tool calls; on JDK 24+ synchronized no longer pins them (S6906).
+    @SuppressWarnings("java:S6906")
     private List<StructuredToolResult> executeCalls(
             List<ToolCall> calls, Map<String, Tool> activeByName, RequestContext ctx) {
         boolean canParallel =
@@ -335,6 +332,11 @@ public final class DefaultAgent implements Agent {
                 : invokeWithPolicy(call, activeByName, ctx);
     }
 
+    /**
+     * Enforces the selector, then authorizes, then runs the tool. A tool that was not presented this
+     * turn cannot be invoked — even if the model names it (hallucination or prompt injection) — and a
+     * denied call becomes a result the model can react to rather than an execution.
+     */
     private StructuredToolResult invokeWithPolicy(ToolCall call, Map<String, Tool> available, RequestContext ctx) {
         Tool tool = available.get(call.name());
         if (tool == null) {
