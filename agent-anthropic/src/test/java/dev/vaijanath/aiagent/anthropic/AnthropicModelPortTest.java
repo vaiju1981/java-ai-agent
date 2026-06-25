@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.anthropic.models.messages.Base64ImageSource;
 import com.anthropic.models.messages.ContentBlockParam;
@@ -136,9 +135,12 @@ class AnthropicModelPortTest {
     }
 
     @Test
-    void fromEnvFailsClearlyWhenTheKeyIsAbsent() {
+    void fromEnvChecksTheKey() {
         String key = System.getenv("ANTHROPIC_API_KEY");
-        assumeTrue(key == null || key.isBlank(), "ANTHROPIC_API_KEY is set in this environment");
-        assertThrows(IllegalStateException.class, AnthropicModelPort::fromEnv);
+        if (key == null || key.isBlank()) {
+            assertThrows(IllegalStateException.class, AnthropicModelPort::fromEnv);
+        } else {
+            assertDoesNotThrow(AnthropicModelPort::fromEnv); // key present → builds a client (no network)
+        }
     }
 }
