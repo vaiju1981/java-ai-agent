@@ -260,6 +260,9 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
 - **`agent-adk`** — wraps a Google ADK agent as an `Agent` (agent-as-component): ADK is a full
   framework, so it's consumed one level up — the same seam later admits Embabel / Koog.
 - **`agent-mcp`** — exposes a Model Context Protocol server's tools as `Tool`s (`McpTools.from(client)`).
+- **`agent-a2a`** — Agent-to-Agent over HTTP: `A2aServer` exposes an `Agent`, and `RemoteAgent`
+  (itself an `Agent`) calls a remote one, so distributed agents compose like local ones. Dependency-light
+  (JDK sockets + `java.net.http`), no `com.sun.*` APIs.
 - **`agent-observability-otel`** — optional OpenTelemetry tracing adapter (`OtelAgentObserver`);
   keeps the OTel SDK out of `agent-core`.
 - **`agent-store-jdbc`** — a durable, queryable `ConversationStore` for SQLite and PostgreSQL:
