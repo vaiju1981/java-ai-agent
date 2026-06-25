@@ -82,8 +82,10 @@ public final class RedactingObserver implements AgentObserver {
     }
 
     private static Message redact(Message message) {
+        // Media (image/audio) is dropped, not forwarded: redaction must not leak content, and base64
+        // blobs would bloat whatever the delegate observer logs.
         return new Message(message.role(), REDACTED, redactCalls(message.toolCalls()),
-                message.toolCallId(), message.toolName());
+                message.toolCallId(), message.toolName(), List.of());
     }
 
     private static List<ToolCall> redactCalls(List<ToolCall> calls) {
