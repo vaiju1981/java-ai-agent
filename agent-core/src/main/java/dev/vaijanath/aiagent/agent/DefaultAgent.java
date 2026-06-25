@@ -44,6 +44,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -89,6 +92,7 @@ public final class DefaultAgent implements Agent {
     private final int maxToolResultChars;
     private final boolean frameToolResults;
     private final boolean turnAudit;
+    private final boolean parallelToolCalls;
 
     private DefaultAgent(Builder b) {
         this.model = Objects.requireNonNull(b.model, "model");
@@ -112,6 +116,7 @@ public final class DefaultAgent implements Agent {
         this.maxToolResultChars = b.maxToolResultChars;
         this.frameToolResults = b.frameToolResults;
         this.turnAudit = b.turnAudit;
+        this.parallelToolCalls = b.parallelToolCalls;
         Map<String, Tool> map = new LinkedHashMap<>();
         for (Tool tool : b.tools) {
             map.put(tool.name(), tool);
@@ -187,26 +192,29 @@ public final class DefaultAgent implements Agent {
             notify(o -> o.onModelResponse(resp));
 
             if (resp.hasToolCalls()) {
-                memory.add(Message.assistant(resp.text(), resp.toolCalls()));
-                for (ToolCall call : resp.toolCalls()) {
+                List<ToolCall> calls = resp.toolCalls();
+                memory.add(Message.assistant(resp.text(), calls));
+                // Announce every call before running any, so observers see the full fan-out up front.
+                for (ToolCall call : calls) {
                     notify(o -> o.onToolCall(call));
-                    // A configured executor (e.g. ReplayToolExecutor) overrides real execution;
-                    // otherwise authorize and invoke the real tool.
-                    StructuredToolResult raw = (toolExecutor != null)
-                            ? StructuredToolResult.of(toolExecutor.execute(call.name(), call.argumentsJson()))
-                            : invokeWithPolicy(call, activeByName, ctx);
+                }
+                // Execute (concurrently when safe — see executeCalls), then record results in call
+                // order so the transcript and observers stay deterministic regardless of finish order.
+                List<StructuredToolResult> raws = executeCalls(calls, activeByName, ctx);
+                for (int i = 0; i < calls.size(); i++) {
+                    ToolCall call = calls.get(i);
+                    StructuredToolResult raw = raws.get(i);
                     // Cap once so observers/recorders and the model all see the same bounded result.
                     ToolResult result =
                             new ToolResult(capped(raw.result().content(), maxToolResultChars), raw.result().error());
                     notify(o -> o.onToolResult(call.name(), result));
-                    // A structured payload (if any) goes to observers/UIs only — never into the model's context.
+                    // A structured payload (if any) goes to observers/UIs only — never into the model.
                     if (raw.hasData()) {
                         String dataJson = raw.dataJson();
                         notify(o -> o.onToolData(call.name(), dataJson));
                     }
-                    String forModel = frameToolResults
-                            ? frame(call.name(), result.content())
-                            : result.content();
+                    String forModel =
+                            frameToolResults ? frame(call.name(), result.content()) : result.content();
                     memory.add(Message.toolResult(call.id(), call.name(), forModel));
                 }
                 continue; // let the model react to the tool results
@@ -274,6 +282,54 @@ public final class DefaultAgent implements Agent {
             current = d.content();
         }
         return GuardrailDecision.allow(current);
+    }
+
+    /**
+     * Runs the turn's tool calls and returns their results in call order. Independent calls run
+     * concurrently on virtual threads when {@code parallelToolCalls} is on and it is safe to do so —
+     * more than one call, no replay {@code toolExecutor} (replay stays deterministic), and no human
+     * {@code approvalHandler} (approvals must be prompted one at a time). Otherwise they run
+     * sequentially. Results are positional either way, so the transcript stays stable.
+     */
+    // Virtual threads suit I/O-bound tool calls; on JDK 24+ synchronized no longer pins them (S6906).
+    @SuppressWarnings("java:S6906")
+    private List<StructuredToolResult> executeCalls(
+            List<ToolCall> calls, Map<String, Tool> activeByName, RequestContext ctx) {
+        boolean canParallel =
+                parallelToolCalls && calls.size() > 1 && toolExecutor == null && approvalHandler == null;
+        if (!canParallel) {
+            List<StructuredToolResult> results = new ArrayList<>(calls.size());
+            for (ToolCall call : calls) {
+                results.add(executeOne(call, activeByName, ctx));
+            }
+            return results;
+        }
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<StructuredToolResult>> futures = new ArrayList<>(calls.size());
+            for (ToolCall call : calls) {
+                futures.add(pool.submit(() -> executeOne(call, activeByName, ctx)));
+            }
+            List<StructuredToolResult> results = new ArrayList<>(calls.size());
+            for (Future<StructuredToolResult> future : futures) {
+                try {
+                    results.add(future.get());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    results.add(StructuredToolResult.of(ToolResult.error("tool execution was interrupted")));
+                } catch (ExecutionException e) {
+                    log.warn("parallel tool execution failed", e.getCause());
+                    results.add(StructuredToolResult.of(ToolResult.error("tool execution failed")));
+                }
+            }
+            return results;
+        }
+    }
+
+    /** Replay executor when configured (deterministic), otherwise the authorize-then-invoke path. */
+    private StructuredToolResult executeOne(ToolCall call, Map<String, Tool> activeByName, RequestContext ctx) {
+        return toolExecutor != null
+                ? StructuredToolResult.of(toolExecutor.execute(call.name(), call.argumentsJson()))
+                : invokeWithPolicy(call, activeByName, ctx);
     }
 
     /**
@@ -426,6 +482,7 @@ public final class DefaultAgent implements Agent {
         private int maxToolResultChars = 8192;
         private boolean frameToolResults = true;
         private boolean turnAudit = true;
+        private boolean parallelToolCalls = true;
 
         public Builder model(ModelPort model) {
             this.model = model;
@@ -538,6 +595,17 @@ public final class DefaultAgent implements Agent {
         /** Disable inner turn lifecycle events when an outer governed seam owns them. */
         public Builder turnAudit(boolean turnAudit) {
             this.turnAudit = turnAudit;
+            return this;
+        }
+
+        /**
+         * When the model returns several tool calls in one step, run them concurrently on virtual
+         * threads (default {@code true}). Results are still recorded in call order, so the transcript
+         * is unchanged. Automatically disabled for a turn that uses a replay {@code toolExecutor} or a
+         * human {@code approvalHandler}, where ordering must be deterministic or serial.
+         */
+        public Builder parallelToolCalls(boolean parallelToolCalls) {
+            this.parallelToolCalls = parallelToolCalls;
             return this;
         }
 
