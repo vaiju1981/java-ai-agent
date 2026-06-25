@@ -25,4 +25,14 @@ public record AgentResponse(String output, boolean blocked, String stopReason) {
     public boolean isCompleted() {
         return !blocked && "completed".equals(stopReason);
     }
+
+    /** The stable, machine-readable classification of how this turn ended. */
+    public StopReason reason() {
+        return StopReason.of(this);
+    }
+
+    /** Whether re-issuing the same request is reasonable (the failure is likely transient). */
+    public boolean retryable() {
+        return reason().retryable();
+    }
 }
