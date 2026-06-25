@@ -1,6 +1,8 @@
 package dev.vaijanath.aiagent.reference;
 
 import dev.vaijanath.aiagent.agent.Agent;
+import dev.vaijanath.aiagent.agent.IdempotencyStore;
+import dev.vaijanath.aiagent.agent.IdempotentAgent;
 import dev.vaijanath.aiagent.agent.ProductionAgentRuntime;
 import dev.vaijanath.aiagent.audit.AsyncAuditSink;
 import dev.vaijanath.aiagent.audit.FileAuditSink;
@@ -16,6 +18,7 @@ import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.springboot.health.ModelEndpointHealthIndicator;
 import dev.vaijanath.aiagent.springboot.metrics.MicrometerAgentObserver;
 import dev.vaijanath.aiagent.store.jdbc.JdbcConversationStore;
+import dev.vaijanath.aiagent.store.jdbc.JdbcIdempotencyStore;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
@@ -54,6 +57,12 @@ class AgentConfiguration {
         return new JdbcConversationStore(dataSource::getConnection, properties.historyTurns());
     }
 
+    @Bean
+    IdempotencyStore idempotencyStore(DataSource dataSource) {
+        // Flyway owns schema changes (V2__agent_idempotency.sql). This constructor performs no DDL.
+        return new JdbcIdempotencyStore(dataSource::getConnection);
+    }
+
     @Bean(destroyMethod = "close")
     AsyncAuditSink auditSink(AgentProperties properties) throws IOException {
         Path path = Path.of(properties.auditFile()).toAbsolutePath();
@@ -63,14 +72,23 @@ class AgentConfiguration {
         return new AsyncAuditSink(new FileAuditSink(path));
     }
 
+    /**
+     * The unary turn agent, wrapped in {@link IdempotentAgent} so a retried request carrying the same
+     * {@code Idempotency-Key} (passed through by {@link AgentController}) returns the prior result instead
+     * of re-running the model and effectful tools. Only non-retryable outcomes are cached, so a transient
+     * failure still re-runs. The streaming agent is intentionally left unwrapped — replaying a cached
+     * result can't reproduce a token stream, so SSE turns are not deduplicated.
+     */
     @Bean
     Agent productionAgent(
             ModelPort model,
             ConversationStore conversations,
             AsyncAuditSink audit,
             MeterRegistry meterRegistry,
-            AgentProperties properties) {
-        return baseBuilder(model, conversations, audit, meterRegistry, properties).build();
+            AgentProperties properties,
+            IdempotencyStore idempotencyStore) {
+        Agent base = baseBuilder(model, conversations, audit, meterRegistry, properties).build();
+        return new IdempotentAgent(base, idempotencyStore);
     }
 
     /**
