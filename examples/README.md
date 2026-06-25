@@ -1,5 +1,10 @@
 # Examples — simple → complex
 
+> **Starting a new project?** [`create-agent/`](create-agent/) is a copy-out starter — a standalone
+> mini-project (its own build, a ~20-line `Main`) that depends on the **published** artifacts. Copy the
+> folder, set an API key, `gradle run`. The examples below instead run *inside* this repo against the
+> source.
+
 A tour of `java-ai-agent`. Run any with:
 
 ```bash
