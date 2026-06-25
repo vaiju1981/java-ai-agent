@@ -1,6 +1,8 @@
 package dev.vaijanath.aiagent.openai;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.openai.models.chat.completions.ChatCompletionContentPart;
@@ -102,5 +104,26 @@ class OpenAiModelPortTest {
 
         assertTrue(tool.function().isPresent());
         assertEquals("get_weather", tool.function().get().function().name());
+    }
+
+    @Test
+    void requireApiKeyRejectsAMissingKeyWithAClearMessage() {
+        assertThrows(
+                IllegalStateException.class, () -> OpenAiModelPort.requireApiKey(null, "OPENAI_API_KEY"));
+        assertThrows(
+                IllegalStateException.class, () -> OpenAiModelPort.requireApiKey("  ", "OPENAI_API_KEY"));
+        assertDoesNotThrow(() -> OpenAiModelPort.requireApiKey("sk-test", "OPENAI_API_KEY"));
+    }
+
+    @Test
+    void fromEnvChecksTheKey() {
+        String key = System.getenv("OPENAI_API_KEY");
+        if (key == null || key.isBlank()) {
+            assertThrows(IllegalStateException.class, OpenAiModelPort::fromEnv);
+        } else {
+            assertDoesNotThrow(() -> {
+                OpenAiModelPort.fromEnv(); // key present → builds a client (no network)
+            });
+        }
     }
 }

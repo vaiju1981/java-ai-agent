@@ -1,0 +1,12 @@
+# Coverage targets apply to production code. The hard gate is the per-module JaCoCo floor enforced in
+# the Gradle build (jacocoTestCoverageVerification); Codecov here is an informational signal.
+ignore:
+  - "**/src/test/**"
+
+coverage:
+  status:
+    patch:
+      default:
+        # Don't fail a PR on patch coverage alone — the JaCoCo floors already gate it, and an
+        # auto target produces flaky reds on small diffs. Keep the signal, not the block.
+        informational: true

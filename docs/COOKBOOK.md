@@ -24,6 +24,18 @@ AgentResponse response = agent.run(new AgentRequest("Hello!"));
 System.out.println(response.output());
 ```
 
+### Which builder do I use?
+
+Everything is an `Agent` (`run(AgentRequest) → AgentResponse`); these are three altitudes of assembling one:
+
+| Use | When |
+|-----|------|
+| `DefaultAgent.builder()` | The agent loop itself — model + prompt + tools/guardrails/observers. The dev default; safe defaults (deny-effectful tools, in-memory memory), but no enforced deadline or audit. |
+| `Trust.govern(agent, sink, guardrails)` | Wrap **any** agent (a `DefaultAgent`, a `DeepAgent`, a `RemoteAgent`) to enforce input/output guardrails and a hard per-turn deadline around it. The governance seam. |
+| `ProductionAgentRuntime.builder()` | The opinionated production assembly: a governed `DefaultAgent` with a resilient model, durable store, audit, argument validation, timeouts, and a fan-out ceiling — what the Spring Boot starter builds for you. |
+
+Start with `DefaultAgent` while iterating; move to `ProductionAgentRuntime` (or the starter) for production.
+
 ## 1b. A typed interface over an agent (`@AiService`)
 
 Prefer a plain Java interface to a builder call site? Wrap any governed `Agent` as a typed service —
