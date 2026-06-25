@@ -95,6 +95,7 @@ public final class DefaultAgent implements Agent {
     private final boolean frameToolResults;
     private final boolean turnAudit;
     private final boolean parallelToolCalls;
+    private final int maxToolCallsPerStep;
 
     private DefaultAgent(Builder b) {
         this.model = Objects.requireNonNull(b.model, "model");
@@ -119,6 +120,7 @@ public final class DefaultAgent implements Agent {
         this.frameToolResults = b.frameToolResults;
         this.turnAudit = b.turnAudit;
         this.parallelToolCalls = b.parallelToolCalls;
+        this.maxToolCallsPerStep = Math.max(0, b.maxToolCallsPerStep);
         Map<String, Tool> map = new LinkedHashMap<>();
         for (Tool tool : b.tools) {
             map.put(tool.name(), tool);
@@ -297,34 +299,46 @@ public final class DefaultAgent implements Agent {
     @SuppressWarnings("java:S6906")
     private List<StructuredToolResult> executeCalls(
             List<ToolCall> calls, Map<String, Tool> activeByName, RequestContext ctx) {
+        // Bound the per-step fan-out: beyond the ceiling, calls are not executed — each comes back as an
+        // error result (the model still gets a result per call, so the transcript stays valid).
+        int limit = maxToolCallsPerStep > 0 ? Math.min(maxToolCallsPerStep, calls.size()) : calls.size();
+        List<ToolCall> toRun = calls.subList(0, limit);
+        if (limit < calls.size()) {
+            log.warn("model requested {} tool calls this step; running {} and skipping the rest "
+                    + "(maxToolCallsPerStep={})", calls.size(), limit, maxToolCallsPerStep);
+        }
+
+        List<StructuredToolResult> results = new ArrayList<>(calls.size());
         boolean canParallel =
-                parallelToolCalls && calls.size() > 1 && toolExecutor == null && approvalHandler == null;
+                parallelToolCalls && toRun.size() > 1 && toolExecutor == null && approvalHandler == null;
         if (!canParallel) {
-            List<StructuredToolResult> results = new ArrayList<>(calls.size());
-            for (ToolCall call : calls) {
+            for (ToolCall call : toRun) {
                 results.add(executeOne(call, activeByName, ctx));
             }
-            return results;
-        }
-        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<StructuredToolResult>> futures = new ArrayList<>(calls.size());
-            for (ToolCall call : calls) {
-                futures.add(pool.submit(() -> executeOne(call, activeByName, ctx)));
-            }
-            List<StructuredToolResult> results = new ArrayList<>(calls.size());
-            for (Future<StructuredToolResult> future : futures) {
-                try {
-                    results.add(future.get());
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    results.add(StructuredToolResult.of(ToolResult.error("tool execution was interrupted")));
-                } catch (ExecutionException e) {
-                    log.warn("parallel tool execution failed", e.getCause());
-                    results.add(StructuredToolResult.of(ToolResult.error("tool execution failed")));
+        } else {
+            try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+                List<Future<StructuredToolResult>> futures = new ArrayList<>(toRun.size());
+                for (ToolCall call : toRun) {
+                    futures.add(pool.submit(() -> executeOne(call, activeByName, ctx)));
+                }
+                for (Future<StructuredToolResult> future : futures) {
+                    try {
+                        results.add(future.get());
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        results.add(StructuredToolResult.of(ToolResult.error("tool execution was interrupted")));
+                    } catch (ExecutionException e) {
+                        log.warn("parallel tool execution failed", e.getCause());
+                        results.add(StructuredToolResult.of(ToolResult.error("tool execution failed")));
+                    }
                 }
             }
-            return results;
         }
+        for (int i = limit; i < calls.size(); i++) {
+            results.add(StructuredToolResult.of(ToolResult.error(TOOL_PREFIX + calls.get(i).name()
+                    + "' skipped: exceeded the per-step tool-call limit of " + maxToolCallsPerStep)));
+        }
+        return results;
     }
 
     /** Replay executor when configured (deterministic), otherwise the authorize-then-invoke path. */
@@ -354,7 +368,10 @@ public final class DefaultAgent implements Agent {
             // An effectful tool the policy didn't auto-approve can be escalated to a human approver, if one
             // is configured; otherwise it is hard-denied (the safe default).
             if (approvalHandler == null || tool.spec().effect() != ToolEffect.EFFECTFUL) {
-                log.info("tool '{}' denied: {}", call.name(), decision.reason());
+                // WARN, not INFO: a silently-denied tool is a common "why didn't my tool run?" trap.
+                log.warn("tool '{}' denied by policy ({}) — returning an error to the model. If it has no "
+                        + "side effects mark it READ_ONLY; otherwise allow-list it via the ToolApprover.",
+                        call.name(), decision.reason());
                 audit(AUDIT_TOOL_DENIED, ctx, "tool=" + call.name() + " reason=" + decision.reason());
                 return StructuredToolResult.of(
                         ToolResult.error(TOOL_PREFIX + call.name() + "' not permitted: " + decision.reason()));
@@ -485,6 +502,7 @@ public final class DefaultAgent implements Agent {
         private boolean frameToolResults = true;
         private boolean turnAudit = true;
         private boolean parallelToolCalls = true;
+        private int maxToolCallsPerStep = 0; // 0 = unlimited
 
         public Builder model(ModelPort model) {
             this.model = model;
@@ -573,6 +591,16 @@ public final class DefaultAgent implements Agent {
 
         public Builder maxSteps(int maxSteps) {
             this.maxSteps = maxSteps;
+            return this;
+        }
+
+        /**
+         * Cap how many tool calls the model may run in a single step. If it requests more, the first
+         * {@code n} run and the rest come back as an error the model can react to (e.g. retry with
+         * fewer) — a ceiling on cost and blast radius from a noisy model. Default {@code 0} = unlimited.
+         */
+        public Builder maxToolCallsPerStep(int maxToolCallsPerStep) {
+            this.maxToolCallsPerStep = maxToolCallsPerStep;
             return this;
         }
 

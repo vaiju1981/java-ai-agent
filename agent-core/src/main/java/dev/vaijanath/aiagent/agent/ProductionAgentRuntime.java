@@ -34,9 +34,10 @@ public final class ProductionAgentRuntime implements Agent {
         Objects.requireNonNull(b.argumentValidator, "argumentValidator");
         requirePositive(b.modelTimeout, "modelTimeout");
         requirePositive(b.toolTimeout, "toolTimeout");
-        if (b.modelAttempts < 1 || b.maxToolResultChars < 1 || b.maxSteps < 1) {
+        if (b.modelAttempts < 1 || b.maxToolResultChars < 1 || b.maxSteps < 1
+                || b.maxToolCallsPerStep < 1) {
             throw new IllegalArgumentException(
-                    "modelAttempts, maxToolResultChars, and maxSteps must be positive");
+                    "modelAttempts, maxToolResultChars, maxSteps, and maxToolCallsPerStep must be positive");
         }
 
         for (Tool tool : b.tools) {
@@ -58,6 +59,7 @@ public final class ProductionAgentRuntime implements Agent {
                 .maxToolResultChars(b.maxToolResultChars)
                 .frameToolResults(true)
                 .maxSteps(b.maxSteps)
+                .maxToolCallsPerStep(b.maxToolCallsPerStep)
                 .systemPrompt(b.systemPrompt);
         if (b.approvalHandler != null) {
             core.approvalHandler(b.approvalHandler);
@@ -104,6 +106,7 @@ public final class ProductionAgentRuntime implements Agent {
         private int modelAttempts = 3;
         private int maxToolResultChars = 8192;
         private int maxSteps = 8;
+        private int maxToolCallsPerStep = 16; // a production ceiling on per-step fan-out by default
         private String systemPrompt;
 
         public Builder model(ModelPort model) { this.model = model; return this; }
@@ -126,6 +129,8 @@ public final class ProductionAgentRuntime implements Agent {
         public Builder toolTimeout(Duration timeout) { this.toolTimeout = timeout; return this; }
         public Builder maxToolResultChars(int max) { this.maxToolResultChars = max; return this; }
         public Builder maxSteps(int max) { this.maxSteps = max; return this; }
+        /** Cap per-step tool-call fan-out (cost/blast-radius ceiling). Default 16. */
+        public Builder maxToolCallsPerStep(int max) { this.maxToolCallsPerStep = max; return this; }
 
         public ProductionAgentRuntime build() { return new ProductionAgentRuntime(this); }
     }
