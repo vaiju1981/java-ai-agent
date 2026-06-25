@@ -16,6 +16,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -46,13 +47,16 @@ class A2aServerRoundTripTest {
             return AgentResponse.completed("ok");
         };
         try (A2aServer server = new A2aServer(capturing, "bot", "d")) {
-            RequestContext ctx = new RequestContext("s1", "alice", "acme", "t1", null, Map.of());
+            Instant deadline = Instant.now().plusSeconds(30);
+            RequestContext ctx = new RequestContext("s1", "alice", "acme", "t1", deadline, Map.of());
 
             remoteTo(server).run(new AgentRequest("x", ctx));
 
             assertEquals("alice", seen.get().principal());
             assertEquals("acme", seen.get().tenant());
             assertEquals("t1", seen.get().traceId());
+            assertTrue(seen.get().deadlineAt().isPresent(), "the deadline is propagated across the hop");
+            assertEquals(deadline.toEpochMilli(), seen.get().deadlineAt().get().toEpochMilli());
         }
     }
 
