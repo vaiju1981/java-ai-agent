@@ -100,11 +100,12 @@ education tools) are intended to run on it — which forces it to be genuinely e
 
 ## Reference application: FinCopilot
 
-[`apps/fincopilot`](apps/fincopilot/README.md) is a complete, deployable product built on this framework
-— a **grounded finance copilot** for individuals and small businesses: per-user accounts & transactions,
-an Analyst that answers from your real data, a knowledge-grounded Advisor (with citations + disclaimers),
-a React dashboard, usage quotas, and data export/delete — on an Ollama substrate, governed end to end. It
-consumes the library exactly as a third-party adopter would.
+[**FinCopilot**](https://github.com/vaiju1981/fincopilot) is a complete, deployable product built on this
+framework, in **its own repository** — a **grounded finance copilot** for individuals and small businesses:
+per-user accounts & transactions, an Analyst that answers from your real data, a knowledge-grounded Advisor
+(with citations + disclaimers), a React dashboard, usage quotas, and data export/delete — on an Ollama
+substrate, governed end to end. It depends on the published `io.github.vaiju1981:agent-*` artifacts exactly
+as any third-party adopter would — the worked example of building a real product on java-ai-agent.
 
 API stability and upgrades are documented in [docs/API-STABILITY.md](docs/API-STABILITY.md) and the
 per-release migration notes (e.g. [docs/MIGRATION-0.2.md](docs/MIGRATION-0.2.md)).

@@ -5,7 +5,12 @@ versioning is [SemVer](https://semver.org). (Commit history has the fine-grained
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- The **FinCopilot** reference application moved to its own repository
+  ([vaiju1981/fincopilot](https://github.com/vaiju1981/fincopilot)) and now consumes the published
+  `io.github.vaiju1981:agent-*` 0.3.0 artifacts. This repository is now library-only (plus the runnable
+  `examples/` and `demos/`). No library API changed.
 
 ## [0.3.0] — 2026-06-25
 
