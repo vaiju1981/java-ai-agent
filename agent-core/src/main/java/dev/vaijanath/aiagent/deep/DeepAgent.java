@@ -4,6 +4,8 @@ import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
 import dev.vaijanath.aiagent.agent.RequestContext;
+import dev.vaijanath.aiagent.checkpoint.Checkpoint;
+import dev.vaijanath.aiagent.checkpoint.CheckpointStore;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
@@ -14,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -31,11 +34,15 @@ import org.slf4j.LoggerFactory;
  * eligible steps run concurrently on a virtual-thread-per-task executor (Loom, GA in Java 21). A
  * dependent step receives its upstream steps' results injected into its instruction, so step B can
  * build on step A's output. A flat plan (no dependencies) is just the degenerate case: one wave with
- * everything in it, exactly the previous fan-out behavior.
+ * everything in it, exactly the previous fan-out behavior. Each worker is a fresh {@link Agent} from
+ * the supplied factory, so there is no shared mutable state.
  *
- * <p>Each worker is a fresh {@link Agent} from the supplied factory, so there is no shared mutable
- * state. A {@code StructuredTaskScope} variant can replace the executor once that API is stable
- * without requiring preview.
+ * <p>With an optional {@link CheckpointStore} the run becomes <b>crash-resumable</b>: progress is
+ * saved as each subtask finishes, keyed by the request's {@code traceId}. A retry carrying the same
+ * {@code traceId} reloads the saved plan and re-runs only the subtasks that were not yet {@code DONE}
+ * (completed results are restored and fed to dependents, not recomputed); a clean completion deletes
+ * the checkpoint. Without a store, nothing is persisted and behavior is unchanged. (Ephemeral requests
+ * get a random {@code traceId}, so they never accidentally resume.)
  */
 public final class DeepAgent implements Agent {
 
@@ -47,6 +54,7 @@ public final class DeepAgent implements Agent {
     private final Workspace workspace;
     private final boolean parallel;
     private final Duration stepTimeout;
+    private final CheckpointStore checkpoints; // null = no durable resume
 
     private DeepAgent(Builder b) {
         this.planner = Objects.requireNonNull(b.planner, "planner");
@@ -55,6 +63,11 @@ public final class DeepAgent implements Agent {
         this.workspace = b.workspace != null ? b.workspace : new InMemoryWorkspace();
         this.parallel = b.parallel;
         this.stepTimeout = b.stepTimeout;
+        this.checkpoints = b.checkpoints;
+    }
+
+    /** Keys the durable record of one run: its tenant, resume id, and original task. */
+    private record RunKey(String tenant, String runId, String task) {
     }
 
     public Workspace workspace() {
@@ -65,23 +78,47 @@ public final class DeepAgent implements Agent {
     public AgentResponse run(AgentRequest request) {
         String task = request.input();
         RequestContext ctx = request.context();
-        Plan plan = planner.plan(task);
-        if (plan.isEmpty()) {
-            log.warn("planner produced no steps; synthesizing directly");
-            return AgentResponse.completed(synthesize(task, List.of()));
+
+        RunKey run = null;
+        Plan plan = null;
+        if (checkpoints != null) {
+            Optional<Checkpoint> saved = checkpoints.load(ctx.tenant(), ctx.traceId());
+            if (saved.isPresent()) {
+                task = saved.get().task(); // resume the original task, so synthesis matches
+                plan = restore(saved.get());
+                run = new RunKey(ctx.tenant(), ctx.traceId(), task);
+                log.info("resuming deep run '{}' from checkpoint ({} subtask(s))",
+                        ctx.traceId(), plan.steps().size());
+            }
         }
-        Dag.validate(plan.steps());
+        if (plan == null) {
+            plan = planner.plan(task);
+            if (plan.isEmpty()) {
+                log.warn("planner produced no steps; synthesizing directly");
+                return AgentResponse.completed(synthesize(task, List.of()));
+            }
+            Dag.validate(plan.steps());
+            if (checkpoints != null) {
+                run = new RunKey(ctx.tenant(), ctx.traceId(), task);
+                checkpoints.save(run.tenant(), run.runId(), snapshot(task, plan));
+            }
+        } else {
+            Dag.validate(plan.steps());
+        }
         workspace.write("plan.md", plan.render());
         log.info("deep agent: {} subtask(s), parallel={}", plan.steps().size(), parallel);
 
-        runDag(plan, ctx);
+        runDag(plan, ctx, run);
 
         workspace.write("plan.md", plan.render()); // statuses are now resolved
+        if (run != null) {
+            checkpoints.delete(run.tenant(), run.runId()); // completed cleanly -> no leftover
+        }
         return AgentResponse.completed(synthesize(task, plan.steps()));
     }
 
     /** Runs the plan wave by wave: each pass executes the steps whose dependencies are all done. */
-    private void runDag(Plan plan, RequestContext ctx) {
+    private void runDag(Plan plan, RequestContext ctx, RunKey run) {
         List<PlanStep> steps = plan.steps();
         Map<Integer, PlanStep> byIndex = new LinkedHashMap<>();
         for (PlanStep step : steps) {
@@ -89,7 +126,7 @@ public final class DeepAgent implements Agent {
         }
         List<PlanStep> wave;
         while (!(wave = Dag.ready(steps)).isEmpty()) {
-            runWave(wave, byIndex, ctx);
+            runWave(wave, byIndex, plan, ctx, run);
         }
         // No more eligible steps: any still PENDING are blocked by a failed dependency.
         for (PlanStep step : steps) {
@@ -99,7 +136,8 @@ public final class DeepAgent implements Agent {
         }
     }
 
-    private void runWave(List<PlanStep> wave, Map<Integer, PlanStep> byIndex, RequestContext ctx) {
+    private void runWave(
+            List<PlanStep> wave, Map<Integer, PlanStep> byIndex, Plan plan, RequestContext ctx, RunKey run) {
         if (parallel) {
             try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
                 List<Future<AgentResponse>> futures = new ArrayList<>();
@@ -109,6 +147,7 @@ public final class DeepAgent implements Agent {
                     futures.add(pool.submit(() ->
                             workerFactory.get().run(new AgentRequest(input, ctx.childSession()))));
                 }
+                // This collecting loop runs on the calling thread, so persist(...) is never concurrent.
                 for (int i = 0; i < wave.size(); i++) {
                     PlanStep step = wave.get(i);
                     Future<AgentResponse> future = futures.get(i);
@@ -118,6 +157,7 @@ public final class DeepAgent implements Agent {
                         future.cancel(true);
                         fail(step, e);
                     }
+                    persist(run, plan);
                 }
             }
         } else {
@@ -129,6 +169,7 @@ public final class DeepAgent implements Agent {
                 } catch (RuntimeException e) {
                     fail(step, e);
                 }
+                persist(run, plan);
             }
         }
     }
@@ -169,6 +210,34 @@ public final class DeepAgent implements Agent {
         workspace.write("step-" + step.index() + ".txt", step.result());
     }
 
+    /** Saves the plan's current progress after a step resolves (no-op when not checkpointing). */
+    private void persist(RunKey run, Plan plan) {
+        if (run != null) {
+            checkpoints.save(run.tenant(), run.runId(), snapshot(run.task(), plan));
+        }
+    }
+
+    private static Checkpoint snapshot(String task, Plan plan) {
+        List<Checkpoint.Step> steps = plan.steps().stream()
+                .map(s -> new Checkpoint.Step(
+                        s.index(), s.description(), s.dependsOn(), s.status().name(), s.result()))
+                .toList();
+        return new Checkpoint(task, steps);
+    }
+
+    private static Plan restore(Checkpoint checkpoint) {
+        List<PlanStep> steps = new ArrayList<>();
+        for (Checkpoint.Step saved : checkpoint.steps()) {
+            PlanStep step = new PlanStep(saved.index(), saved.description(), saved.dependsOn());
+            PlanStep.Status status = PlanStep.Status.valueOf(saved.status());
+            // A step that was in-flight when the run died re-runs, so normalize RUNNING back to PENDING.
+            step.status(status == PlanStep.Status.RUNNING ? PlanStep.Status.PENDING : status);
+            step.result(saved.result());
+            steps.add(step);
+        }
+        return new Plan(steps);
+    }
+
     private String synthesize(String task, List<PlanStep> steps) {
         StringBuilder sb = new StringBuilder();
         sb.append("Synthesize one cohesive answer to the task using the sub-results below.\n");
@@ -194,6 +263,7 @@ public final class DeepAgent implements Agent {
         private Workspace workspace;
         private boolean parallel = true;
         private Duration stepTimeout = Duration.ofMinutes(2);
+        private CheckpointStore checkpoints;
 
         public Builder planner(Planner planner) {
             this.planner = planner;
@@ -223,6 +293,16 @@ public final class DeepAgent implements Agent {
 
         public Builder stepTimeout(Duration stepTimeout) {
             this.stepTimeout = stepTimeout;
+            return this;
+        }
+
+        /**
+         * Makes the run crash-resumable: progress is saved per subtask (keyed by the request's
+         * {@code traceId}) and a retry with the same {@code traceId} resumes. Optional — without it
+         * nothing is persisted.
+         */
+        public Builder checkpoints(CheckpointStore checkpoints) {
+            this.checkpoints = checkpoints;
             return this;
         }
 

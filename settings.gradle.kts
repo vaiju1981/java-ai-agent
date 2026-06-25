@@ -21,6 +21,7 @@ include(
     "agent-observability-otel",
     "agent-store-jdbc",
     "agent-store-pgvector",
+    "agent-store-sqlite",
     "agent-tools-jsonschema",
     "agent-tools-annotations",
     "agent-anthropic",
