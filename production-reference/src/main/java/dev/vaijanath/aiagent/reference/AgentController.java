@@ -17,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -59,8 +60,10 @@ class AgentController {
             @RequestHeader(value = "X-Tenant-Id", required = false) String tenant,
             @RequestHeader(value = "X-Principal-Id", required = false) String principal,
             @RequestHeader(value = "X-Trace-Id", required = false) String traceId,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
-        return AgentTurns.run(agent, prepare(body, tenant, principal, traceId, idempotencyKey));
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestAttribute(name = ApiKeyAuthenticationFilter.TENANT_ATTRIBUTE, required = false)
+                    String authTenant) {
+        return AgentTurns.run(agent, prepare(body, tenant, principal, traceId, idempotencyKey, authTenant));
     }
 
     @PostMapping(value = "/turn/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -69,18 +72,24 @@ class AgentController {
             @RequestHeader(value = "X-Tenant-Id", required = false) String tenant,
             @RequestHeader(value = "X-Principal-Id", required = false) String principal,
             @RequestHeader(value = "X-Trace-Id", required = false) String traceId,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
-        AgentRequest request = prepare(body, tenant, principal, traceId, idempotencyKey);
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestAttribute(name = ApiKeyAuthenticationFilter.TENANT_ATTRIBUTE, required = false)
+                    String authTenant) {
+        AgentRequest request = prepare(body, tenant, principal, traceId, idempotencyKey, authTenant);
         return AgentTurns.stream(
                 streamingAgentFactory, request, streamExecutor, properties.requestTimeout().toMillis() + 5_000L);
     }
 
     /** Validates the request and builds the {@link RequestContext}; shared by both endpoints. */
     private AgentRequest prepare(
-            TurnRequest body, String tenant, String principal, String traceId, String idempotencyKey) {
+            TurnRequest body, String tenant, String principal, String traceId, String idempotencyKey,
+            String authTenant) {
         String input = body == null ? null : body.input();
         String session = body == null ? null : body.sessionId();
-        AgentTurns.requireIdentifier(tenant, "tenant");
+        // When auth is enabled the tenant is bound to the API key (set by the filter), so it is trusted
+        // over any client-supplied X-Tenant-Id. With auth disabled (dev), fall back to the header.
+        String effectiveTenant = authTenant != null && !authTenant.isBlank() ? authTenant : tenant;
+        AgentTurns.requireIdentifier(effectiveTenant, "tenant");
         AgentTurns.requireIdentifier(principal, "principal");
         AgentTurns.requireIdentifier(session, "sessionId");
         if (traceId != null && !traceId.isBlank()) {
@@ -94,7 +103,7 @@ class AgentController {
         RequestContext context = new RequestContext(
                 session,
                 principal,
-                tenant,
+                effectiveTenant,
                 trace,
                 Instant.now().plus(properties.requestTimeout()),
                 idempotencyKey == null || idempotencyKey.isBlank()

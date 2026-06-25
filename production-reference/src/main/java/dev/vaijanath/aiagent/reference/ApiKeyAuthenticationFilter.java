@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -23,11 +24,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     static final String HEADER = "X-Api-Key";
+    /** Request attribute the filter sets to the authenticated key's tenant (read by the controller). */
+    static final String TENANT_ATTRIBUTE = "agent.authenticatedTenant";
 
-    private final List<byte[]> keys;
+    private final List<Map.Entry<byte[], String>> keys; // (key bytes -> bound tenant)
 
-    ApiKeyAuthenticationFilter(List<String> apiKeys) {
-        this.keys = apiKeys.stream().map(key -> key.getBytes(StandardCharsets.UTF_8)).toList();
+    ApiKeyAuthenticationFilter(Map<String, String> apiKeys) {
+        this.keys = apiKeys.entrySet().stream()
+                .map(e -> Map.entry(e.getKey().getBytes(StandardCharsets.UTF_8), e.getValue()))
+                .toList();
     }
 
     @Override
@@ -40,25 +45,29 @@ class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        if (!authorized(request.getHeader(HEADER))) {
+        String tenant = resolveTenant(request.getHeader(HEADER));
+        if (tenant == null) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.getWriter().write("{\"error\":\"missing or invalid API key\"}");
             return;
         }
+        // Bind the tenant to the credential — the controller uses this, not a client-supplied header.
+        request.setAttribute(TENANT_ATTRIBUTE, tenant);
         chain.doFilter(request, response);
     }
 
-    private boolean authorized(String presented) {
+    /** The tenant bound to the presented key, or {@code null} if it matches none. Constant-time per key. */
+    private String resolveTenant(String presented) {
         if (presented == null || presented.isBlank()) {
-            return false;
+            return null;
         }
         byte[] presentedBytes = presented.getBytes(StandardCharsets.UTF_8);
-        boolean ok = false;
-        for (byte[] key : keys) {
-            // Constant-time per key and no early exit, so timing doesn't reveal which key matched.
-            ok |= MessageDigest.isEqual(key, presentedBytes);
+        String tenant = null;
+        for (Map.Entry<byte[], String> entry : keys) {
+            // Compare every key with no early exit, so timing doesn't reveal which key matched.
+            tenant = MessageDigest.isEqual(entry.getKey(), presentedBytes) ? entry.getValue() : tenant;
         }
-        return ok;
+        return tenant;
     }
 }

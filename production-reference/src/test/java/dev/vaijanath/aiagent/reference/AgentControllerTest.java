@@ -16,7 +16,7 @@ import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import java.time.Duration;
-import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +45,7 @@ class AgentControllerTest {
             return AgentResponse.completed("streamed answer");
         };
         AgentProperties properties = new AgentProperties(
-                null, null, 0, Duration.ofSeconds(90), null, null, null, "", List.of(), 0, 0);
+                null, null, 0, Duration.ofSeconds(90), null, null, null, "", Map.of(), 0, 0);
         // Run the streaming turn synchronously so the SSE assertions are deterministic.
         mvc = standaloneSetup(new AgentController(agent, streamingFactory, Runnable::run, properties)).build();
     }
