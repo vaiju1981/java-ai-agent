@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.openai.models.chat.completions.ChatCompletionContentPart;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
@@ -113,5 +114,12 @@ class OpenAiModelPortTest {
         assertThrows(
                 IllegalStateException.class, () -> OpenAiModelPort.requireApiKey("  ", "OPENAI_API_KEY"));
         assertDoesNotThrow(() -> OpenAiModelPort.requireApiKey("sk-test", "OPENAI_API_KEY"));
+    }
+
+    @Test
+    void fromEnvFailsClearlyWhenTheKeyIsAbsent() {
+        String key = System.getenv("OPENAI_API_KEY");
+        assumeTrue(key == null || key.isBlank(), "OPENAI_API_KEY is set in this environment");
+        assertThrows(IllegalStateException.class, OpenAiModelPort::fromEnv);
     }
 }
