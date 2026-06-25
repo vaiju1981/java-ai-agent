@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -12,7 +12,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class ApiKeyAuthenticationFilterTest {
 
-    private final ApiKeyAuthenticationFilter filter = new ApiKeyAuthenticationFilter(List.of("s3cret"));
+    private final ApiKeyAuthenticationFilter filter =
+            new ApiKeyAuthenticationFilter(Map.of("s3cret", "acme"));
 
     @Test
     void rejectsMissingKeyWith401() throws Exception {
@@ -49,6 +50,10 @@ class ApiKeyAuthenticationFilterTest {
 
         assertEquals(200, response.getStatus());
         assertNotNull(chain.getRequest(), "a valid key must pass through to the chain");
+        assertEquals(
+                "acme",
+                request.getAttribute(ApiKeyAuthenticationFilter.TENANT_ATTRIBUTE),
+                "the key's bound tenant is exposed for the controller, not taken from a client header");
     }
 
     @Test
@@ -65,7 +70,7 @@ class ApiKeyAuthenticationFilterTest {
 
     @Test
     void passesThroughWhenNoKeysConfigured() throws Exception {
-        ApiKeyAuthenticationFilter open = new ApiKeyAuthenticationFilter(List.of());
+        ApiKeyAuthenticationFilter open = new ApiKeyAuthenticationFilter(Map.of());
         MockFilterChain chain = new MockFilterChain();
 
         open.doFilter(new MockHttpServletRequest("POST", "/api/agent/turn"), new MockHttpServletResponse(), chain);

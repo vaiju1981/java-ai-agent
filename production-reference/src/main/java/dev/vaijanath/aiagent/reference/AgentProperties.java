@@ -1,7 +1,8 @@
 package dev.vaijanath.aiagent.reference;
 
 import java.time.Duration;
-import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("agent")
@@ -16,8 +17,9 @@ public record AgentProperties(
         // Content safety: a Llama Guard model enables the full crisis -> PII -> Llama Guard pipeline;
         // blank keeps the model-free crisis + PII scrub guardrails only.
         String guardModel,
-        // Edge protection (the reference assumes a trusted gateway, but enforces a baseline itself).
-        List<String> apiKeys,
+        // Edge protection: each API key maps to the tenant it authenticates (so the tenant is bound to
+        // the credential, not asserted by a client header). Empty = unauthenticated (with a warning).
+        Map<String, String> apiKeys,
         int rateLimitPerMinute,
         long maxRequestBytes) {
 
@@ -30,7 +32,12 @@ public record AgentProperties(
         toolTimeout = positiveOr(toolTimeout, Duration.ofSeconds(15));
         auditFile = defaultIfBlank(auditFile, "var/audit/agent-events.log");
         guardModel = guardModel == null ? "" : guardModel.strip();
-        apiKeys = apiKeys == null ? List.of() : apiKeys.stream().filter(k -> !k.isBlank()).toList();
+        apiKeys = apiKeys == null
+                ? Map.of()
+                : apiKeys.entrySet().stream()
+                        .filter(e -> e.getKey() != null && !e.getKey().isBlank())
+                        .collect(Collectors.toUnmodifiableMap(
+                                Map.Entry::getKey, e -> defaultIfBlank(e.getValue(), "default")));
         rateLimitPerMinute = Math.max(0, rateLimitPerMinute); // 0 = disabled
         maxRequestBytes = maxRequestBytes > 0 ? maxRequestBytes : 64 * 1024;
     }
