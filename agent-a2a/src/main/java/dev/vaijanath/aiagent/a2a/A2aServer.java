@@ -1,7 +1,6 @@
 package dev.vaijanath.aiagent.a2a;
 
 import dev.vaijanath.aiagent.agent.Agent;
-import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.ServerSocket;
@@ -100,15 +99,16 @@ public final class A2aServer implements AutoCloseable {
     }
 
     private static void writeResponse(OutputStream out, int status, String body) throws IOException {
+        // Write straight to the socket stream (owned by the try-with-resources in serve); no wrapping
+        // stream is acquired here, so there is nothing extra to close.
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         String head = "HTTP/1.1 " + status + " " + reason(status) + "\r\n"
                 + "Content-Type: application/json; charset=utf-8\r\n"
                 + "Content-Length: " + bytes.length + "\r\n"
                 + "Connection: close\r\n\r\n";
-        BufferedOutputStream sink = new BufferedOutputStream(out);
-        sink.write(head.getBytes(StandardCharsets.US_ASCII));
-        sink.write(bytes);
-        sink.flush();
+        out.write(head.getBytes(StandardCharsets.US_ASCII));
+        out.write(bytes);
+        out.flush();
     }
 
     private static String reason(int status) {
