@@ -9,6 +9,7 @@ import dev.vaijanath.aiagent.memory.ConversationStore;
 import dev.vaijanath.aiagent.memory.InMemoryConversationStore;
 import dev.vaijanath.aiagent.memory.InMemoryMemory;
 import dev.vaijanath.aiagent.memory.Memory;
+import dev.vaijanath.aiagent.model.BudgetExceededException;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelPorts;
@@ -184,13 +185,9 @@ public final class DefaultAgent implements Agent {
             try {
                 resp = callModel(req);
             } catch (RuntimeException e) {
-                // Graceful failure: surface it, never crash out of run().
-                log.warn("model call failed; ending turn gracefully", e);
-                notify(o -> o.onError("model", e));
-                audit("error", ctx, "model call failed");
-                auditTurn("turn.end", ctx, "model_error");
-                return finish(AgentResponse.stopped(
-                        "I ran into a problem reaching the model. Please try again.", "model_error"), startNanos);
+                // Graceful failure: surface it, never crash out of run(). A token-budget cap is reported
+                // distinctly from a model outage (see modelFailure).
+                return modelFailure(ctx, e, startNanos);
             }
             Duration modelLatency = Duration.ofNanos(System.nanoTime() - modelStart);
             notify(o -> o.onModelResponse(resp, modelLatency));
@@ -291,6 +288,25 @@ public final class DefaultAgent implements Agent {
         if (turnAudit) {
             audit(type, ctx, detail);
         }
+    }
+
+    /**
+     * Ends a turn gracefully on a model-side failure: log, observe, audit, and return a stopped result.
+     * A token-budget cap is surfaced distinctly from a model outage ({@code budget_exceeded} vs
+     * {@code model_error}) so operators can tell a cost ceiling from a down endpoint.
+     */
+    private AgentResponse modelFailure(RequestContext ctx, RuntimeException error, long startNanos) {
+        boolean budget = error instanceof BudgetExceededException;
+        String stage = budget ? "budget" : "model";
+        String stopReason = budget ? "budget_exceeded" : "model_error";
+        String message = budget
+                ? "This request reached its token budget."
+                : "I ran into a problem reaching the model. Please try again.";
+        log.warn("turn ending gracefully ({})", stopReason, error);
+        notify(o -> o.onError(stage, error));
+        audit("error", ctx, stage + " error");
+        auditTurn("turn.end", ctx, stopReason);
+        return finish(AgentResponse.stopped(message, stopReason), startNanos);
     }
 
     private AgentResponse finish(AgentResponse response, long startNanos) {

@@ -15,6 +15,7 @@ class StopReasonTest {
         assertEquals(StopReason.MAX_STEPS, AgentResponse.stopped("x", "max_steps").reason());
         assertEquals(StopReason.DEADLINE_EXCEEDED, AgentResponse.stopped("x", "deadline_exceeded").reason());
         assertEquals(StopReason.MODEL_ERROR, AgentResponse.stopped("x", "model_error").reason());
+        assertEquals(StopReason.BUDGET_EXCEEDED, AgentResponse.stopped("x", "budget_exceeded").reason());
         assertEquals(StopReason.UNKNOWN, AgentResponse.stopped("x", "something_custom").reason());
     }
 

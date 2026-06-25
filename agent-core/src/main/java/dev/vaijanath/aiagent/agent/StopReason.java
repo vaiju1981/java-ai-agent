@@ -21,6 +21,8 @@ public enum StopReason {
     DEADLINE_EXCEEDED(Category.TIMEOUT, true),
     /** The model call failed after retries; typically transient. */
     MODEL_ERROR(Category.ERROR, true),
+    /** The turn hit its token budget — a cost ceiling, distinct from a model outage; not retryable. */
+    BUDGET_EXCEEDED(Category.ERROR, false),
     /** Any other stop reason. */
     UNKNOWN(Category.ERROR, false);
 
@@ -60,6 +62,7 @@ public enum StopReason {
             case "max_steps" -> MAX_STEPS;
             case "deadline_exceeded" -> DEADLINE_EXCEEDED;
             case "model_error" -> MODEL_ERROR;
+            case "budget_exceeded" -> BUDGET_EXCEEDED;
             default -> UNKNOWN;
         };
     }
