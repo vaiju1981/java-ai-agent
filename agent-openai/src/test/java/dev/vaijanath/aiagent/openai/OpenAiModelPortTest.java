@@ -3,8 +3,10 @@ package dev.vaijanath.aiagent.openai;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.openai.models.chat.completions.ChatCompletionContentPart;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
 import com.openai.models.chat.completions.ChatCompletionTool;
+import dev.vaijanath.aiagent.model.Media;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelRequest;
 import dev.vaijanath.aiagent.model.ToolCall;
@@ -47,6 +49,45 @@ class OpenAiModelPortTest {
 
         assertTrue(params.tools().isPresent());
         assertEquals(1, params.tools().get().size());
+    }
+
+    @Test
+    void textOnlyUserMessageStaysAPlainString() {
+        ModelRequest request = new ModelRequest(List.of(Message.user("hi")), List.of());
+
+        ChatCompletionCreateParams params = OpenAiModelPort.toParams(request, "gpt-4o");
+
+        assertTrue(params.messages().get(0).user().orElseThrow().content().text().isPresent());
+    }
+
+    @Test
+    void mapsInlineImageMediaToADataUrlContentPart() {
+        Media img = Media.image("image/png", new byte[] {1, 2, 3});
+        ModelRequest request =
+                new ModelRequest(List.of(Message.user("what is this?", List.of(img))), List.of());
+
+        ChatCompletionCreateParams params = OpenAiModelPort.toParams(request, "gpt-4o");
+
+        List<ChatCompletionContentPart> parts =
+                params.messages().get(0).user().orElseThrow().content().arrayOfContentParts().orElseThrow();
+        assertEquals(2, parts.size()); // text + image
+        assertTrue(parts.get(0).text().isPresent());
+        String url = parts.get(1).imageUrl().orElseThrow().imageUrl().url();
+        assertTrue(url.startsWith("data:image/png;base64,"), url);
+    }
+
+    @Test
+    void mapsImageUrlMediaAsAPlainUrlAndOmitsBlankText() {
+        Media img = Media.imageUrl("https://example.com/cat.png");
+        ModelRequest request = new ModelRequest(List.of(Message.user("", List.of(img))), List.of());
+
+        ChatCompletionCreateParams params = OpenAiModelPort.toParams(request, "gpt-4o");
+
+        List<ChatCompletionContentPart> parts =
+                params.messages().get(0).user().orElseThrow().content().arrayOfContentParts().orElseThrow();
+        assertEquals(1, parts.size()); // blank text omitted
+        assertEquals(
+                "https://example.com/cat.png", parts.get(0).imageUrl().orElseThrow().imageUrl().url());
     }
 
     @Test

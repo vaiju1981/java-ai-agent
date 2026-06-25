@@ -3,16 +3,20 @@ package dev.vaijanath.aiagent.anthropic;
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.core.JsonValue;
+import com.anthropic.models.messages.Base64ImageSource;
 import com.anthropic.models.messages.ContentBlock;
 import com.anthropic.models.messages.ContentBlockParam;
+import com.anthropic.models.messages.ImageBlockParam;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.TextBlockParam;
 import com.anthropic.models.messages.Tool;
 import com.anthropic.models.messages.ToolResultBlockParam;
 import com.anthropic.models.messages.ToolUseBlockParam;
+import com.anthropic.models.messages.UrlImageSource;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.vaijanath.aiagent.model.Media;
 import dev.vaijanath.aiagent.model.Message;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ModelRequest;
@@ -94,7 +98,13 @@ public final class AnthropicModelPort implements ModelPort {
         for (Message m : request.messages()) {
             switch (m.role()) {
                 case SYSTEM -> { /* folded into the system prompt above */ }
-                case USER -> builder.addUserMessage(m.content());
+                case USER -> {
+                    if (m.hasMedia()) {
+                        builder.addUserMessageOfBlockParams(userBlocks(m));
+                    } else {
+                        builder.addUserMessage(m.content());
+                    }
+                }
                 case ASSISTANT -> {
                     if (m.hasToolCalls()) {
                         builder.addAssistantMessageOfBlockParams(assistantBlocks(m));
@@ -114,6 +124,26 @@ public final class AnthropicModelPort implements ModelPort {
             builder.addTool(toTool(spec));
         }
         return builder.build();
+    }
+
+    private static List<ContentBlockParam> userBlocks(Message m) {
+        List<ContentBlockParam> blocks = new ArrayList<>();
+        if (!m.content().isBlank()) {
+            blocks.add(ContentBlockParam.ofText(TextBlockParam.builder().text(m.content()).build()));
+        }
+        for (Media media : m.media()) {
+            if (media.kind() != Media.Kind.IMAGE) {
+                continue; // the Messages API takes images here; audio is carried but not sent
+            }
+            ImageBlockParam.Source source = media.isUrl()
+                    ? ImageBlockParam.Source.ofUrl(UrlImageSource.builder().url(media.url()).build())
+                    : ImageBlockParam.Source.ofBase64(Base64ImageSource.builder()
+                            .mediaType(Base64ImageSource.MediaType.of(media.mimeType()))
+                            .data(media.base64Data())
+                            .build());
+            blocks.add(ContentBlockParam.ofImage(ImageBlockParam.builder().source(source).build()));
+        }
+        return blocks;
     }
 
     private static List<ContentBlockParam> assistantBlocks(Message m) {
