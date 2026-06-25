@@ -6,6 +6,7 @@ import dev.vaijanath.aiagent.model.ToolCall;
 import dev.vaijanath.aiagent.observe.AgentObserver;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.time.Duration;
 import java.util.Objects;
 
 /**
@@ -16,8 +17,9 @@ import java.util.Objects;
  *
  * <p>Tags are low-cardinality by construction: directions ({@code input}/{@code output}), tool names
  * (developer-defined and bounded), outcomes ({@code ok}/{@code error} and stop reasons), and pipeline
- * stages. End-to-end and per-endpoint latency are already provided by Actuator's
- * {@code http.server.requests} timer, so this observer focuses on agent-domain counters.
+ * stages. Alongside the counters it records agent-domain latency timers — model call, tool call, and
+ * whole turn — which (unlike Actuator's {@code http.server.requests}) also cover non-HTTP agents and
+ * let you see where a turn's time goes.
  */
 public final class MicrometerAgentObserver implements AgentObserver {
 
@@ -35,6 +37,12 @@ public final class MicrometerAgentObserver implements AgentObserver {
     }
 
     @Override
+    public void onModelResponse(ModelResponse response, Duration latency) {
+        registry.timer("agent.model.latency").record(latency);
+        onModelResponse(response);
+    }
+
+    @Override
     public void onToolCall(ToolCall call) {
         registry.counter("agent.tool.calls", "tool", call.name()).increment();
     }
@@ -46,9 +54,21 @@ public final class MicrometerAgentObserver implements AgentObserver {
     }
 
     @Override
+    public void onToolResult(String toolName, ToolResult result, Duration latency) {
+        registry.timer("agent.tool.latency", "tool", toolName).record(latency);
+        onToolResult(toolName, result);
+    }
+
+    @Override
     public void onTurnEnd(AgentResponse response) {
         String outcome = response.blocked() ? "blocked" : response.stopReason();
         registry.counter("agent.turns", "outcome", outcome).increment();
+    }
+
+    @Override
+    public void onTurnEnd(AgentResponse response, Duration duration) {
+        registry.timer("agent.turn.latency").record(duration);
+        onTurnEnd(response);
     }
 
     @Override
