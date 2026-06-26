@@ -14,7 +14,7 @@ class ConfigurationFailFastTest {
 
     private static AgentProperties props(String guardModel, Map<String, String> apiKeys) {
         return new AgentProperties(
-                null, null, 0, Duration.ofSeconds(90), null, null, null, guardModel, apiKeys, 0, 0);
+                null, null, 0, Duration.ofSeconds(90), null, null, null, guardModel, apiKeys, 0, 0, false, "");
     }
 
     private static Environment withProfiles(String... active) {

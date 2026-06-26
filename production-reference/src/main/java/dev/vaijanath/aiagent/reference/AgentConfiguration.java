@@ -11,13 +11,18 @@ import dev.vaijanath.aiagent.guardrail.Guardrail;
 import dev.vaijanath.aiagent.guardrail.Guardrails;
 import dev.vaijanath.aiagent.guardrail.PiiScrubGuardrail;
 import dev.vaijanath.aiagent.langchain4j.OllamaModelPorts;
+import dev.vaijanath.aiagent.learn.LlmReflector;
+import dev.vaijanath.aiagent.learn.ReflectiveAgent;
 import dev.vaijanath.aiagent.memory.ConversationStore;
+import dev.vaijanath.aiagent.memory.EpisodicStore;
 import dev.vaijanath.aiagent.model.ModelPort;
 import dev.vaijanath.aiagent.model.ResilientModelPort;
 import dev.vaijanath.aiagent.observe.AgentObserver;
+import dev.vaijanath.aiagent.rag.Embedder;
 import dev.vaijanath.aiagent.springboot.health.ModelEndpointHealthIndicator;
 import dev.vaijanath.aiagent.springboot.metrics.MicrometerAgentObserver;
 import dev.vaijanath.aiagent.store.jdbc.JdbcConversationStore;
+import dev.vaijanath.aiagent.store.jdbc.JdbcEpisodicStore;
 import dev.vaijanath.aiagent.store.jdbc.JdbcIdempotencyStore;
 import dev.vaijanath.aiagent.tools.jsonschema.JsonSchemaToolValidator;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -73,11 +78,13 @@ class AgentConfiguration {
     }
 
     /**
-     * The unary turn agent, wrapped in {@link IdempotentAgent} so a retried request carrying the same
-     * {@code Idempotency-Key} (passed through by {@link AgentController}) returns the prior result instead
-     * of re-running the model and effectful tools. Only non-retryable outcomes are cached, so a transient
-     * failure still re-runs. The streaming agent is intentionally left unwrapped — replaying a cached
-     * result can't reproduce a token stream, so SSE turns are not deduplicated.
+     * The unary turn agent. Optionally wrapped in a {@link ReflectiveAgent} (when {@code
+     * agent.self-learning} is on) that learns from past mistakes, then in {@link IdempotentAgent} so a
+     * retried request carrying the same {@code Idempotency-Key} (passed through by {@link AgentController})
+     * returns the prior result instead of re-running the model and effectful tools. Only non-retryable
+     * outcomes are cached, so a transient failure still re-runs. The streaming agent is intentionally left
+     * unwrapped — replaying a cached result can't reproduce a token stream, so SSE turns are not
+     * deduplicated (nor are they self-corrected).
      */
     @Bean
     Agent productionAgent(
@@ -86,9 +93,33 @@ class AgentConfiguration {
             AsyncAuditSink audit,
             MeterRegistry meterRegistry,
             AgentProperties properties,
-            IdempotencyStore idempotencyStore) {
+            IdempotencyStore idempotencyStore,
+            DataSource dataSource) {
         Agent base = baseBuilder(model, conversations, audit, meterRegistry, properties).build();
-        return new IdempotentAgent(base, idempotencyStore);
+        // Idempotency stays outermost (dedup the whole request); a ReflectiveAgent's retries are internal.
+        Agent core = properties.hasSelfLearning() ? selfLearning(base, model, dataSource, properties) : base;
+        return new IdempotentAgent(core, idempotencyStore);
+    }
+
+    /**
+     * Wraps the agent so it learns from past mistakes: before answering it recalls lessons from similar
+     * past episodes (durable + semantic via {@link JdbcEpisodicStore}, embedded by {@code
+     * agent.embedding-model}) and injects them; after answering it self-critiques and, on a poor answer,
+     * records the lesson and retries with it applied. Learning persists across restarts and is shared
+     * across instances. The {@code agent_episodes} table is created by the bundled Flyway migration.
+     */
+    private Agent selfLearning(Agent base, ModelPort model, DataSource dataSource, AgentProperties properties) {
+        Embedder embedder =
+                OllamaModelPorts.ollamaEmbedder(properties.ollamaBaseUrl(), properties.embeddingModel());
+        EpisodicStore episodes = new JdbcEpisodicStore(dataSource::getConnection, embedder);
+        log.info("self-learning enabled: ReflectiveAgent over JdbcEpisodicStore (embeddings: {})",
+                properties.embeddingModel());
+        return ReflectiveAgent.builder()
+                .worker(() -> base)
+                .reflector(new LlmReflector(model))
+                .memory(episodes)
+                .maxAttempts(2)
+                .build();
     }
 
     /**
@@ -184,6 +215,10 @@ class AgentConfiguration {
             Environment environment,
             @Value("${spring.datasource.password:}") String dbPassword) {
         return args -> {
+            if (properties.selfLearning() && properties.embeddingModel().isBlank()) {
+                log.warn("agent.self-learning is on but no agent.embedding-model is set — self-learning is "
+                        + "OFF (episodic recall needs an embedding model)");
+            }
             List<String> problems = new ArrayList<>();
             if (properties.apiKeys().isEmpty()) {
                 problems.add("no agent.api-keys configured — /api would be UNAUTHENTICATED");

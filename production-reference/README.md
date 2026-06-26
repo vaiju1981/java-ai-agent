@@ -50,6 +50,8 @@ deadline; `409` on a concurrent-write conflict; `400` on invalid input.
 | `agent.api-keys` (YAML map) | _(empty)_ | maps each `X-Api-Key` to the tenant it authenticates (key → tenant), so the tenant is bound to the credential, not a client header. Empty leaves `/api` unauthenticated (a startup warning; fails startup under `prod`). Configure as a YAML map — see `application.yml`. |
 | `AGENT_RATE_LIMIT_PER_MINUTE` | `120` | per-caller token-bucket limit (`0` disables) |
 | `AGENT_MAX_REQUEST_BYTES` | `65536` | reject larger bodies with `413` |
+| `AGENT_SELF_LEARNING` | `false` | opt-in: wrap the unary agent in a `ReflectiveAgent` that recalls lessons from past episodes and self-corrects (needs `AGENT_EMBEDDING_MODEL`) |
+| `AGENT_EMBEDDING_MODEL` | _(blank)_ | embedding model for episodic recall (e.g. `nomic-embed-text`); required when self-learning is on |
 
 ## Security model
 

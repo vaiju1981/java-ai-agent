@@ -68,3 +68,9 @@ agent:
   api-keys: {}
   rate-limit-per-minute: ${AGENT_RATE_LIMIT_PER_MINUTE:120}
   max-request-bytes: ${AGENT_MAX_REQUEST_BYTES:65536}
+  # Self-learning (opt-in, default off): wrap the unary agent in a ReflectiveAgent that recalls lessons
+  # from past episodes (durable + semantic, via JdbcEpisodicStore in the agent_episodes table) and
+  # self-corrects on a poor answer. Needs an embedding model (e.g. nomic-embed-text) pulled in Ollama;
+  # with self-learning on but no embedding-model set, it logs a warning and stays off.
+  self-learning: ${AGENT_SELF_LEARNING:false}
+  embedding-model: ${AGENT_EMBEDDING_MODEL:}
