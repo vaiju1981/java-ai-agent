@@ -47,18 +47,21 @@ deadline; `409` on a concurrent-write conflict; `400` on invalid input.
 | `DATABASE_URL` / `DATABASE_USER` / `DATABASE_PASSWORD` | local Postgres / `agent` / `agent` | datasource (a startup warning fires if the password is left at `agent`) |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | `http://localhost:11434` / `llama3.2` | model backend |
 | `AGENT_GUARD_MODEL` | _(blank)_ | Llama Guard model (e.g. `llama-guard3:1b`); blank runs crisis + PII guardrails only |
-| `AGENT_API_KEYS` | _(blank)_ | comma-separated valid `X-Api-Key` values; blank leaves `/api` unauthenticated (with a warning) |
+| `agent.api-keys` (YAML map) | _(empty)_ | maps each `X-Api-Key` to the tenant it authenticates (key → tenant), so the tenant is bound to the credential, not a client header. Empty leaves `/api` unauthenticated (a startup warning; fails startup under `prod`). Configure as a YAML map — see `application.yml`. |
 | `AGENT_RATE_LIMIT_PER_MINUTE` | `120` | per-caller token-bucket limit (`0` disables) |
 | `AGENT_MAX_REQUEST_BYTES` | `65536` | reject larger bodies with `413` |
 
 ## Security model
 
-- **Authentication** is a baseline: `X-Api-Key` is checked against `AGENT_API_KEYS`. A real
-  deployment usually terminates auth at a gateway — leave `AGENT_API_KEYS` blank only if such a
-  gateway is in front (the service logs a loud warning when it is unauthenticated).
-- **Identity** (`X-Tenant-Id`, `X-Principal-Id`) must be set by that trusted gateway; never forward
-  client-supplied identity headers unchanged. Tenant isolation in the store is only as strong as the
-  identity it is given.
+- **Authentication** is a baseline: `X-Api-Key` is checked against the configured `agent.api-keys`. A
+  real deployment usually terminates auth at a gateway — leave `agent.api-keys` empty only if such a
+  gateway is in front (the service logs a loud warning when it is unauthenticated, and refuses to start
+  under the `prod` profile).
+- **Tenant** is **bound to the API key** (`agent.api-keys` maps key → tenant), not asserted by a client
+  header, so `X-Tenant-Id` cannot be spoofed when authentication is on. `X-Tenant-Id` is honored only as
+  a fallback when auth is disabled (dev). **Principal** (`X-Principal-Id`) should be set by a trusted
+  gateway; never forward client-supplied identity headers unchanged. Tenant isolation in the store is
+  only as strong as the identity it is given.
 - **Rate limiting** is in-memory and therefore per instance; a multi-replica deployment needs a
   shared limiter (e.g. Redis) for a global limit.
 - **Content safety**: crisis detection and PII scrubbing always run; set `AGENT_GUARD_MODEL` to add
