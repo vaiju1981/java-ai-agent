@@ -3,7 +3,7 @@
 Notable changes to java-ai-agent. Format loosely follows [Keep a Changelog](https://keepachangelog.com);
 versioning is [SemVer](https://semver.org). (Commit history has the fine-grained detail.)
 
-## [Unreleased]
+## [0.5.0] — 2026-06-26
 
 The **self-learning** line: production-grade learning from past mistakes.
 
@@ -19,6 +19,8 @@ The **self-learning** line: production-grade learning from past mistakes.
   the deployable golden path demonstrates learning from past mistakes. Off by default.
 - **`examples/LearningAgent`** — a deterministic, no-model demo of the self-learning loop (slips on the
   first task, recalls the lesson on the next); cookbook §7b documents the pattern.
+- **`rag.Vectors`** — a shared `cosine(...)` helper, consolidating three byte-identical copies across the
+  vector stores (also the engine behind `JdbcEpisodicStore`'s recall).
 
 ### Changed
 
@@ -27,6 +29,11 @@ The **self-learning** line: production-grade learning from past mistakes.
   longer squats a consumer's migration version space (the cause of the cross-repo `V2` collision). Add it
   to your Flyway locations (`spring.flyway.locations=classpath:db/agent-store-jdbc,classpath:db/migration`).
   `fromJdbcUrl(...)` still self-creates the schema. See [docs/MIGRATION-0.5.md](docs/MIGRATION-0.5.md).
+
+### Notes
+
+- Other than the `agent-store-jdbc` migration relocation above, 0.5.0 is additive against 0.4.0; the
+  japicmp baseline stays 0.4.0 for this release (bumped to 0.5.0 once it lands on Central).
 
 ## [0.4.0] — 2026-06-25
 
