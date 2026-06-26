@@ -21,7 +21,12 @@ public record AgentProperties(
         // the credential, not asserted by a client header). Empty = unauthenticated (with a warning).
         Map<String, String> apiKeys,
         int rateLimitPerMinute,
-        long maxRequestBytes) {
+        long maxRequestBytes,
+        // Self-learning: when true, the unary agent is wrapped in a ReflectiveAgent that recalls lessons
+        // from past episodes (durable + semantic via JdbcEpisodicStore) and self-corrects on a poor
+        // answer. Requires an embedding model; defaults off.
+        boolean selfLearning,
+        String embeddingModel) {
 
     public AgentProperties {
         ollamaBaseUrl = defaultIfBlank(ollamaBaseUrl, "http://localhost:11434");
@@ -40,11 +45,17 @@ public record AgentProperties(
                                 Map.Entry::getKey, e -> defaultIfBlank(e.getValue(), "default")));
         rateLimitPerMinute = Math.max(0, rateLimitPerMinute); // 0 = disabled
         maxRequestBytes = maxRequestBytes > 0 ? maxRequestBytes : 64 * 1024;
+        embeddingModel = embeddingModel == null ? "" : embeddingModel.strip();
     }
 
     /** True when a Llama Guard model is configured, enabling the full safety pipeline. */
     public boolean hasGuardModel() {
         return !guardModel.isBlank();
+    }
+
+    /** True when self-learning is enabled and an embedding model is configured to back episodic recall. */
+    public boolean hasSelfLearning() {
+        return selfLearning && !embeddingModel.isBlank();
     }
 
     private static String defaultIfBlank(String value, String fallback) {
