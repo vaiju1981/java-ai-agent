@@ -58,23 +58,10 @@ public final class InMemoryVectorStore implements Retriever {
         float[] q = embedder.embed(query);
         return entries.stream()
                 .filter(e -> e.tenant.equals(tenant))
-                .map(e -> new RetrievedChunk(e.id, e.text, cosine(q, e.vector), e.metadata))
+                .map(e -> new RetrievedChunk(e.id, e.text, Vectors.cosine(q, e.vector), e.metadata))
                 .filter(c -> c.score() > 0.0)
                 .sorted(Comparator.comparingDouble(RetrievedChunk::score).reversed())
                 .limit(limit)
                 .toList();
-    }
-
-    static double cosine(float[] a, float[] b) {
-        double dot = 0;
-        double normA = 0;
-        double normB = 0;
-        int n = Math.min(a.length, b.length);
-        for (int i = 0; i < n; i++) {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-        return (normA == 0 || normB == 0) ? 0 : dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 }

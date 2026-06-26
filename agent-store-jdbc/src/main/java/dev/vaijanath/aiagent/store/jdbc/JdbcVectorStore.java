@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.vaijanath.aiagent.rag.Embedder;
 import dev.vaijanath.aiagent.rag.RetrievedChunk;
 import dev.vaijanath.aiagent.rag.Retriever;
+import dev.vaijanath.aiagent.rag.Vectors;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -108,7 +109,7 @@ public final class JdbcVectorStore implements Retriever {
             ps.setString(1, tenant);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    double score = cosine(q, read(rs.getString("embedding"), float[].class));
+                    double score = Vectors.cosine(q, read(rs.getString("embedding"), float[].class));
                     if (score > 0.0) {
                         scored.add(new RetrievedChunk(
                                 rs.getString("chunk_id"),
@@ -147,18 +148,5 @@ public final class JdbcVectorStore implements Retriever {
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException("corrupt stored value", e);
         }
-    }
-
-    private static double cosine(float[] a, float[] b) {
-        double dot = 0;
-        double normA = 0;
-        double normB = 0;
-        int n = Math.min(a.length, b.length);
-        for (int i = 0; i < n; i++) {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-        return (normA == 0 || normB == 0) ? 0 : dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 }
