@@ -149,7 +149,7 @@ subprojects {
         // the enforcement behind the "deprecate, don't remove" policy (docs/API-STABILITY.md). Override the
         // baseline with -PjapicmpBaseline=<version>; bump it after a release once it lands on Central.
         val japicmpBaselineVersion =
-            (project.findProperty("japicmpBaseline") as String?)?.takeIf(String::isNotBlank) ?: "0.3.0"
+            (project.findProperty("japicmpBaseline") as String?)?.takeIf(String::isNotBlank) ?: "0.4.0"
         val japicmpTool = configurations.create("japicmpTool") { isCanBeConsumed = false }
         val japicmpBaseline = configurations.create("japicmpBaseline") {
             isCanBeConsumed = false
