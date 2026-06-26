@@ -21,4 +21,9 @@ final class Examples {
         String baseUrl = System.getenv().getOrDefault("OLLAMA_BASE_URL", "http://localhost:11434");
         return OllamaModelPorts.ollama(baseUrl, modelName);
     }
+
+    /** True when no real model is configured (the {@link StubModelPort} fallback is in use). */
+    static boolean isStub(ModelPort port) {
+        return port instanceof StubModelPort;
+    }
 }
