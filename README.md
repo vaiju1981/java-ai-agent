@@ -222,28 +222,19 @@ runs *on top* of them.
 | Eval harness + budget enforcement | **yes** | partial | no |
 | Zero-dependency core | **yes** | no | no |
 
-## Demos
+## Try it
 
 For the deployment-shaped golden path—not a demo—see the
 [`production-reference`](production-reference/README.md) service. It wires the production runtime
 to PostgreSQL/Flyway, HikariCP, durable audit, bounded requests, health probes, and Ollama.
 
-The [`demos`](demos/README.md) module is a small set of **deep, production-shaped applications** —
-each runs through the governed runtime and is verified live against a local model:
+For runnable, source-level examples — a minimal agent, multi-tool orchestration, the local safety
+layer, cross-session memory, and streaming — see [`examples`](examples/README.md):
 
 ```bash
 export AGENT_MODEL=gemma4:31b-cloud   # any pulled, tool-capable Ollama model
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.<group>.<Demo>
+./gradlew :examples:run -PmainClass=dev.vaijanath.aiagent.examples.ToolUsingAssistant
 ```
-
-| Demo | Package | What it shows |
-|---|---|---|
-| **GovernedSupportDeskDemo** | `flagship` | a deterministic (no-model) tour of the whole trust layer: durable restart, deny-by-default → allow-list, guardrail block + PII scrub, token-budget stop, tenant isolation, audit |
-| **DataAnalystDemo** | `data` | a real EDA agent over a multi-table warehouse — profiling, histograms, IQR outliers, correlation, segmentation, time-series, **driver analysis** — writing a persisted report |
-| **FraudInvestigationDemo** | `fraud` | analysis **plus governed, effectful action**: investigates planted fraud, then `flag_for_review` (allowed) and `freeze_account` (**denied without authorization**), idempotent and audited |
-| **PersonalFinanceDemo** | `finance` | a financial advisor over a year of income + expenses: cash-flow, savings-rate trend, budget variance + forecast, subscription/anomaly detection, goal projection → a persisted plan |
-
-See [demos/README.md](demos/README.md) for what each one does and sample output.
 
 ## Modules
 
@@ -276,10 +267,8 @@ See [demos/README.md](demos/README.md) for what each one does and sample output.
 - **`agent-store-pgvector`** — a pgvector-backed vector store for embeddings-based semantic recall.
 - **`agent-store-sqlite`** — an embedded, zero-infra `CheckpointStore` for crash-resumable
   orchestration (survives restarts). *(On `main`; ships in the next release.)*
-- **`examples`** — a graduated set of runnable agents, from `MinimalAgent` to the `StudyBuddy`
-  capstone (which composes everything); see [examples/README.md](examples/README.md).
-- **`demos`** — deep, production-shaped applications (a flagship trust-layer tour, a data analyst, a
-  fraud investigator, a financial advisor), each governed and verified live; see [demos/README.md](demos/README.md).
+- **`examples`** — a small, canonical set of runnable agents (minimal agent, tool orchestration, the
+  safety layer, cross-session memory, streaming); see [examples/README.md](examples/README.md).
 - **`production-reference`** — a deployable Spring Boot/PostgreSQL golden path with migrations,
   pooling, durable audit, safe runtime presets, health probes, and bounded multi-tenant requests.
 
@@ -337,14 +326,6 @@ export OLLAMA_BASE_URL=http://localhost:11434   # optional, this is the default
 ollama pull llama-guard3:1b
 AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
   -PmainClass=dev.vaijanath.aiagent.examples.SafeAgent
-```
-
-**Deep agent demo** (`DeepResearchAgent`) — plans a task, runs a sub-agent per subtask concurrently
-on virtual threads, then synthesizes:
-
-```bash
-AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
-  -PmainClass=dev.vaijanath.aiagent.examples.DeepResearchAgent
 ```
 
 ## Status & roadmap

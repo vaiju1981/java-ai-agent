@@ -68,6 +68,9 @@ on the A2A request record (see [docs/MIGRATION-0.4.md](docs/MIGRATION-0.4.md)).
 
 ### Notes
 
+- The `demos` module was removed and `examples` trimmed to a canonical set (minimal agent, tool
+  orchestration, safety layer, cross-session memory, streaming) to keep the repo focused on the library;
+  the removed showcases remain in git history. No published library module changed.
 - `DefaultAgent.converse` / `executeCalls` were refactored below the cognitive-complexity gate — a pure,
   behavior-preserving change with no API or semantic impact.
 - Every change above is additive against the 0.3.0 API except the `A2aRequest` constructor; the japicmp
