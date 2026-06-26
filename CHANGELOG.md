@@ -3,6 +3,26 @@
 Notable changes to java-ai-agent. Format loosely follows [Keep a Changelog](https://keepachangelog.com);
 versioning is [SemVer](https://semver.org). (Commit history has the fine-grained detail.)
 
+## [Unreleased]
+
+The **self-learning** line: production-grade learning from past mistakes.
+
+### Added
+
+- **`JdbcEpisodicStore`** (`agent-store-jdbc`) — a durable, **semantic** `EpisodicStore` for SQLite/
+  PostgreSQL. Episodes are stored with their task+lesson embedded (via the `rag.Embedder` seam) and
+  recalled by cosine similarity, so a `ReflectiveAgent`'s learning persists across restarts and is shared
+  across instances — production "RAG over past mistakes". Previously, semantic recall existed only in the
+  in-memory `LangChain4jEpisodicStore`.
+
+### Changed
+
+- **(Breaking)** `agent-store-jdbc` now ships its Flyway migrations under its **own** location,
+  `classpath:db/agent-store-jdbc/` — **not** the default `classpath:db/migration` — so the library no
+  longer squats a consumer's migration version space (the cause of the cross-repo `V2` collision). Add it
+  to your Flyway locations (`spring.flyway.locations=classpath:db/agent-store-jdbc,classpath:db/migration`).
+  `fromJdbcUrl(...)` still self-creates the schema. See [docs/MIGRATION-0.5.md](docs/MIGRATION-0.5.md).
+
 ## [0.4.0] — 2026-06-25
 
 The **hardening** release: production-rigor and observability across the runtime and the reference,
