@@ -2,7 +2,7 @@
 
 This document defines what `java-ai-agent` considers **stable public API** versus **internal**, and how
 changes are managed across releases. It applies to the published library modules (`agent-*`); the
-`apps/` and `demos/` modules and `production-reference` are example applications, not API.
+`examples/` module and `production-reference` are example applications, not API.
 
 ## Stable public API
 
