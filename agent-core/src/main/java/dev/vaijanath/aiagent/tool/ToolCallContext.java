@@ -53,14 +53,17 @@ public record ToolCallContext(
     /**
      * A stable opaque key for this logical call. When the application supplied a client idempotency
      * key, retries remain stable across traces and service instances; otherwise the key is scoped to
-     * this trace/session. The SHA-256 digest does not expose the caller key or arguments.
+     * this trace/session. The tool name and arguments are <b>always</b> folded in, so two distinct
+     * calls to the same tool within one request (e.g. {@code pay({"amount":5})} and
+     * {@code pay({"amount":6})}) never collapse to one key, while a retry of the same call still does.
+     * The SHA-256 digest exposes neither the caller key nor the arguments.
      */
     public String idempotencyKey() {
         boolean hasClientKey = clientIdempotencyKey != null && !clientIdempotencyKey.isBlank();
         String requestScope = hasClientKey
                 ? part(clientIdempotencyKey)
-                : part(sessionId) + part(traceId) + part(argumentsJson);
-        String material = part(tenant) + requestScope + part(spec.name());
+                : part(sessionId) + part(traceId);
+        String material = part(tenant) + requestScope + part(argumentsJson) + part(spec.name());
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(material.getBytes(StandardCharsets.UTF_8));

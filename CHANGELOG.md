@@ -58,6 +58,14 @@ on the A2A request record (see [docs/MIGRATION-0.4.md](docs/MIGRATION-0.4.md)).
   `io.github.vaiju1981:agent-*` artifacts. This repository is now library-only (plus the runnable
   `examples/` and `demos/`).
 
+### Fixed
+
+- **Tool idempotency key now always includes the call arguments.** `ToolCallContext.idempotencyKey()`
+  dropped the arguments whenever a client idempotency key was present (0.3.0), so two distinct calls to
+  the same tool within one idempotent request (e.g. `pay({"amount":5})` and `pay({"amount":6})`) hashed
+  to the same key — an effectful tool deduplicating by it could skip a real operation. Arguments are now
+  folded into the key on every path; a retry of the *same* call still deduplicates.
+
 ### Notes
 
 - `DefaultAgent.converse` / `executeCalls` were refactored below the cognitive-complexity gate — a pure,
