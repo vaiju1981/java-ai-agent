@@ -14,6 +14,11 @@ The **self-learning** line: production-grade learning from past mistakes.
   recalled by cosine similarity, so a `ReflectiveAgent`'s learning persists across restarts and is shared
   across instances — production "RAG over past mistakes". Previously, semantic recall existed only in the
   in-memory `LangChain4jEpisodicStore`.
+- **Opt-in self-learning in `production-reference`** — `agent.self-learning=true` (plus an
+  `agent.embedding-model`) wraps the unary agent in a `ReflectiveAgent` backed by `JdbcEpisodicStore`, so
+  the deployable golden path demonstrates learning from past mistakes. Off by default.
+- **`examples/LearningAgent`** — a deterministic, no-model demo of the self-learning loop (slips on the
+  first task, recalls the lesson on the next); cookbook §7b documents the pattern.
 
 ### Changed
 

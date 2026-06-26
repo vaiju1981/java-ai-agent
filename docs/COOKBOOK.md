@@ -237,6 +237,37 @@ Memory windowed = new TokenWindowedMemory(tokenizer, 4_000);
 Memory summarizing = new SummarizingMemory(tokenizer, summarizer, 4_000, /* keep recent */ 6);
 ```
 
+## 7b. Self-learning — learn from past mistakes (`agent-core`)
+
+`ReflectiveAgent` recalls lessons from similar **past episodes** and injects them, self-critiques the
+answer with a `Reflector`, and on a poor answer records the lesson and **retries with it applied** — so
+learning persists across runs, not just within one.
+
+```java
+Agent learner = ReflectiveAgent.builder()
+    .worker(() -> baseAgent)               // a fresh worker per attempt
+    .reflector(new LlmReflector(model))    // self-critique → a lesson when the answer falls short
+    .memory(new InMemoryEpisodicStore())   // records + recalls lessons (see below for durable/semantic)
+    .maxAttempts(3)
+    .build();
+```
+
+Every lesson is a recorded `Episode`, so behaviour change is auditable, never silent drift. Choose the
+`EpisodicStore` by how recall should work and how long it should last:
+
+- `InMemoryEpisodicStore` / `FileEpisodicStore` — keyword recall (in-process / durable-to-disk).
+- `LangChain4jEpisodicStore` — **semantic** recall via embeddings (in-memory).
+- `JdbcEpisodicStore` (`agent-store-jdbc`) — **durable + semantic**: embeddings in SQLite/PostgreSQL, so
+  recall survives restarts and is shared across instances ("RAG over past mistakes").
+
+```java
+EpisodicStore memory = new JdbcEpisodicStore(dataSource::getConnection, embedder); // durable + semantic
+```
+
+The `production-reference` service wires this in opt-in (`agent.self-learning=true` + an
+`agent.embedding-model`). Runnable demo: `examples/LearningAgent` (deterministic — slips on the first
+task, recalls the lesson on the next).
+
 ## 8. Guardrails
 
 Compose the `kidguard` safety pipeline and add prompt-injection screening.
