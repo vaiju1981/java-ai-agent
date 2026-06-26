@@ -28,6 +28,7 @@ still run, but the real behavior (tool orchestration, streaming) needs a model.
 | `SafeAgent` | the local safety layer — Llama Guard + PII scrub | needs `llama-guard3:1b` |
 | `MemoryAcrossSessions` | **cross-session memory** — learnings persist to a file via `FileEpisodicStore`; run it twice and the second (separate) process already knows the lesson | needs a model |
 | `StreamingChat` | **streaming** — prints the model's reply token-by-token as it's generated | needs a model |
+| `LearningAgent` | **self-learning** — a `ReflectiveAgent` slips on the first task, records the lesson, and recalls it on a later similar task (2 attempts → 1) | none (deterministic) |
 
 ## What to look for
 
