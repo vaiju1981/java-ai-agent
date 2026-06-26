@@ -5,7 +5,7 @@
 > folder, set an API key, `gradle run`. The examples below instead run *inside* this repo against the
 > source.
 
-A tour of `java-ai-agent`. Run any with:
+A small, canonical tour of `java-ai-agent`. Run any with:
 
 ```bash
 ./gradlew :examples:run -PmainClass=dev.vaijanath.aiagent.examples.<ClassName>
@@ -19,56 +19,25 @@ export AGENT_MODEL=gemma4:31b-cloud   # any pulled Ollama model
 ```
 
 Without `AGENT_MODEL` they fall back to an honest **stub** (obvious placeholder output) so they
-still run, but the real behavior (tool orchestration, skill selection, self-correction) needs a model.
+still run, but the real behavior (tool orchestration, streaming) needs a model.
 
-## Basics
-
-| # | Example | Shows | Model |
-|---|---------|-------|-------|
-| 1 | `MinimalAgent` | the smallest agent: model + prompt | optional |
-| 2 | `HelloAgent` | a tool, a keyword guardrail, token accounting | optional |
-| 3 | `SafeAgent` | the local safety layer — Llama Guard + PII scrub | needs `llama-guard3:1b` |
-
-## Substantial (run these with a model)
-
-| # | Example | What it really demonstrates |
-|---|---------|------------------------------|
-| 4 | `ToolUsingAssistant` | **multi-tool orchestration** — the model chains `convert` (mi→km) then `math` (add) to answer one question; the trace shows each tool call |
-| 5 | `SkilledAgentExample` | **skills, model-selected** — an `LlmSkillSelector` picks `math-tutor` (with the math tool) vs `french-translator` per task; the equipped skill's instructions + tools steer the answer |
-| 6 | `ResearchAssistant` | **deep agent** — plans a CTO briefing into sections, writes each with a concurrent sub-agent (virtual threads), and synthesizes; prints the plan, the per-section **workspace artifacts**, and the final briefing |
-| 7 | `LearningAgentExample` | **learning from real mistakes** — a deterministic verifier rejects banned words; the model slips, the agent records the lesson, retries, and self-corrects (watch the INFO log show each attempt) |
-| 8 | `MemoryAcrossSessions` | **cross-session memory** — learnings are persisted to a file with `FileEpisodicStore`; run it twice and the second (separate) process already knows the lesson |
-| 9 | `PermissionedAgent` | **capability-based tool authorization** — `denyEffectful` runs the read-only tool and denies the effectful one by default (no allow-list needed); swap in an allow-list or human approval |
-| 10 | `EvalExample` | **eval harness** — runs an agent against a suite of cases and reports a pass rate |
-| 11 | `StreamingChat` | **streaming** — prints the model's reply token-by-token as it's generated |
-
-(`DeepResearchAgent` is a smaller deep-agent demo kept as a stepping stone to `ResearchAssistant`.)
-
-## Capstone — everything at once
-
-| Example | Composes |
-|---------|----------|
-| `StudyBuddy` | **kidguard guardrails + skills + tools + deep agent + learning + observability**, all through the one `Agent` seam |
-
-`StudyBuddy` runs four turns on one safe, skilled, observed worker: a homework question (skill + tool),
-a harmful request (blocked by Llama Guard), an encouragement that must be signed "Mitra" (self-corrects
-on the second attempt), and a "why is the sky blue" explainer answered by a deep agent whose
-sub-agents are themselves safe and skilled — then prints total token usage. Best with
-`AGENT_MODEL` set and `ollama pull llama-guard3:1b`.
-
-```bash
-ollama pull llama-guard3:1b
-AGENT_MODEL=gemma4:31b-cloud ./gradlew :examples:run \
-  -PmainClass=dev.vaijanath.aiagent.examples.StudyBuddy
-```
+| Example | Shows | Model |
+|---------|-------|-------|
+| `MinimalAgent` | the smallest agent: model + prompt | optional |
+| `ToolUsingAssistant` | **multi-tool orchestration** — the model chains `convert` (mi→km) then `math` (add) to answer one question; the trace shows each tool call | needs a model |
+| `SafeAgent` | the local safety layer — Llama Guard + PII scrub | needs `llama-guard3:1b` |
+| `MemoryAcrossSessions` | **cross-session memory** — learnings persist to a file via `FileEpisodicStore`; run it twice and the second (separate) process already knows the lesson | needs a model |
+| `StreamingChat` | **streaming** — prints the model's reply token-by-token as it's generated | needs a model |
 
 ## What to look for
 
 - **ToolUsingAssistant** — DEBUG trace: `tool 'convert' -> ok`, `tool 'math' -> ok`; the model never
   computes in its head. Token usage printed at the end.
-- **SkilledAgentExample** — the math task ends up using the `math` tool and explaining steps; the
-  translation task returns French only. Different skills, selected by the model, change behavior.
-- **ResearchAssistant** — `plan.md` lists subtasks marked `DONE`; each `step-N.txt` is a real section
-  draft produced by a concurrent sub-agent; the final briefing synthesizes them.
-- **LearningAgentExample** — attempt 1 typically uses a banned word → the verifier teaches a lesson →
-  a later attempt avoids it. The lesson is a recorded `Episode`, so the learning is auditable.
+- **SafeAgent** — a harmful prompt is replaced by a safe response; PII in the input is scrubbed before
+  it reaches the model. Guardrails fail closed.
+- **MemoryAcrossSessions** — the recorded lesson is an `Episode` persisted to disk, so the learning is
+  auditable and survives a restart.
+
+> More elaborate showcases (multi-agent orchestration, skills, deep-research planning, learning,
+> evaluation) live outside this repo to keep the core lean — see the cookbook ([docs/COOKBOOK.md](../docs/COOKBOOK.md))
+> for the corresponding patterns.

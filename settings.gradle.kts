@@ -30,7 +30,6 @@ include(
     "agent-openai",
     "agent-spring-boot-starter",
     "examples",
-    "demos",
     "downstream-smoke",
     "production-reference",
 )

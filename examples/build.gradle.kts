@@ -14,5 +14,5 @@ dependencies {
 application {
     // Override with -PmainClass=...SafeAgent to run a different example.
     mainClass.set(providers.gradleProperty("mainClass")
-        .orElse("dev.vaijanath.aiagent.examples.HelloAgent"))
+        .orElse("dev.vaijanath.aiagent.examples.MinimalAgent"))
 }
