@@ -57,6 +57,31 @@ note these changes:
   prior result. This needs the new `V2__agent_idempotency.sql` Flyway migration (shipped in
   `agent-store-jdbc`).
 
+## Heads-up: `agent-store-jdbc` adds a second Flyway migration
+
+`agent-store-jdbc` ships its schema as Flyway migrations under the default `classpath:db/migration`. In
+0.3.0 it shipped only `V1__agent_conversation_store.sql`; **0.4.0 adds `V2__agent_idempotency.sql`** (for
+the durable `JdbcIdempotencyStore`).
+
+If your application has **its own** Flyway migrations under `db/migration` and you numbered them starting
+at `V2` (reserving `V1` for the library), they now **collide** with the library's `V2` — Flyway fails at
+startup with *"Found more than one migration with version 2"*. Flyway shares one global version space
+across all locations, and it scans `db/migration` **recursively**, so a subfolder does not help.
+
+**Recommended fix — let your app own its full schema in a separate location:**
+
+1. Move your migrations to a location that is **not** under `db/migration`, e.g. `classpath:db/<yourapp>`
+   (a sibling, not a subfolder).
+2. If you use `JdbcConversationStore` (or `JdbcIdempotencyStore`), copy the DDL you need from
+   `agent-store-jdbc`'s migrations into your own first migration there — keeping the same filename and
+   contents preserves the checksum so existing `flyway_schema_history` still validates.
+3. Point Flyway at only your location: `spring.flyway.locations=classpath:db/<yourapp>`. The library's
+   `db/migration` is then never scanned, so your version space is independent of future library migrations.
+4. If you build Flyway programmatically (e.g. in tests), set `.locations("classpath:db/<yourapp>")` too.
+
+A worked example is the FinCopilot bump:
+[vaiju1981/fincopilot#1](https://github.com/vaiju1981/fincopilot/pull/1).
+
 ## Everything else is additive
 
 The tool-fan-out ceiling (`maxToolCallsPerStep`), observer timing, MDC/OTel tracing, `StopReason`,
