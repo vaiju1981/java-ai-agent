@@ -29,6 +29,12 @@ still run, but the real behavior (tool orchestration, streaming) needs a model.
 | `MemoryAcrossSessions` | **cross-session memory** — learnings persist to a file via `FileEpisodicStore`; run it twice and the second (separate) process already knows the lesson | needs a model |
 | `StreamingChat` | **streaming** — prints the model's reply token-by-token as it's generated | needs a model |
 | `LearningAgent` | **self-learning** — a `ReflectiveAgent` slips on the first task, records the lesson, and recalls it on a later similar task (2 attempts → 1) | none (deterministic) |
+| `RagAgent` | **RAG** — embeds a small policy corpus, retrieves the top matches, and grounds the answer in them; prints the retrieval evidence | optional (`AGENT_EMBEDDING_MODEL` for real semantics) |
+| `MemoryStrategies` | **context windowing** — `TokenWindowedMemory` bounds a long conversation to the system message + recent turns within a token budget | none (deterministic) |
+| `SkilledAgent` | **skills** — a catalog (math-tutor + french-translator); the selector equips the right skill per task | needs a model (selection runs offline) |
+| `EvalHarness` | **eval** — scores an agent against an `EvalCase` suite and prints a pass-rate report | needs a model |
+| `CostAccounting` | **observability** — per-model token accounting + bring-your-own cost (`TokenAccountingObserver` + `Pricing`) | none (deterministic) |
+| `MultimodalChat` | **multimodal** — attaches a generated chart image to a turn and sends it to a vision model | needs a vision model (e.g. `llava`) |
 
 ## What to look for
 
