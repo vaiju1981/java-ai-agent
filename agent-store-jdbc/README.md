@@ -25,8 +25,12 @@ SELECT session_id, MAX(created_at) - MIN(created_at) AS span_ms FROM agent_messa
   recent N complete turns while still persisting full history for analytics.
 - **Atomic turns:** messages produced by one agent turn commit in one transaction; failed turns leave
   no partial tool-call history.
-- **Migrations:** the Flyway-compatible schema is bundled at
-  `classpath:db/migration/V1__agent_conversation_store.sql`.
+- **Migrations:** the Flyway-compatible schema is bundled under the module's **own** location,
+  `classpath:db/agent-store-jdbc/` (`V1` conversation store, `V2` idempotency, `V3` episodes) — **not**
+  the default `classpath:db/migration`, so the library never squats your migration version space. Add it
+  to your Flyway locations to apply it, alongside your own:
+  `spring.flyway.locations=classpath:db/agent-store-jdbc,classpath:db/migration`. (`fromJdbcUrl` still
+  self-creates the schema for local development.)
 - **Faithful:** tool calls and tool results are persisted, so tool-using conversations resume exactly.
 - **Concurrency:** same-session work is serialized in-process; for multiple instances writing the same
   session, use sticky routing or external coordination. A clash rolls back the complete turn and
