@@ -60,7 +60,7 @@ jobs:
       # (Code quality is handled by SonarCloud's automatic analysis via its GitHub App.)
       - name: Upload coverage to Codecov
         if: ${{ env.CODECOV_TOKEN != '' }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           # The per-module jacocoTestReport.xml files are discovered automatically.
