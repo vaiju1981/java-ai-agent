@@ -297,12 +297,12 @@ npm run build
 
 ### Milestone G: Packaging
 
-- Serve React build from Java server.
-- Add Dockerfile.
-- Add docker-compose.
-- Add workspace volume.
-- Add quickstart docs.
-- Acceptance: fresh checkout can run `docker compose up` and open the app.
+- [x] Serve React build from Java server.
+- [x] Add Dockerfile.
+- [x] Add docker-compose.
+- [x] Add workspace volume.
+- [x] Add quickstart docs.
+- [x] Acceptance: fresh checkout can run `docker compose up` and open the app.
 
 ### Milestone H: Phase 3 Advanced Analytics
 

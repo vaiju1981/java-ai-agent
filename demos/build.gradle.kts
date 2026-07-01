@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.Copy
+
 plugins {
     application
 }
@@ -19,4 +21,11 @@ dependencies {
 application {
     mainClass.set(providers.gradleProperty("mainClass")
         .orElse("dev.vaijanath.aiagent.demos.IncidentResponseWarRoom"))
+}
+
+tasks.named<Copy>("processResources") {
+    val analyticsUiDist = layout.projectDirectory.dir("analytics-ui/dist")
+    from(analyticsUiDist) {
+        into("analytics-ui")
+    }
 }

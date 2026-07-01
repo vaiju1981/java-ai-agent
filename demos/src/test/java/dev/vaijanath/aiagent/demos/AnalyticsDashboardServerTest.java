@@ -18,6 +18,71 @@ class AnalyticsDashboardServerTest {
     Path tempDir;
 
     @Test
+    void startsWithEmptyWorkspaceUntilCsvIsUploaded() throws Exception {
+        try (AnalyticsDashboardServer server = AnalyticsDashboardServer.startEmpty(tempDir.resolve("empty-workspace"))) {
+            HttpClient client = HttpClient.newHttpClient();
+            URI root = server.uri();
+
+            HttpResponse<String> session = client.send(
+                    HttpRequest.newBuilder(root.resolve("/api/session")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, session.statusCode());
+            assertTrue(session.body().contains("\"rows\" : 0"));
+            assertTrue(session.body().contains("\"csv\" : \"\""));
+
+            HttpResponse<String> schema = client.send(
+                    HttpRequest.newBuilder(root.resolve("/api/schema")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, schema.statusCode());
+            assertTrue(schema.body().contains("\"rows\" : 0"));
+            assertTrue(schema.body().contains("\"columns\" : [ ]"));
+
+            HttpResponse<String> connectors = client.send(
+                    HttpRequest.newBuilder(root.resolve("/api/connectors")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, connectors.statusCode());
+            assertTrue(connectors.body().contains("No dataset loaded"));
+            assertTrue(connectors.body().contains("\"rawDataSentToModel\" : false"));
+
+            HttpRequest chat = HttpRequest.newBuilder(root.resolve("/api/chat"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            "{\"question\":\"What features are important for revenue?\"}"))
+                    .build();
+            HttpResponse<String> emptyChat = client.send(chat, HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, emptyChat.statusCode());
+            assertTrue(emptyChat.body().contains("Upload or connect a dataset"));
+
+            String csvContent = """
+                    week,channel,visitors,ad_spend,discount_rate,page_load_ms,repeat_customer_share,orders,revenue,conversion_rate
+                    1,email,100,25,0.05,340,0.40,12,1200,0.120
+                    2,email,110,30,0.04,330,0.41,14,1450,0.127
+                    """
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\r", "\\r")
+                    .replace("\n", "\\n");
+            HttpRequest upload = HttpRequest.newBuilder(root.resolve("/api/upload"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            "{\"filename\":\"phase-g.csv\",\"content\":\"" + csvContent + "\"}"))
+                    .build();
+            HttpResponse<String> uploaded = client.send(upload, HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, uploaded.statusCode());
+            assertTrue(uploaded.body().contains("\"status\" : \"uploaded\""));
+            assertTrue(uploaded.body().contains("\"rows\" : 2"));
+            assertTrue(uploaded.body().contains("email"));
+
+            HttpResponse<String> uploadedSession = client.send(
+                    HttpRequest.newBuilder(root.resolve("/api/session")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, uploadedSession.statusCode());
+            assertTrue(uploadedSession.body().contains("\"rows\" : 2"));
+            assertTrue(uploadedSession.body().contains("phase-g.csv"));
+        }
+    }
+
+    @Test
     void servesDashboardUiAndFilterEndpoint() throws Exception {
         Path csv = AnalyticsInsightAgent.sampleCsv();
         Path database = tempDir.resolve("analytics.sqlite");
@@ -36,16 +101,10 @@ class AnalyticsDashboardServerTest {
                         HttpRequest.newBuilder(root).GET().build(),
                         HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, ui.statusCode());
-                assertTrue(ui.body().contains("Analytics Insight Dashboard"));
-                assertTrue(ui.body().contains("Revenue By Channel"));
-                assertTrue(ui.body().contains("Total Revenue"));
-                assertTrue(ui.body().contains("Channel Rollup"));
-                assertTrue(ui.body().contains("id=\"channels\""));
-                assertTrue(ui.body().contains("Upload CSV"));
-                assertTrue(ui.body().contains("Ask The Data"));
-                assertTrue(ui.body().contains("/api/filter"));
-                assertTrue(ui.body().contains("/api/upload"));
-                assertTrue(ui.body().contains("/api/chat"));
+                assertTrue(
+                        ui.body().contains("Analytics Workbench")
+                                || ui.body().contains("Analytics Insight Dashboard"));
+                assertTrue(ui.body().contains("id=\"root\"") || ui.body().contains("Upload CSV"));
 
                 HttpResponse<String> dashboard = client.send(
                         HttpRequest.newBuilder(root.resolve("/api/dashboard")).GET().build(),

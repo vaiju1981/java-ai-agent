@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -43,14 +44,23 @@ final class AnalyticsDashboardServer implements AutoCloseable {
     }
 
     public static void main(String[] args) throws Exception {
-        Path csv = args.length > 0 ? Path.of(args[0]) : AnalyticsInsightAgent.sampleCsv();
-        Path database = Files.createTempFile("java-ai-agent-analytics-ui-", ".sqlite");
-        Path dashboardSpec = Files.createTempFile("java-ai-agent-dashboard-ui-", ".json");
-        Path dashboardHtml = Files.createTempFile("java-ai-agent-dashboard-ui-", ".html");
-        AnalyticsFrame frame = AnalyticsFrame.loadCsv(csv);
-        AnalyticsDatabase analytics = AnalyticsDatabase.importCsv(database, csv);
-        AnalyticsDashboard.create(analytics, frame, dashboardSpec, dashboardHtml);
-        AnalyticsDashboardServer hosted = startOwned(analytics, csv, database, dashboardSpec, dashboardHtml);
+        Path workspace = configuredWorkspace();
+        Files.createDirectories(workspace);
+        Path dashboardSpec = workspace.resolve("dashboard.json");
+        Path dashboardHtml = workspace.resolve("dashboard.html");
+        Path database = workspace.resolve("analytics.sqlite");
+        String configuredCsv = args.length > 0 ? args[0] : System.getenv("ANALYTICS_CSV");
+        AnalyticsDashboardServer hosted;
+        if (configuredCsv == null || configuredCsv.isBlank()) {
+            writeEmptyDashboard(dashboardSpec, dashboardHtml);
+            hosted = start(null, Path.of(""), database, dashboardSpec, dashboardHtml, true);
+        } else {
+            Path csv = Path.of(configuredCsv);
+            AnalyticsFrame frame = AnalyticsFrame.loadCsv(csv);
+            AnalyticsDatabase analytics = AnalyticsDatabase.importCsv(database, csv);
+            AnalyticsDashboard.create(analytics, frame, dashboardSpec, dashboardHtml);
+            hosted = startOwned(analytics, csv, database, dashboardSpec, dashboardHtml);
+        }
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             hosted.close();
         }));
@@ -60,6 +70,18 @@ final class AnalyticsDashboardServer implements AutoCloseable {
 
     static AnalyticsDashboardServer start(AnalyticsDatabase analytics, Path dashboardSpec, Path dashboardHtml) {
         return start(analytics, Path.of("sample.csv"), Path.of(""), dashboardSpec, dashboardHtml, false);
+    }
+
+    static AnalyticsDashboardServer startEmpty(Path workspace) {
+        try {
+            Files.createDirectories(workspace);
+            Path dashboardSpec = workspace.resolve("dashboard.json");
+            Path dashboardHtml = workspace.resolve("dashboard.html");
+            writeEmptyDashboard(dashboardSpec, dashboardHtml);
+            return start(null, Path.of(""), workspace.resolve("analytics.sqlite"), dashboardSpec, dashboardHtml, true);
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to start empty analytics dashboard server", e);
+        }
     }
 
     private static AnalyticsDashboardServer startOwned(
@@ -79,7 +101,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             Path dashboardHtml,
             boolean ownsAnalytics) {
         try {
-            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", configuredPort()), 0);
+            HttpServer server = HttpServer.create(new InetSocketAddress(configuredHost(), configuredPort()), 0);
             ExecutorService executor = Executors.newSingleThreadExecutor();
             DashboardWorkspace workspace =
                     new DashboardWorkspace(analytics, csv, database, dashboardSpec, dashboardHtml, ownsAnalytics);
@@ -105,6 +127,19 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         }
     }
 
+    private static String configuredHost() {
+        String value = System.getenv("ANALYTICS_HOST");
+        return value == null || value.isBlank() ? "127.0.0.1" : value;
+    }
+
+    private static Path configuredWorkspace() {
+        String value = System.getenv("ANALYTICS_WORKSPACE");
+        if (value == null || value.isBlank()) {
+            return Path.of("workspace", "analytics");
+        }
+        return Path.of(value);
+    }
+
     URI uri() {
         return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/");
     }
@@ -120,8 +155,10 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         try {
             String path = exchange.getRequestURI().getPath();
             String method = exchange.getRequestMethod();
-            if ("GET".equals(method) && "/".equals(path)) {
-                respondHtml(exchange, hostedHtml());
+            if ("GET".equals(method) && !path.startsWith("/api/")) {
+                if (!respondStaticAsset(exchange, path)) {
+                    respondHtml(exchange, hostedHtml());
+                }
                 return;
             }
             if ("GET".equals(method) && "/api/dashboard".equals(path)) {
@@ -447,7 +484,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                         <h2>Upload CSV</h2>
                         <input id="csvFile" type="file" accept=".csv,text/csv">
                         <button id="upload">Upload Dataset</button>
-                        <div class="file-name" id="uploadStatus">Using sample dataset</div>
+                        <div class="file-name" id="uploadStatus">No dataset loaded</div>
                       </section>
                       <section class="stack">
                         <h2>Filters</h2>
@@ -463,7 +500,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                       </section>
                       <section class="stack">
                         <h2>Selection</h2>
-                        <div class="status" id="selection">All channels, weeks 1-16</div>
+                        <div class="status" id="selection">No dataset loaded</div>
                       </section>
                     </aside>
                     <main class="workspace">
@@ -733,7 +770,9 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                     function renderSelection() {
                       const filters = state.dashboard?.lastFilterResult?.filters || state.filterResult?.result?.filters;
                       if (!filters) {
-                        document.getElementById('selection').textContent = 'All channels, weeks 1-16';
+                        document.getElementById('selection').textContent = state.dashboard?.tiles?.length
+                          ? 'All channels'
+                          : 'No dataset loaded';
                         return;
                       }
                       const list = Array.isArray(filters.channel) ? filters.channel.join(', ') : 'all channels';
@@ -798,18 +837,65 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         respond(exchange, 200, "text/html; charset=utf-8", body);
     }
 
+    private static boolean respondStaticAsset(HttpExchange exchange, String path) throws IOException {
+        String normalized = "/".equals(path) ? "/index.html" : path;
+        if (normalized.contains("..")) {
+            return false;
+        }
+        String configuredDist = System.getenv("ANALYTICS_UI_DIST");
+        if (configuredDist != null && !configuredDist.isBlank()) {
+            Path asset = Path.of(configuredDist).resolve(normalized.substring(1)).normalize();
+            if (asset.startsWith(Path.of(configuredDist).normalize()) && Files.isRegularFile(asset)) {
+                respondBytes(exchange, 200, contentType(asset.getFileName().toString()), Files.readAllBytes(asset));
+                return true;
+            }
+        }
+        String resource = "analytics-ui" + normalized;
+        try (InputStream stream = AnalyticsDashboardServer.class.getClassLoader().getResourceAsStream(resource)) {
+            if (stream == null) {
+                return false;
+            }
+            respondBytes(exchange, 200, contentType(normalized), stream.readAllBytes());
+            return true;
+        }
+    }
+
     private static void respondJson(HttpExchange exchange, String json) throws IOException {
         respond(exchange, 200, "application/json; charset=utf-8", json);
     }
 
     private static void respond(HttpExchange exchange, int status, String contentType, String body)
             throws IOException {
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        respondBytes(exchange, status, contentType, body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void respondBytes(HttpExchange exchange, int status, String contentType, byte[] bytes)
+            throws IOException {
         exchange.getResponseHeaders().put("Content-Type", List.of(contentType));
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream stream = exchange.getResponseBody()) {
             stream.write(bytes);
         }
+    }
+
+    private static String contentType(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".html")) {
+            return "text/html; charset=utf-8";
+        }
+        if (lower.endsWith(".js")) {
+            return "application/javascript; charset=utf-8";
+        }
+        if (lower.endsWith(".css")) {
+            return "text/css; charset=utf-8";
+        }
+        if (lower.endsWith(".svg")) {
+            return "image/svg+xml";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        return "application/octet-stream";
     }
 
     private static String string(Object value) {
@@ -829,6 +915,29 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             return MAPPER.readValue(json, Object.class);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("failed to parse analytics result", e);
+        }
+    }
+
+    private static void writeEmptyDashboard(Path dashboardSpec, Path dashboardHtml) {
+        Map<String, Object> dashboard = Map.of(
+                "version", 1,
+                "title", "Analytics Workbench",
+                "generatedAt", "",
+                "source", Map.of("table", "", "engine", "sqlite+tablesaw"),
+                "filters", List.of(),
+                "layout", List.of(),
+                "tiles", List.of());
+        try {
+            Files.writeString(dashboardSpec, toJson(dashboard), StandardCharsets.UTF_8);
+            Files.writeString(dashboardHtml, """
+                    <!doctype html>
+                    <html lang="en">
+                    <head><meta charset="utf-8"><title>Analytics Workbench</title></head>
+                    <body><h1>Analytics Workbench</h1><p>No dataset loaded. Upload a CSV to begin.</p></body>
+                    </html>
+                    """, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to initialize empty dashboard workspace", e);
         }
     }
 
@@ -877,10 +986,13 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                     "database", database.toString(),
                     "dashboardSpec", dashboardSpec.toString(),
                     "dashboardHtml", dashboardHtml.toString(),
-                    "rows", analytics.rowCount()));
+                    "rows", analytics == null ? 0 : analytics.rowCount()));
         }
 
         synchronized String filterOptionsJson() {
+            if (analytics == null) {
+                return toJson(Map.of("filters", List.of()));
+            }
             return toJson(Map.of(
                     "filters", List.of(
                             Map.of(
@@ -911,22 +1023,35 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         }
 
         synchronized String schemaJson() {
+            if (analytics == null) {
+                return toJson(Map.of("table", "data", "rows", 0, "columns", List.of()));
+            }
             return analytics.schemaJson();
         }
 
         synchronized String profileJson() {
+            if (analytics == null) {
+                return toJson(Map.of("table", "data", "rows", 0, "columns", List.of()));
+            }
             return analytics.profileJson();
         }
 
         synchronized String qualityJson() {
+            if (analytics == null) {
+                return toJson(Map.of("rows", 0, "duplicateRowGroups", 0, "columns", List.of()));
+            }
             return analytics.dataQualityJson();
         }
 
         synchronized String sampleJson() {
+            if (analytics == null) {
+                return toJson(Map.of("rows", List.of(), "limitedTo", 25));
+            }
             return analytics.sqlJson("select * from data order by _row_id limit 25");
         }
 
         synchronized String analysis(String analysis, Map<String, Object> request) {
+            AnalyticsDatabase analytics = requireAnalytics();
             String normalized = analysis.toLowerCase(Locale.ROOT);
             String title;
             String description;
@@ -1019,7 +1144,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 String drilldownTileId,
                 String drilldownValue) {
             return AnalyticsDashboard.applyFilters(
-                    analytics, dashboardSpec, dashboardHtml, filters, drilldownTileId, drilldownValue);
+                    requireAnalytics(), dashboardSpec, dashboardHtml, filters, drilldownTileId, drilldownValue);
         }
 
         synchronized String pinDashboardTile(Map<String, Object> request) {
@@ -1068,7 +1193,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                     .filter(candidate -> datasetId.isBlank() || datasetId.equals(candidate.get("id")))
                     .findFirst()
                     .orElseGet(() -> datasets.isEmpty() ? Map.of("id", "active-session", "name", "Active Session") : datasets.getFirst());
-            long estimatedRows = numberOption(dataset.get("estimatedRows"), analytics.rowCount());
+            long estimatedRows = numberOption(dataset.get("estimatedRows"), analytics == null ? 0 : analytics.rowCount());
             int boundedSampleRows = Math.max(1, (int) Math.min(Math.min(sampleRows, 25000L), Math.max(1L, estimatedRows)));
             if (!"local".equals(connector.get("mode"))) {
                 boundedSampleRows = Math.min(boundedSampleRows, 1000);
@@ -1111,10 +1236,15 @@ final class AnalyticsDashboardServer implements AutoCloseable {
 
         synchronized String upload(UploadRequest request) {
             try {
-                Path uploadedCsv = Files.createTempFile("java-ai-agent-upload-", "-" + safeName(request.filename()));
-                Path uploadedDatabase = Files.createTempFile("java-ai-agent-upload-", ".sqlite");
-                Path uploadedSpec = Files.createTempFile("java-ai-agent-upload-dashboard-", ".json");
-                Path uploadedHtml = Files.createTempFile("java-ai-agent-upload-dashboard-", ".html");
+                Path workspace = dashboardSpec.toAbsolutePath().getParent();
+                if (workspace == null) {
+                    workspace = Files.createTempDirectory("java-ai-agent-upload-workspace-");
+                }
+                Files.createDirectories(workspace);
+                Path uploadedCsv = workspace.resolve(safeName(request.filename()));
+                Path uploadedDatabase = workspace.resolve("analytics.sqlite");
+                Path uploadedSpec = dashboardSpec;
+                Path uploadedHtml = dashboardHtml;
                 Files.writeString(uploadedCsv, request.content(), StandardCharsets.UTF_8);
                 AnalyticsFrame frame = AnalyticsFrame.loadCsv(uploadedCsv);
                 AnalyticsDatabase nextAnalytics = AnalyticsDatabase.importCsv(uploadedDatabase, uploadedCsv);
@@ -1132,6 +1262,12 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         }
 
         synchronized String chat(ChatRequest request) {
+            if (analytics == null) {
+                return toJson(Map.of(
+                        "question", request.question().strip(),
+                        "answer", "Upload or connect a dataset before asking analytics questions.",
+                        "error", "No dataset loaded"));
+            }
             String question = request.question().strip();
             String lower = question.toLowerCase(Locale.ROOT);
             try {
@@ -1213,7 +1349,9 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 Path nextSpec,
                 Path nextHtml) {
             if (ownsAnalytics) {
-                analytics.close();
+                if (analytics != null) {
+                    analytics.close();
+                }
             }
             analytics = nextAnalytics;
             csv = nextCsv;
@@ -1226,9 +1364,18 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         @Override
         public synchronized void close() {
             if (ownsAnalytics) {
-                analytics.close();
+                if (analytics != null) {
+                    analytics.close();
+                }
                 ownsAnalytics = false;
             }
+        }
+
+        private AnalyticsDatabase requireAnalytics() {
+            if (analytics == null) {
+                throw new IllegalStateException("No dataset loaded. Upload a CSV or provide ANALYTICS_CSV.");
+            }
+            return analytics;
         }
 
         private static String safeName(String filename) {
@@ -1301,6 +1448,10 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         }
 
         private List<Map<String, Object>> connectors() {
+            long rows = analytics == null ? 0 : analytics.rowCount();
+            String activeName = csv.getFileName() == null || csv.toString().isBlank()
+                    ? "No dataset loaded"
+                    : safeName(csv.getFileName().toString());
             return List.of(
                     Map.of(
                             "id", "csv-upload",
@@ -1312,14 +1463,14 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                             "capabilities", List.of("upload", "schema_inference", "local_cache"),
                             "datasets", List.of(Map.of(
                                     "id", "active-csv",
-                                    "name", safeName(csv.getFileName().toString()),
+                                    "name", activeName,
                                     "table", "data",
-                                    "estimatedRows", analytics.rowCount(),
+                                    "estimatedRows", rows,
                                     "storage", "local_csv"))),
                     Map.of(
                             "id", "sqlite",
                             "name", "SQLite Session",
-                            "status", "configured",
+                            "status", analytics == null ? "available" : "configured",
                             "mode", "local",
                             "description", "Query the generated SQLite session database with bounded SELECTs.",
                             "requiresCredentials", false,
@@ -1328,7 +1479,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                                     "id", "active-session",
                                     "name", "Active SQLite Session",
                                     "table", "data",
-                                    "estimatedRows", analytics.rowCount(),
+                                    "estimatedRows", rows,
                                     "storage", "sqlite"))),
                     Map.of(
                             "id", "huggingface",
@@ -1396,11 +1547,12 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         }
 
         private List<Map<String, Object>> cacheEntries() {
+            long rows = analytics == null ? 0 : analytics.rowCount();
             return List.of(
                     Map.of(
                             "key", "active-session:schema",
-                            "status", "warm",
-                            "rows", analytics.rowCount(),
+                            "status", analytics == null ? "empty" : "warm",
+                            "rows", rows,
                             "artifact", database.toString(),
                             "ttlMinutes", 1440),
                     Map.of(
