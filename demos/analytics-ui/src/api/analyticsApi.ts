@@ -201,6 +201,70 @@ export type DashboardActionResult = {
   dashboardHtml?: string;
 };
 
+export type ConnectorDataset = {
+  id: string;
+  name: string;
+  table?: string;
+  sourceUrl?: string;
+  estimatedRows: number;
+  storage: string;
+};
+
+export type ConnectorInfo = {
+  id: string;
+  name: string;
+  status: "available" | "configured" | "metadata" | "planned" | string;
+  mode: "local" | "metadata_only" | "warehouse" | string;
+  description: string;
+  requiresCredentials: boolean;
+  capabilities: string[];
+  datasets: ConnectorDataset[];
+};
+
+export type ConnectorCatalog = {
+  activeSession: SessionInfo;
+  connectors: ConnectorInfo[];
+  cache: Array<{
+    key: string;
+    status: string;
+    rows: number;
+    artifact: string;
+    ttlMinutes: number;
+  }>;
+  policy: {
+    rawDataSentToModel: boolean;
+    metadataOnlyPublicConnectors: boolean;
+    defaultSampleRows: number;
+    maxFetchRows: number;
+    costGuardrailUsd: number;
+  };
+};
+
+export type ConnectorPlan = {
+  status: string;
+  connectorId: string;
+  datasetId: string;
+  readiness: string;
+  rawDataSentToModel: boolean;
+  plan: {
+    mode: string;
+    pushdownSql: string;
+    sampleRows: number;
+    maxFetchRows: number;
+    estimatedRows: number;
+    estimatedBytes: number;
+    estimatedCostUsd: number;
+    requiresCredentials: boolean;
+    nextActions: string[];
+  };
+  cache: {
+    key: string;
+    status: string;
+    ttlMinutes: number;
+  };
+  warnings: string[];
+};
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
   if (!response.ok) {
@@ -229,6 +293,10 @@ export async function loadAppSnapshot(): Promise<AppSnapshot> {
     getJson<FilterOptions>("/api/filter-options")
   ]);
   return { session, dashboard, filterOptions };
+}
+
+export async function loadConnectorCatalog(): Promise<ConnectorCatalog> {
+  return getJson<ConnectorCatalog>("/api/connectors");
 }
 
 export async function loadDatasetPreview(): Promise<DatasetPreview> {
@@ -306,4 +374,12 @@ export async function exportDashboard(format: "json" | "html"): Promise<string> 
     throw new Error(`dashboard export returned ${response.status}`);
   }
   return response.text();
+}
+
+export async function planConnectorScale(request: {
+  connectorId: string;
+  datasetId: string;
+  sampleRows: number;
+}): Promise<ConnectorPlan> {
+  return postJson<ConnectorPlan>("/api/connect", request);
 }

@@ -140,6 +140,10 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 respondJson(exchange, workspace.sessionJson());
                 return;
             }
+            if ("GET".equals(method) && "/api/connectors".equals(path)) {
+                respondJson(exchange, workspace.connectorsJson());
+                return;
+            }
             if ("GET".equals(method) && "/api/filter-options".equals(path)) {
                 respondJson(exchange, workspace.filterOptionsJson());
                 return;
@@ -180,6 +184,10 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             }
             if ("POST".equals(method) && "/api/dashboard/reload".equals(path)) {
                 respondJson(exchange, workspace.reloadDashboard());
+                return;
+            }
+            if ("POST".equals(method) && "/api/connect".equals(path)) {
+                respondJson(exchange, workspace.connect(mapRequest(exchange)));
                 return;
             }
             if ("POST".equals(method) && "/api/upload".equals(path)) {
@@ -889,6 +897,19 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                                     "range", parseJson(analytics.numericRangeJson("week"))))));
         }
 
+        synchronized String connectorsJson() {
+            return toJson(Map.of(
+                    "activeSession", parseJson(sessionJson()),
+                    "connectors", connectors(),
+                    "cache", cacheEntries(),
+                    "policy", Map.of(
+                            "rawDataSentToModel", false,
+                            "metadataOnlyPublicConnectors", true,
+                            "defaultSampleRows", 1000,
+                            "maxFetchRows", 25000,
+                            "costGuardrailUsd", 2.50)));
+        }
+
         synchronized String schemaJson() {
             return analytics.schemaJson();
         }
@@ -1034,6 +1055,58 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             return toJson(Map.of(
                     "status", "reloaded",
                     "dashboard", parseJson(dashboardJson())));
+        }
+
+        synchronized String connect(Map<String, Object> request) {
+            String connectorId = option(request, "connectorId", "sqlite");
+            String datasetId = option(request, "datasetId", "");
+            int sampleRows = intOption(request, "sampleRows", 1000);
+            Map<String, Object> connector = connector(connectorId);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> datasets = (List<Map<String, Object>>) connector.getOrDefault("datasets", List.of());
+            Map<String, Object> dataset = datasets.stream()
+                    .filter(candidate -> datasetId.isBlank() || datasetId.equals(candidate.get("id")))
+                    .findFirst()
+                    .orElseGet(() -> datasets.isEmpty() ? Map.of("id", "active-session", "name", "Active Session") : datasets.getFirst());
+            long estimatedRows = numberOption(dataset.get("estimatedRows"), analytics.rowCount());
+            int boundedSampleRows = Math.max(1, (int) Math.min(Math.min(sampleRows, 25000L), Math.max(1L, estimatedRows)));
+            if (!"local".equals(connector.get("mode"))) {
+                boundedSampleRows = Math.min(boundedSampleRows, 1000);
+            }
+            double estimatedCost = "warehouse".equals(connector.get("mode"))
+                    ? Math.min(2.50, Math.max(0.01, estimatedRows / 1_000_000_000.0))
+                    : 0.0;
+            String table = string(dataset.getOrDefault("table", "data"));
+            String query = "select * from " + table + " limit " + boundedSampleRows;
+            List<String> warnings = "local".equals(connector.get("mode"))
+                    ? List.of("Local connector can execute bounded reads against the active session.")
+                    : List.of(
+                            "Metadata-only plan: no remote fetch is performed in this demo.",
+                            "Use pushdown SQL and bounded samples before materializing rows.");
+            return toJson(Map.of(
+                    "status", "planned",
+                    "connectorId", connectorId,
+                    "datasetId", string(dataset.getOrDefault("id", datasetId)),
+                    "readiness", connector.get("status"),
+                    "rawDataSentToModel", false,
+                    "plan", Map.of(
+                            "mode", connector.get("mode"),
+                            "pushdownSql", query,
+                            "sampleRows", boundedSampleRows,
+                            "maxFetchRows", 25000,
+                            "estimatedRows", estimatedRows,
+                            "estimatedBytes", estimatedRows * 128,
+                            "estimatedCostUsd", Math.round(estimatedCost * 100.0) / 100.0,
+                            "requiresCredentials", connector.get("requiresCredentials"),
+                            "nextActions", List.of(
+                                    "Review schema and cost estimate",
+                                    "Confirm bounded sample size",
+                                    "Run analysis against summarized results only")),
+                    "cache", Map.of(
+                            "key", connectorId + ":" + string(dataset.getOrDefault("id", datasetId)),
+                            "status", "metadata_ready",
+                            "ttlMinutes", 60),
+                    "warnings", warnings));
         }
 
         synchronized String upload(UploadRequest request) {
@@ -1187,10 +1260,10 @@ final class AnalyticsDashboardServer implements AutoCloseable {
         private static int intOption(Map<String, Object> request, String name, int fallback) {
             Object value = request.get(name);
             if (value instanceof Number number) {
-                return Math.max(1, Math.min(12, number.intValue()));
+                return number.intValue();
             }
             try {
-                return Math.max(1, Math.min(12, Integer.parseInt(string(value))));
+                return Integer.parseInt(string(value));
             } catch (NumberFormatException e) {
                 return fallback;
             }
@@ -1207,6 +1280,135 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 return selected.isEmpty() ? fallback : selected;
             }
             return fallback;
+        }
+
+        private static long numberOption(Object value, long fallback) {
+            if (value instanceof Number number) {
+                return number.longValue();
+            }
+            try {
+                return Long.parseLong(string(value));
+            } catch (NumberFormatException e) {
+                return fallback;
+            }
+        }
+
+        private Map<String, Object> connector(String id) {
+            return connectors().stream()
+                    .filter(candidate -> id.equals(candidate.get("id")))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown connector: " + id));
+        }
+
+        private List<Map<String, Object>> connectors() {
+            return List.of(
+                    Map.of(
+                            "id", "csv-upload",
+                            "name", "CSV Upload",
+                            "status", "available",
+                            "mode", "local",
+                            "description", "Import a local CSV into SQLite and Tablesaw.",
+                            "requiresCredentials", false,
+                            "capabilities", List.of("upload", "schema_inference", "local_cache"),
+                            "datasets", List.of(Map.of(
+                                    "id", "active-csv",
+                                    "name", safeName(csv.getFileName().toString()),
+                                    "table", "data",
+                                    "estimatedRows", analytics.rowCount(),
+                                    "storage", "local_csv"))),
+                    Map.of(
+                            "id", "sqlite",
+                            "name", "SQLite Session",
+                            "status", "configured",
+                            "mode", "local",
+                            "description", "Query the generated SQLite session database with bounded SELECTs.",
+                            "requiresCredentials", false,
+                            "capabilities", List.of("pushdown_sql", "bounded_sample", "local_cache"),
+                            "datasets", List.of(Map.of(
+                                    "id", "active-session",
+                                    "name", "Active SQLite Session",
+                                    "table", "data",
+                                    "estimatedRows", analytics.rowCount(),
+                                    "storage", "sqlite"))),
+                    Map.of(
+                            "id", "huggingface",
+                            "name", "Hugging Face Datasets",
+                            "status", "metadata",
+                            "mode", "metadata_only",
+                            "description", "Public dataset references and scale planning without CI downloads.",
+                            "requiresCredentials", false,
+                            "capabilities", List.of("dataset_card", "schema_plan", "sample_plan"),
+                            "datasets", List.of(
+                                    Map.of(
+                                            "id", "hf-nyc-taxi",
+                                            "name", "NYC taxi trips sample families",
+                                            "sourceUrl", "https://huggingface.co/datasets",
+                                            "estimatedRows", 10_000_000L,
+                                            "storage", "remote_dataset"),
+                                    Map.of(
+                                            "id", "hf-retail",
+                                            "name", "Retail events sample families",
+                                            "sourceUrl", "https://huggingface.co/datasets",
+                                            "estimatedRows", 2_750_000L,
+                                            "storage", "remote_dataset"))),
+                    Map.of(
+                            "id", "kaggle",
+                            "name", "Kaggle",
+                            "status", "metadata",
+                            "mode", "metadata_only",
+                            "description", "Dataset cards and manual-download workflow with local import.",
+                            "requiresCredentials", true,
+                            "capabilities", List.of("dataset_card", "manual_download", "license_review"),
+                            "datasets", List.of(
+                                    Map.of(
+                                            "id", "kaggle-marketing",
+                                            "name", "Marketing campaign performance datasets",
+                                            "sourceUrl", "https://www.kaggle.com/datasets",
+                                            "estimatedRows", 500_000L,
+                                            "storage", "manual_download"),
+                                    Map.of(
+                                            "id", "kaggle-ecommerce",
+                                            "name", "Ecommerce behavior datasets",
+                                            "sourceUrl", "https://www.kaggle.com/datasets",
+                                            "estimatedRows", 3_000_000L,
+                                            "storage", "manual_download"))),
+                    Map.of(
+                            "id", "bigquery-public",
+                            "name", "BigQuery Public",
+                            "status", "planned",
+                            "mode", "warehouse",
+                            "description", "Pushdown SQL, cost estimates, and bounded fetches before result materialization.",
+                            "requiresCredentials", true,
+                            "capabilities", List.of("pushdown_sql", "cost_estimate", "bounded_fetch"),
+                            "datasets", List.of(
+                                    Map.of(
+                                            "id", "bq-ga-sessions",
+                                            "name", "Google Analytics sample exports",
+                                            "table", "bigquery-public-data.google_analytics_sample.ga_sessions_*",
+                                            "estimatedRows", 12_000_000L,
+                                            "storage", "warehouse"),
+                                    Map.of(
+                                            "id", "bq-austin-bike",
+                                            "name", "Austin bikeshare trips",
+                                            "table", "bigquery-public-data.austin_bikeshare.bikeshare_trips",
+                                            "estimatedRows", 650_000L,
+                                            "storage", "warehouse"))));
+        }
+
+        private List<Map<String, Object>> cacheEntries() {
+            return List.of(
+                    Map.of(
+                            "key", "active-session:schema",
+                            "status", "warm",
+                            "rows", analytics.rowCount(),
+                            "artifact", database.toString(),
+                            "ttlMinutes", 1440),
+                    Map.of(
+                            "key", "public-connectors:metadata",
+                            "status", "ready",
+                            "rows", 0,
+                            "artifact", "metadata-only",
+                            "ttlMinutes", 60));
         }
 
         @SuppressWarnings("unchecked")

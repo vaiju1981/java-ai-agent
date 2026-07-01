@@ -62,6 +62,33 @@ class AnalyticsDashboardServerTest {
                 assertTrue(filterOptions.body().contains("paid_search"));
                 assertTrue(filterOptions.body().contains("direct"));
 
+                HttpResponse<String> connectors = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/connectors")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, connectors.statusCode());
+                assertTrue(connectors.body().contains("\"connectors\""));
+                assertTrue(connectors.body().contains("Hugging Face Datasets"));
+                assertTrue(connectors.body().contains("BigQuery Public"));
+                assertTrue(connectors.body().contains("\"rawDataSentToModel\" : false"));
+
+                HttpRequest connect = HttpRequest.newBuilder(root.resolve("/api/connect"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("""
+                                {
+                                  "connectorId": "bigquery-public",
+                                  "datasetId": "bq-ga-sessions",
+                                  "sampleRows": 5000
+                                }
+                                """))
+                        .build();
+                HttpResponse<String> connectPlan = client.send(connect, HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, connectPlan.statusCode());
+                assertTrue(connectPlan.body().contains("\"status\" : \"planned\""));
+                assertTrue(connectPlan.body().contains("\"connectorId\" : \"bigquery-public\""));
+                assertTrue(connectPlan.body().contains("\"sampleRows\" : 1000"));
+                assertTrue(connectPlan.body().contains("\"rawDataSentToModel\" : false"));
+                assertTrue(connectPlan.body().contains("Metadata-only plan"));
+
                 HttpResponse<String> schema = client.send(
                         HttpRequest.newBuilder(root.resolve("/api/schema")).GET().build(),
                         HttpResponse.BodyHandlers.ofString());

@@ -160,6 +160,11 @@ nav {
   box-shadow: var(--shadow-soft);
 }
 
+.connector-card.selected {
+  border-color: #b7d5ce;
+  background: #f3fbf8;
+}
+
 .connector-icon {
   display: grid;
   width: 36px;
@@ -168,6 +173,31 @@ nav {
   border-radius: 8px;
   background: #eaf5f2;
   color: var(--color-teal);
+}
+
+.connector-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.connector-meta span {
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.scale-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-top: 14px;
 }
 
 .section-heading.compact {

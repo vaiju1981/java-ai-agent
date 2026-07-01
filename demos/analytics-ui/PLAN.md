@@ -287,12 +287,12 @@ npm run build
 
 ### Milestone F: Connectors And Scale
 
-- Connector catalog UI.
-- Metadata-only Hugging Face/Kaggle/BigQuery public dataset cards.
-- Local connector configuration forms.
-- Sampling and query-cost estimate panels.
-- Result cache visibility.
-- Acceptance: user can inspect connector readiness and run scale-safe plans without raw data in model
+- [x] Connector catalog UI.
+- [x] Metadata-only Hugging Face/Kaggle/BigQuery public dataset cards.
+- [x] Local connector configuration forms.
+- [x] Sampling and query-cost estimate panels.
+- [x] Result cache visibility.
+- [x] Acceptance: user can inspect connector readiness and run scale-safe plans without raw data in model
   context.
 
 ### Milestone G: Packaging
