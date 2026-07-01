@@ -278,12 +278,12 @@ npm run build
 
 ### Milestone E: Dashboard Builder
 
-- Pinned tiles.
-- Dashboard filters.
-- Drilldowns.
-- Save/reload dashboard artifact.
-- Export dashboard JSON/HTML.
-- Acceptance: build a dashboard from uploaded data and reload it from persisted artifacts.
+- [x] Pinned tiles.
+- [x] Dashboard filters.
+- [x] Drilldowns.
+- [x] Save/reload dashboard artifact.
+- [x] Export dashboard JSON/HTML.
+- [x] Acceptance: build a dashboard from uploaded data and reload it from persisted artifacts.
 
 ### Milestone F: Connectors And Scale
 

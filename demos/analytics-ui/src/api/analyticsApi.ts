@@ -13,6 +13,7 @@ export type DashboardTile = {
   value?: unknown;
   subtitle?: string;
   body?: string;
+  evidenceIds?: string[];
   chart?: {
     data?: {
       values?: Array<Record<string, unknown>>;
@@ -166,6 +167,40 @@ export type AnalysisResponse = {
   };
 };
 
+export type DashboardFilters = Record<string, unknown>;
+
+export type DashboardFilterResult = {
+  dashboard: string;
+  dashboardSpec: string;
+  result: {
+    appliedAt?: string;
+    filters?: DashboardFilters;
+    where?: string;
+    tiles?: Array<{
+      tileId: string;
+      data?: {
+        rows?: Array<Record<string, unknown>>;
+      };
+    }>;
+    drilldown?: {
+      tileId: string;
+      value: string;
+      data?: {
+        rows?: Array<Record<string, unknown>>;
+      };
+    };
+  };
+};
+
+export type DashboardActionResult = {
+  status: string;
+  tileId?: string;
+  revision?: number;
+  dashboard?: DashboardModel;
+  dashboardSpec?: string;
+  dashboardHtml?: string;
+};
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
   if (!response.ok) {
@@ -232,4 +267,43 @@ export async function askData(question: string): Promise<ChatResponse> {
 
 export async function runAnalysis(kind: AnalysisKind, request: AnalysisRequest): Promise<AnalysisResponse> {
   return postJson<AnalysisResponse>(`/api/analysis/${kind}`, request);
+}
+
+export async function applyDashboardFilters(
+  filters: DashboardFilters,
+  drilldownTileId = "",
+  drilldownValue = ""
+): Promise<DashboardFilterResult> {
+  return postJson<DashboardFilterResult>("/api/filter", {
+    filters,
+    drilldownTileId,
+    drilldownValue
+  });
+}
+
+export async function pinDashboardTile(tile: {
+  id: string;
+  title: string;
+  body: string;
+  source: string;
+  evidenceIds: string[];
+  result?: unknown;
+}): Promise<DashboardActionResult> {
+  return postJson<DashboardActionResult>("/api/dashboard/pin", tile);
+}
+
+export async function saveDashboard(): Promise<DashboardActionResult> {
+  return postJson<DashboardActionResult>("/api/dashboard/save", {});
+}
+
+export async function reloadDashboard(): Promise<DashboardActionResult> {
+  return postJson<DashboardActionResult>("/api/dashboard/reload", {});
+}
+
+export async function exportDashboard(format: "json" | "html"): Promise<string> {
+  const response = await fetch(`/api/dashboard/export/${format}`);
+  if (!response.ok) {
+    throw new Error(`dashboard export returned ${response.status}`);
+  }
+  return response.text();
 }

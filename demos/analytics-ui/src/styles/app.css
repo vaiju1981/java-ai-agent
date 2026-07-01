@@ -214,6 +214,108 @@ nav {
   gap: 14px;
 }
 
+.dashboard-layout {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-shell {
+  display: grid;
+  grid-template-columns: 286px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.dashboard-controls {
+  display: grid;
+  gap: 14px;
+}
+
+.filter-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.filter-stack strong {
+  font-size: 13px;
+}
+
+.checkbox-stack {
+  display: grid;
+  gap: 6px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-line);
+  border-radius: 7px;
+  background: #fbfcfa;
+  padding: 8px 9px;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+.range-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.range-row input {
+  min-width: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 8px 9px;
+}
+
+.dashboard-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.dashboard-action-grid .icon-button,
+.dashboard-action-grid .primary-button {
+  width: 100%;
+}
+
+.status-panel {
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 10px 12px;
+}
+
+.drilldown-bar {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) 90px;
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.drilldown-bar span,
+.drilldown-bar strong {
+  font-size: 13px;
+}
+
+.drilldown-bar strong {
+  text-align: right;
+}
+
 .analysis-shell {
   display: grid;
   grid-template-columns: 272px minmax(0, 1fr);
@@ -657,6 +759,10 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-shell {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--color-line);
@@ -684,6 +790,10 @@ th {
   }
 
   .bar-row {
+    grid-template-columns: 90px minmax(0, 1fr) 80px;
+  }
+
+  .drilldown-bar {
     grid-template-columns: 90px minmax(0, 1fr) 80px;
   }
 }

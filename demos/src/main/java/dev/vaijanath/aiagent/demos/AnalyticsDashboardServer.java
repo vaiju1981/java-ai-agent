@@ -128,6 +128,14 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 respondJson(exchange, workspace.dashboardJson());
                 return;
             }
+            if ("GET".equals(method) && "/api/dashboard/export/json".equals(path)) {
+                respondJson(exchange, workspace.dashboardJson());
+                return;
+            }
+            if ("GET".equals(method) && "/api/dashboard/export/html".equals(path)) {
+                respondHtml(exchange, workspace.dashboardHtml());
+                return;
+            }
             if ("GET".equals(method) && "/api/session".equals(path)) {
                 respondJson(exchange, workspace.sessionJson());
                 return;
@@ -162,6 +170,18 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                         "result", result.result())));
                 return;
             }
+            if ("POST".equals(method) && "/api/dashboard/pin".equals(path)) {
+                respondJson(exchange, workspace.pinDashboardTile(mapRequest(exchange)));
+                return;
+            }
+            if ("POST".equals(method) && "/api/dashboard/save".equals(path)) {
+                respondJson(exchange, workspace.saveDashboard());
+                return;
+            }
+            if ("POST".equals(method) && "/api/dashboard/reload".equals(path)) {
+                respondJson(exchange, workspace.reloadDashboard());
+                return;
+            }
             if ("POST".equals(method) && "/api/upload".equals(path)) {
                 respondJson(exchange, workspace.upload(uploadRequest(exchange)));
                 return;
@@ -194,6 +214,17 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 typedFilters,
                 string(parsed.get("drilldownTileId")),
                 string(parsed.get("drilldownValue")));
+    }
+
+    private static Map<String, Object> mapRequest(HttpExchange exchange) throws IOException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).strip();
+        if (body.isBlank()) {
+            return Map.of();
+        }
+        Map<String, Object> parsed = MAPPER.readValue(body, new TypeReference<>() {});
+        Map<String, Object> typed = new LinkedHashMap<>();
+        parsed.forEach((key, value) -> typed.put(String.valueOf(key), value));
+        return typed;
     }
 
     private static UploadRequest uploadRequest(HttpExchange exchange) throws IOException {
@@ -824,6 +855,14 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             }
         }
 
+        synchronized String dashboardHtml() {
+            try {
+                return Files.readString(dashboardHtml, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new IllegalStateException("failed to read dashboard html", e);
+            }
+        }
+
         synchronized String sessionJson() {
             return toJson(Map.of(
                     "csv", csv.toString(),
@@ -960,6 +999,41 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 String drilldownValue) {
             return AnalyticsDashboard.applyFilters(
                     analytics, dashboardSpec, dashboardHtml, filters, drilldownTileId, drilldownValue);
+        }
+
+        synchronized String pinDashboardTile(Map<String, Object> request) {
+            String title = option(request, "title", "Pinned Analysis");
+            String source = option(request, "source", "dashboard-builder");
+            String body = option(request, "body", "");
+            if (body.isBlank() && request.get("result") != null) {
+                body = toJson(request.get("result"));
+            }
+            if (body.isBlank()) {
+                body = "Pinned from " + source + ".";
+            }
+            List<String> evidenceIds = options(request, "evidenceIds", List.of(source));
+            String tileId = option(request, "id", "pinned-" + safeName(source).replace(".", "-").toLowerCase(Locale.ROOT));
+            AnalyticsDashboard.DashboardUpdate update =
+                    AnalyticsDashboard.update(dashboardSpec, dashboardHtml, "add_insight_tile", tileId, title, body, evidenceIds);
+            return toJson(Map.of(
+                    "status", "pinned",
+                    "tileId", update.tileId(),
+                    "revision", update.revision(),
+                    "dashboard", parseJson(dashboardJson())));
+        }
+
+        synchronized String saveDashboard() {
+            return toJson(Map.of(
+                    "status", "saved",
+                    "dashboardSpec", dashboardSpec.toString(),
+                    "dashboardHtml", dashboardHtml.toString(),
+                    "dashboard", parseJson(dashboardJson())));
+        }
+
+        synchronized String reloadDashboard() {
+            return toJson(Map.of(
+                    "status", "reloaded",
+                    "dashboard", parseJson(dashboardJson())));
         }
 
         synchronized String upload(UploadRequest request) {

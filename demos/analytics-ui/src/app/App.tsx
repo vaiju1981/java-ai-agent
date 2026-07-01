@@ -9,14 +9,13 @@ import {
   RefreshCw,
   ShieldCheck
 } from "lucide-react";
-import { loadAppSnapshot, type AppSnapshot, type DashboardTile, type UploadResult } from "../api/analyticsApi";
+import { loadAppSnapshot, type AppSnapshot, type UploadResult } from "../api/analyticsApi";
 import { AppShell, type NavItem } from "../components/AppShell";
-import { ResultTable } from "../components/ResultTable";
 import { AnalysisWorkspaceScreen } from "../features/analysis-workspace/AnalysisWorkspaceScreen";
 import { AskDataScreen } from "../features/ask-data/AskDataScreen";
 import { DataPreviewScreen } from "../features/data-preview/DataPreviewScreen";
 import { DataSourcesScreen } from "../features/data-sources/DataSourcesScreen";
-import { fileName, formatValue } from "../lib/format";
+import { DashboardBuilderScreen } from "../features/dashboard-builder/DashboardBuilderScreen";
 
 const navItems: NavItem[] = [
   { id: "sources", label: "Data Sources", icon: FileUp },
@@ -27,109 +26,6 @@ const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "evidence", label: "Evidence", icon: ShieldCheck }
 ];
-
-function kpiTiles(snapshot: AppSnapshot): DashboardTile[] {
-  return snapshot.dashboard?.tiles?.filter((tile) => tile.type === "kpi") ?? [];
-}
-
-function chartTile(snapshot: AppSnapshot): DashboardTile | undefined {
-  return snapshot.dashboard?.tiles?.find((tile) => tile.id === "chart-revenue-channel");
-}
-
-function tableTile(snapshot: AppSnapshot): DashboardTile | undefined {
-  return snapshot.dashboard?.tiles?.find((tile) => tile.id === "table-channel");
-}
-
-function metricValue(row: Record<string, unknown>, preferred: string[]): number {
-  for (const key of preferred) {
-    const value = row[key];
-    if (typeof value === "number") {
-      return value;
-    }
-  }
-  const discovered = Object.entries(row).find(([key, value]) => {
-    const normalized = key.toLowerCase();
-    return typeof value === "number" && preferred.some((name) => normalized.includes(name));
-  });
-  return typeof discovered?.[1] === "number" ? discovered[1] : 0;
-}
-
-function AppContent({ snapshot }: { snapshot: AppSnapshot }) {
-  const chartRows = chartTile(snapshot)?.chart?.data?.values ?? [];
-  const tableRows = tableTile(snapshot)?.data?.rows ?? [];
-  const filterCount = snapshot.filterOptions?.filters?.length ?? 0;
-
-  return (
-    <div className="workspace-grid">
-      <section className="panel hero-panel">
-        <div>
-          <p className="eyebrow">Active Dataset</p>
-          <h2>{fileName(snapshot.session?.csv)}</h2>
-          <p className="muted">
-            {formatValue(snapshot.session?.rows)} rows loaded through the Java analytics backend.
-          </p>
-        </div>
-        <div className="hero-stats">
-          <div>
-            <span>{filterCount}</span>
-            <small>generated filters</small>
-          </div>
-          <div>
-            <span>{snapshot.dashboard?.tiles?.length ?? 0}</span>
-            <small>dashboard tiles</small>
-          </div>
-        </div>
-      </section>
-
-      <section className="metric-row">
-        {kpiTiles(snapshot).map((tile) => (
-          <article className="metric-card" key={tile.id}>
-            <p>{tile.title}</p>
-            <strong>{formatValue(tile.value)}</strong>
-            <span>{tile.subtitle}</span>
-          </article>
-        ))}
-      </section>
-
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Dashboard Preview</p>
-            <h3>Revenue By Channel</h3>
-          </div>
-          <span className="pill">{chartRows.length} rows</span>
-        </div>
-        <div className="bar-list">
-          {chartRows.map((row) => {
-            const channel = String(row.channel ?? "unknown");
-            const revenue = metricValue(row, ["revenue", "mean"]);
-            const max = Math.max(...chartRows.map((item) => metricValue(item, ["revenue", "mean"])), 1);
-            return (
-              <div className="bar-row" key={channel}>
-                <span>{channel}</span>
-                <div className="bar-track">
-                  <div className="bar-fill" style={{ width: `${Math.max(4, (revenue / max) * 100)}%` }} />
-                </div>
-                <strong>{formatValue(revenue)}</strong>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Current Rollup</p>
-            <h3>Channel Table</h3>
-          </div>
-          <span className="pill">{tableRows.length} rows</span>
-        </div>
-        <ResultTable rows={tableRows} />
-      </section>
-    </div>
-  );
-}
 
 function Placeholder({ title, body }: { title: string; body: string }) {
   return (
@@ -193,7 +89,12 @@ export function App() {
       return <AnalysisWorkspaceScreen snapshot={snapshot} />;
     }
     if (active === "dashboard") {
-      return <AppContent snapshot={snapshot} />;
+      return (
+        <DashboardBuilderScreen
+          onDashboardChanged={(dashboard) => setSnapshot((current) => ({ ...current, dashboard }))}
+          snapshot={snapshot}
+        />
+      );
     }
     const selected = navItems.find((item) => item.id === active);
     return (

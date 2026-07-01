@@ -180,6 +180,55 @@ class AnalyticsDashboardServerTest {
                     assertTrue(analysisResponse.body().contains("\"result\""), analysis);
                     assertTrue(analysisResponse.body().contains("\"tileCandidate\""), analysis);
                 }
+
+                HttpRequest pin = HttpRequest.newBuilder(root.resolve("/api/dashboard/pin"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("""
+                                {
+                                  "id": "pinned-test",
+                                  "title": "Pinned Revenue Insight",
+                                  "body": "Revenue analysis pinned from the dashboard builder.",
+                                  "source": "features",
+                                  "evidenceIds": ["features"]
+                                }
+                                """))
+                        .build();
+                HttpResponse<String> pinned = client.send(pin, HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, pinned.statusCode());
+                assertTrue(pinned.body().contains("\"status\" : \"pinned\""));
+                assertTrue(pinned.body().contains("\"tileId\" : \"pinned-test\""));
+                assertTrue(pinned.body().contains("Pinned Revenue Insight"));
+
+                HttpRequest save = HttpRequest.newBuilder(root.resolve("/api/dashboard/save"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                        .build();
+                HttpResponse<String> saved = client.send(save, HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, saved.statusCode());
+                assertTrue(saved.body().contains("\"status\" : \"saved\""));
+                assertTrue(saved.body().contains("\"dashboardSpec\""));
+
+                HttpRequest reload = HttpRequest.newBuilder(root.resolve("/api/dashboard/reload"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                        .build();
+                HttpResponse<String> reloaded = client.send(reload, HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, reloaded.statusCode());
+                assertTrue(reloaded.body().contains("\"status\" : \"reloaded\""));
+                assertTrue(reloaded.body().contains("Pinned Revenue Insight"));
+
+                HttpResponse<String> jsonExport = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/dashboard/export/json")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, jsonExport.statusCode());
+                assertTrue(jsonExport.body().contains("Pinned Revenue Insight"));
+
+                HttpResponse<String> htmlExport = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/dashboard/export/html")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, htmlExport.statusCode());
+                assertTrue(htmlExport.body().contains("Analytics Insight Dashboard"));
+                assertTrue(htmlExport.body().contains("Pinned Revenue Insight"));
             }
         }
     }
