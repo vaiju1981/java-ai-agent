@@ -16,6 +16,7 @@ Run a demo:
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.IncidentResponseWarRoom
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.ControlledOperationsCopilot
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsInsightAgent
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsDashboardServer
 ```
 
 ## IncidentResponseWarRoom
@@ -84,11 +85,25 @@ See [`ANALYTICS_AGENT_TOOL_CATALOG.md`](ANALYTICS_AGENT_TOOL_CATALOG.md) for the
 tool catalog and roadmap toward larger public datasets, semantic modeling, warehouse pushdown, and
 advanced ML/causal workflows.
 
+See [`analytics-ui/PLAN.md`](analytics-ui/PLAN.md) for the installable analytics app plan, including
+the React UI shape, backend APIs, Docker target, milestones, and acceptance criteria.
+
 Pass a CSV path after `--args`:
 
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsInsightAgent --args="/path/to/upload.csv"
 ```
+
+Run the hosted analytics UI:
+
+```bash
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsDashboardServer
+```
+
+The server prints a local URL. Pass a CSV path after `--args` to serve your own dataset. The UI also
+supports browser CSV upload, data-driven filter values from the active table, and an "Ask The Data"
+chat panel. Chat always runs local analytics tools first; when `OLLAMA_BASE_URL` is set, the answer
+is summarized only with Ollama `gemma4:31b-cloud`.
 
 Run deterministic demo tests:
 

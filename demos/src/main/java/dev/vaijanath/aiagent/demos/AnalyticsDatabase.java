@@ -404,6 +404,21 @@ final class AnalyticsDatabase implements AutoCloseable {
         }
     }
 
+    String distinctValuesJson(String columnName, int limit) {
+        Column column = requireColumn(columnName);
+        return json(Map.of(
+                "column", column.name(),
+                "values", distinctValues(column, Math.max(1, Math.min(limit, 100)))));
+    }
+
+    String numericRangeJson(String columnName) {
+        Column column = requireNumeric(columnName);
+        return json(Map.of(
+                "column", column.name(),
+                "min", number("select min(" + column.sql() + ") from " + TABLE),
+                "max", number("select max(" + column.sql() + ") from " + TABLE)));
+    }
+
     @Override
     public void close() {
         try {
