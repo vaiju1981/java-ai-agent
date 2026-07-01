@@ -250,13 +250,13 @@ npm run build
 
 ### Milestone B: Dataset Upload And Preview
 
-- CSV upload UI.
-- Active session state.
-- Schema panel.
-- Sample rows.
-- Data quality summary.
-- Data-driven filters.
-- Acceptance: upload a CSV and see filter values, schema, sample rows, and quality metrics update.
+- [x] CSV upload UI.
+- [x] Active session state.
+- [x] Schema panel.
+- [x] Sample rows.
+- [x] Data quality summary.
+- [x] Data-driven filters.
+- [x] Acceptance: upload a CSV and see filter values, schema, sample rows, and quality metrics update.
 
 ### Milestone C: Ask Data
 

@@ -75,6 +75,25 @@ nav {
   padding: 9px 12px;
 }
 
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--color-teal);
+  border-radius: 7px;
+  background: var(--color-teal);
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 750;
+  padding: 10px 13px;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .main-surface {
   min-width: 0;
 }
@@ -107,6 +126,82 @@ nav {
 .workspace-grid {
   display: grid;
   gap: 14px;
+}
+
+.upload-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.upload-row input {
+  min-width: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 9px 10px;
+}
+
+.connector-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.connector-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-surface);
+  padding: 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.connector-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 8px;
+  background: #eaf5f2;
+  color: var(--color-teal);
+}
+
+.section-heading.compact {
+  align-items: flex-start;
+}
+
+.filter-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.filter-chip {
+  display: grid;
+  gap: 4px;
+  max-width: 360px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 10px 12px;
+}
+
+.filter-chip span {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.empty-state {
+  border: 1px dashed var(--color-line);
+  border-radius: 8px;
+  color: var(--color-muted);
+  padding: 18px;
 }
 
 .panel,
@@ -303,6 +398,11 @@ th {
   }
 
   .metric-row {
+    grid-template-columns: 1fr;
+  }
+
+  .connector-grid,
+  .upload-row {
     grid-template-columns: 1fr;
   }
 

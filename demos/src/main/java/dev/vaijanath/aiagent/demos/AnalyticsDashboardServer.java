@@ -136,6 +136,22 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 respondJson(exchange, workspace.filterOptionsJson());
                 return;
             }
+            if ("GET".equals(method) && "/api/schema".equals(path)) {
+                respondJson(exchange, workspace.schemaJson());
+                return;
+            }
+            if ("GET".equals(method) && "/api/profile".equals(path)) {
+                respondJson(exchange, workspace.profileJson());
+                return;
+            }
+            if ("GET".equals(method) && "/api/quality".equals(path)) {
+                respondJson(exchange, workspace.qualityJson());
+                return;
+            }
+            if ("GET".equals(method) && "/api/sample".equals(path)) {
+                respondJson(exchange, workspace.sampleJson());
+                return;
+            }
             if ("POST".equals(method) && "/api/filter".equals(path)) {
                 FilterRequest request = filterRequest(exchange);
                 AnalyticsDashboard.DashboardFilterResult result =
@@ -816,6 +832,22 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                                     "type", "range",
                                     "field", "week",
                                     "range", parseJson(analytics.numericRangeJson("week"))))));
+        }
+
+        synchronized String schemaJson() {
+            return analytics.schemaJson();
+        }
+
+        synchronized String profileJson() {
+            return analytics.profileJson();
+        }
+
+        synchronized String qualityJson() {
+            return analytics.dataQualityJson();
+        }
+
+        synchronized String sampleJson() {
+            return analytics.sqlJson("select * from data order by _row_id limit 25");
         }
 
         synchronized AnalyticsDashboard.DashboardFilterResult applyFilters(

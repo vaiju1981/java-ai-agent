@@ -9,8 +9,12 @@ import {
   RefreshCw,
   ShieldCheck
 } from "lucide-react";
-import { loadAppSnapshot, type AppSnapshot, type DashboardTile } from "../api/analyticsApi";
+import { loadAppSnapshot, type AppSnapshot, type DashboardTile, type UploadResult } from "../api/analyticsApi";
 import { AppShell, type NavItem } from "../components/AppShell";
+import { ResultTable } from "../components/ResultTable";
+import { DataPreviewScreen } from "../features/data-preview/DataPreviewScreen";
+import { DataSourcesScreen } from "../features/data-sources/DataSourcesScreen";
+import { fileName, formatValue } from "../lib/format";
 
 const navItems: NavItem[] = [
   { id: "sources", label: "Data Sources", icon: FileUp },
@@ -21,20 +25,6 @@ const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "evidence", label: "Evidence", icon: ShieldCheck }
 ];
-
-function formatNumber(value: unknown) {
-  if (typeof value !== "number") {
-    return String(value ?? "-");
-  }
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-function fileName(path: string | undefined) {
-  if (!path) {
-    return "No dataset loaded";
-  }
-  return path.split("/").at(-1) ?? path;
-}
 
 function kpiTiles(snapshot: AppSnapshot): DashboardTile[] {
   return snapshot.dashboard?.tiles?.filter((tile) => tile.type === "kpi") ?? [];
@@ -74,7 +64,7 @@ function AppContent({ snapshot }: { snapshot: AppSnapshot }) {
           <p className="eyebrow">Active Dataset</p>
           <h2>{fileName(snapshot.session?.csv)}</h2>
           <p className="muted">
-            {formatNumber(snapshot.session?.rows)} rows loaded through the Java analytics backend.
+            {formatValue(snapshot.session?.rows)} rows loaded through the Java analytics backend.
           </p>
         </div>
         <div className="hero-stats">
@@ -93,7 +83,7 @@ function AppContent({ snapshot }: { snapshot: AppSnapshot }) {
         {kpiTiles(snapshot).map((tile) => (
           <article className="metric-card" key={tile.id}>
             <p>{tile.title}</p>
-            <strong>{formatNumber(tile.value)}</strong>
+            <strong>{formatValue(tile.value)}</strong>
             <span>{tile.subtitle}</span>
           </article>
         ))}
@@ -118,7 +108,7 @@ function AppContent({ snapshot }: { snapshot: AppSnapshot }) {
                 <div className="bar-track">
                   <div className="bar-fill" style={{ width: `${Math.max(4, (revenue / max) * 100)}%` }} />
                 </div>
-                <strong>{formatNumber(revenue)}</strong>
+                <strong>{formatValue(revenue)}</strong>
               </div>
             );
           })}
@@ -133,26 +123,7 @@ function AppContent({ snapshot }: { snapshot: AppSnapshot }) {
           </div>
           <span className="pill">{tableRows.length} rows</span>
         </div>
-        <div className="table-shell">
-          <table>
-            <thead>
-              <tr>
-                {Object.keys(tableRows[0] ?? { channel: "", avg_revenue: "" }).map((key) => (
-                  <th key={key}>{key}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tableRows.map((row, index) => (
-                <tr key={index}>
-                  {Object.values(row).map((value, valueIndex) => (
-                    <td key={valueIndex}>{formatNumber(value)}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ResultTable rows={tableRows} />
       </section>
     </div>
   );
@@ -190,12 +161,28 @@ export function App() {
     void refresh();
   }, []);
 
+  function handleUploaded(result: UploadResult) {
+    setSnapshot((current) => ({
+      ...current,
+      dashboard: result.dashboard,
+      filterOptions: result.filterOptions,
+      session: current.session ? { ...current.session, csv: result.filename, rows: result.rows } : current.session
+    }));
+    setActive("preview");
+  }
+
   const content = useMemo(() => {
     if (loading) {
       return <Placeholder title="Loading analytics workspace" body="Connecting to the Java analytics API." />;
     }
     if (error) {
       return <Placeholder title="Backend not reachable" body={error} />;
+    }
+    if (active === "sources") {
+      return <DataSourcesScreen onRefresh={refresh} onUploaded={handleUploaded} snapshot={snapshot} />;
+    }
+    if (active === "preview") {
+      return <DataPreviewScreen snapshot={snapshot} />;
     }
     if (active === "dashboard") {
       return <AppContent snapshot={snapshot} />;

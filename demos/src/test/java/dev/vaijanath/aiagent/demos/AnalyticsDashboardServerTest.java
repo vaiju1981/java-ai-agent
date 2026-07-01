@@ -62,6 +62,33 @@ class AnalyticsDashboardServerTest {
                 assertTrue(filterOptions.body().contains("paid_search"));
                 assertTrue(filterOptions.body().contains("direct"));
 
+                HttpResponse<String> schema = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/schema")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, schema.statusCode());
+                assertTrue(schema.body().contains("\"columns\""));
+                assertTrue(schema.body().contains("\"revenue\""));
+
+                HttpResponse<String> profile = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/profile")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, profile.statusCode());
+                assertTrue(profile.body().contains("\"columns\""));
+                assertTrue(profile.body().contains("\"missing\""));
+
+                HttpResponse<String> quality = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/quality")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, quality.statusCode());
+                assertTrue(quality.body().contains("\"duplicateRowGroups\""));
+
+                HttpResponse<String> sample = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/sample")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, sample.statusCode());
+                assertTrue(sample.body().contains("\"rows\""));
+                assertTrue(sample.body().contains("paid_search"));
+
                 HttpRequest filter = HttpRequest.newBuilder(root.resolve("/api/filter"))
                         .header("Content-Type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString("""
