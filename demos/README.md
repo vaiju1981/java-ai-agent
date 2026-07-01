@@ -105,6 +105,15 @@ supports browser CSV upload, data-driven filter values from the active table, an
 chat panel. Chat always runs local analytics tools first; when `OLLAMA_BASE_URL` is set, the answer
 is summarized only with Ollama `gemma4:31b-cloud`.
 
+Run the React analytics UI scaffold:
+
+```bash
+ANALYTICS_PORT=8080 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsDashboardServer
+cd demos/analytics-ui
+npm install
+npm run dev
+```
+
 Run deterministic demo tests:
 
 ```bash

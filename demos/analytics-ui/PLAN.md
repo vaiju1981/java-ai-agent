@@ -242,11 +242,11 @@ npm run build
 
 ### Milestone A: App Scaffold
 
-- Create React + TypeScript app under `demos/analytics-ui`.
-- Add API client and Vite proxy.
-- Render app shell, navigation, and current dashboard data.
-- Keep Java embedded HTML as fallback until React is served.
-- Acceptance: `npm run build` and `./gradlew :demos:check` pass.
+- [x] Create React + TypeScript app under `demos/analytics-ui`.
+- [x] Add API client and Vite proxy.
+- [x] Render app shell, navigation, and current dashboard data.
+- [x] Keep Java embedded HTML as fallback until React is served.
+- [x] Acceptance: `npm run build` and `./gradlew :demos:check` pass.
 
 ### Milestone B: Dataset Upload And Preview
 

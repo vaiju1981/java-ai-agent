@@ -79,7 +79,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             Path dashboardHtml,
             boolean ownsAnalytics) {
         try {
-            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", configuredPort()), 0);
             ExecutorService executor = Executors.newSingleThreadExecutor();
             DashboardWorkspace workspace =
                     new DashboardWorkspace(analytics, csv, database, dashboardSpec, dashboardHtml, ownsAnalytics);
@@ -90,6 +90,18 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             return hosted;
         } catch (IOException e) {
             throw new IllegalStateException("failed to start analytics dashboard server", e);
+        }
+    }
+
+    private static int configuredPort() {
+        String value = System.getenv("ANALYTICS_PORT");
+        if (value == null || value.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("ANALYTICS_PORT must be a number", e);
         }
     }
 
