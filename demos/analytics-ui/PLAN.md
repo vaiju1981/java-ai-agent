@@ -260,13 +260,13 @@ npm run build
 
 ### Milestone C: Ask Data
 
-- Chat history.
-- Question submission.
-- Tool trace.
-- Structured result rendering.
-- Ollama `gemma4:31b-cloud` summary when configured.
-- Deterministic fallback when not configured.
-- Acceptance: ask feature/correlation/causal/channel questions and see answers plus evidence.
+- [x] Chat history.
+- [x] Question submission.
+- [x] Tool trace.
+- [x] Structured result rendering.
+- [x] Ollama `gemma4:31b-cloud` summary when configured.
+- [x] Deterministic fallback when not configured.
+- [x] Acceptance: ask feature/correlation/causal/channel questions and see answers plus evidence.
 
 ### Milestone D: Analysis Workspace
 

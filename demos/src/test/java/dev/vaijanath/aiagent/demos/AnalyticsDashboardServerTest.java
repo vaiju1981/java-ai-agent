@@ -143,7 +143,20 @@ class AnalyticsDashboardServerTest {
                 HttpResponse<String> chatResponse = client.send(chat, HttpResponse.BodyHandlers.ofString());
                 assertEquals(200, chatResponse.statusCode());
                 assertTrue(chatResponse.body().contains("\"tool\" : \"interesting_features\""));
+                assertTrue(chatResponse.body().contains("\"model\""));
+                assertTrue(chatResponse.body().contains("\"result\""));
+                assertTrue(chatResponse.body().contains("\"features\""));
                 assertTrue(chatResponse.body().contains("\"answer\""));
+
+                HttpRequest causalChat = HttpRequest.newBuilder(root.resolve("/api/chat"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(
+                                "{\"question\":\"Does discount_rate cause revenue?\"}"))
+                        .build();
+                HttpResponse<String> causalResponse = client.send(causalChat, HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, causalResponse.statusCode());
+                assertTrue(causalResponse.body().contains("\"tool\" : \"causal_sanity_check\""));
+                assertTrue(causalResponse.body().contains("\"canClaimCausation\" : false"));
             }
         }
     }

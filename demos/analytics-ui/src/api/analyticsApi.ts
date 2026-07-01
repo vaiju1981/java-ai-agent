@@ -121,6 +121,15 @@ export type UploadResult = {
   dashboard: DashboardModel;
 };
 
+export type ChatResponse = {
+  question: string;
+  answer: string;
+  model?: string;
+  tool?: string;
+  result?: unknown;
+  error?: string;
+};
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
   if (!response.ok) {
@@ -166,4 +175,17 @@ export async function uploadDataset(file: File): Promise<UploadResult> {
     filename: file.name,
     content: await file.text()
   });
+}
+
+export async function askData(question: string): Promise<ChatResponse> {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question })
+  });
+  const payload = (await response.json()) as ChatResponse;
+  if (!response.ok) {
+    throw new Error(payload.error ?? `/api/chat returned ${response.status}`);
+  }
+  return payload;
 }

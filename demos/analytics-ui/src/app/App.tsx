@@ -12,6 +12,7 @@ import {
 import { loadAppSnapshot, type AppSnapshot, type DashboardTile, type UploadResult } from "../api/analyticsApi";
 import { AppShell, type NavItem } from "../components/AppShell";
 import { ResultTable } from "../components/ResultTable";
+import { AskDataScreen } from "../features/ask-data/AskDataScreen";
 import { DataPreviewScreen } from "../features/data-preview/DataPreviewScreen";
 import { DataSourcesScreen } from "../features/data-sources/DataSourcesScreen";
 import { fileName, formatValue } from "../lib/format";
@@ -183,6 +184,9 @@ export function App() {
     }
     if (active === "preview") {
       return <DataPreviewScreen snapshot={snapshot} />;
+    }
+    if (active === "ask") {
+      return <AskDataScreen snapshot={snapshot} />;
     }
     if (active === "dashboard") {
       return <AppContent snapshot={snapshot} />;
