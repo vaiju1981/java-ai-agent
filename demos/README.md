@@ -54,6 +54,8 @@ A CSV-to-insights analytics workflow:
   distribution comparisons, hypothesis-test approximations, regression feature screens, anomaly
   detection, simple forecasts, Tablesaw-prepared chart specs, causal sanity checks, guarded SQL, and
   dashboard creation;
+- reports regression diagnostics, normalized feature importance, in-sample evaluation metrics, and a
+  model card from the existing regression workflow;
 - answers questions such as "what features matter?", "which columns correlate with revenue?", and
   "does discount_rate cause revenue?";
 - maps natural-language metric questions through the semantic layer before executing governed SQL;
@@ -63,6 +65,15 @@ A CSV-to-insights analytics workflow:
   drilldown metadata, then renders it to HTML;
 - updates the persisted dashboard from a follow-up prompt, including re-rendering HTML and recording
   update evidence;
+- applies dashboard filters and tile drilldowns against SQLite, refreshes tile data in the dashboard
+  model, re-renders HTML, and records interaction evidence;
+- includes a local hosted dashboard server that serves the dashboard UI plus `/api/dashboard` and
+  `/api/filter` endpoints for interactive inspection;
+- imports multiple related CSVs into SQLite, discovers likely join relationships, defines semantic
+  metrics/dimensions across the join, and runs a governed joined customer-segment rollup;
+- exposes scale-readiness tools for optional Hugging Face, Kaggle, and BigQuery public dataset
+  references, warehouse-style pushdown estimates, deterministic SQL sampling, result caching, and
+  million-row demo planning without loading raw large datasets into model context;
 - writes a persisted analyst decision log that links owner, status, conclusion, rationale, and evidence
   ids;
 - refuses to claim causation from observational data while still surfacing measured associations;
@@ -77,4 +88,17 @@ Pass a CSV path after `--args`:
 
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsInsightAgent --args="/path/to/upload.csv"
+```
+
+Run deterministic demo tests:
+
+```bash
+./gradlew :demos:check
+```
+
+The live model smoke test is opt-in and skipped unless `OLLAMA_BASE_URL` is set. It always calls
+Ollama with `gemma4:31b-cloud`.
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434 ./gradlew :demos:test --tests '*AnalyticsInsightAgentLiveTest'
 ```

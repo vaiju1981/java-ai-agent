@@ -53,6 +53,57 @@ final class AnalyticsDashboard {
         return new DashboardUpdate(specOutput, htmlOutput, normalizedOperation, normalizedTileId, revision);
     }
 
+    static DashboardFilterResult applyFilters(
+            AnalyticsDatabase analytics,
+            Path specOutput,
+            Path htmlOutput,
+            Map<String, Object> filters,
+            String drilldownTileId,
+            String drilldownValue) {
+        Map<String, Object> spec = readSpec(specOutput);
+        String where = filterWhere(filters);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("appliedAt", Instant.now().toString());
+        result.put("filters", filters == null ? Map.of() : filters);
+        result.put("where", where.isBlank() ? "all rows" : where);
+        result.put("tiles", List.of(
+                Map.of(
+                        "tileId", "kpi-rows",
+                        "data", parse(analytics.sqlJson("select count(*) as rows from data" + where))),
+                Map.of(
+                        "tileId", "kpi-revenue",
+                        "data", parse(analytics.sqlJson(
+                                "select round(sum(revenue), 2) as total_revenue from data" + where))),
+                Map.of(
+                        "tileId", "kpi-conversion",
+                        "data", parse(analytics.sqlJson(
+                                "select round(avg(conversion_rate), 3) as avg_conversion_rate from data" + where))),
+                Map.of(
+                        "tileId", "chart-revenue-channel",
+                        "data", parse(analytics.sqlJson("select channel, round(avg(revenue), 2) as avg_revenue, "
+                                + "round(avg(conversion_rate), 3) as avg_conversion_rate, count(*) as rows "
+                                + "from data" + where + " group by channel order by avg_revenue desc"))),
+                Map.of(
+                        "tileId", "table-channel",
+                        "data", parse(analytics.sqlJson("select channel, round(avg(revenue), 2) as avg_revenue, "
+                                + "round(sum(revenue), 2) as total_revenue, count(*) as rows "
+                                + "from data" + where + " group by channel order by total_revenue desc")))));
+        if (drilldownTileId != null && !drilldownTileId.isBlank()
+                && drilldownValue != null && !drilldownValue.isBlank()) {
+            result.put("drilldown", Map.of(
+                    "tileId", drilldownTileId,
+                    "value", drilldownValue,
+                    "data", parse(analytics.sqlJson("select week, channel, visitors, orders, revenue, "
+                            + "conversion_rate from data" + appendCondition(where, "channel = '"
+                            + escapeSql(drilldownValue) + "'") + " order by week"))));
+        }
+        spec.put("lastFilterResult", result);
+        spec.put("updatedAt", Instant.now().toString());
+        writeJson(specOutput, spec);
+        writeHtml(htmlOutput, spec);
+        return new DashboardFilterResult(specOutput, htmlOutput, result);
+    }
+
     private static Map<String, Object> buildSpec(AnalyticsDatabase analytics, AnalyticsFrame frame) {
         JsonNode totals = firstRow(analytics.sqlJson(
                 "select count(*) as rows, round(sum(revenue), 2) as total_revenue, "
@@ -211,6 +262,40 @@ final class AnalyticsDashboard {
         return revision;
     }
 
+    @SuppressWarnings("unchecked")
+    private static String filterWhere(Map<String, Object> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return "";
+        }
+        List<String> conditions = new ArrayList<>();
+        Object channels = filters.get("channel");
+        if (channels instanceof List<?> values && !values.isEmpty()) {
+            String in = values.stream()
+                    .map(value -> "'" + escapeSql(String.valueOf(value)) + "'")
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("");
+            conditions.add("channel in (" + in + ")");
+        } else if (channels instanceof String channel && !channel.isBlank() && !"all".equalsIgnoreCase(channel)) {
+            conditions.add("channel = '" + escapeSql(channel) + "'");
+        }
+        Object week = filters.get("week");
+        if (week instanceof Map<?, ?> weekRange) {
+            Object from = weekRange.get("from");
+            Object to = weekRange.get("to");
+            if (from instanceof Number fromNumber) {
+                conditions.add("week >= " + fromNumber.intValue());
+            }
+            if (to instanceof Number toNumber) {
+                conditions.add("week <= " + toNumber.intValue());
+            }
+        }
+        return conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions);
+    }
+
+    private static String appendCondition(String where, String condition) {
+        return where == null || where.isBlank() ? " where " + condition : where + " and " + condition;
+    }
+
     private static JsonNode firstRow(String sqlJson) {
         JsonNode rows = parseNode(sqlJson).path("rows");
         if (!rows.isArray() || rows.isEmpty()) {
@@ -279,6 +364,7 @@ final class AnalyticsDashboard {
                     <section class="tile"><h2>Filters</h2><pre>%s</pre></section>
                     <section class="tile wide"><h2>Layout</h2><pre>%s</pre></section>
                     <section class="tile full"><h2>Tiles</h2><pre>%s</pre></section>
+                    <section class="tile full"><h2>Last Filter Result</h2><pre>%s</pre></section>
                   </div>
                 </body>
                 </html>
@@ -286,7 +372,8 @@ final class AnalyticsDashboard {
                 escapeHtml(String.valueOf(spec.get("title"))),
                 escapeHtml(toJson(spec.get("filters"))),
                 escapeHtml(toJson(spec.get("layout"))),
-                escapeHtml(toJson(spec.get("tiles"))));
+                escapeHtml(toJson(spec.get("tiles"))),
+                escapeHtml(toJson(spec.getOrDefault("lastFilterResult", Map.of()))));
         try {
             Files.writeString(output, html, StandardCharsets.UTF_8);
         } catch (IOException e) {
@@ -309,7 +396,13 @@ final class AnalyticsDashboard {
                 .replace("\"", "&quot;");
     }
 
+    private static String escapeSql(String value) {
+        return value.replace("'", "''");
+    }
+
     record DashboardArtifact(Path spec, Path html) {}
 
     record DashboardUpdate(Path spec, Path html, String operation, String tileId, int revision) {}
+
+    record DashboardFilterResult(Path spec, Path html, Map<String, Object> result) {}
 }

@@ -73,6 +73,14 @@ final class AnalyticsEvidenceLog {
         record("artifact_update", "dashboard_update", details);
     }
 
+    void recordDashboardFilter(Path dashboard, Path spec, Map<String, Object> result) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("path", dashboard.toAbsolutePath().toString());
+        details.put("spec", spec.toAbsolutePath().toString());
+        details.put("result", result);
+        record("dashboard_interaction", "dashboard_filter_apply", details);
+    }
+
     String manifestJson() {
         return toJson(snapshot());
     }

@@ -29,6 +29,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * A CSV-to-insights analytics demo: imports a CSV into SQLite and answers profiling, correlation,
@@ -50,6 +51,9 @@ public final class AnalyticsInsightAgent {
             String sqlAnswer,
             String workbenchAnswer,
             String dashboardUpdateAnswer,
+            String dashboardFilterAnswer,
+            String multiTableAnswer,
+            String scaleAnswer,
             int rows,
             long modelCalls,
             long totalTokens,
@@ -76,6 +80,12 @@ public final class AnalyticsInsightAgent {
         System.out.println(run.workbenchAnswer());
         System.out.println("\nDashboard update:");
         System.out.println(run.dashboardUpdateAnswer());
+        System.out.println("\nDashboard filter:");
+        System.out.println(run.dashboardFilterAnswer());
+        System.out.println("\nMulti-table model:");
+        System.out.println(run.multiTableAnswer());
+        System.out.println("\nScale readiness:");
+        System.out.println(run.scaleAnswer());
         System.out.printf(Locale.ROOT, "%nmodel calls=%d, tokens=%d%n", run.modelCalls(), run.totalTokens());
         System.out.println("\nEval:");
         System.out.print(run.evalReport().render());
@@ -108,6 +118,13 @@ public final class AnalyticsInsightAgent {
             AgentResponse dashboardUpdate = agent.run(new AgentRequest(
                     "Update the dashboard with an executive insight tile that flags causal caution and "
                             + "links the supporting evidence."));
+            AgentResponse dashboardFilter = agent.run(new AgentRequest(
+                    "Filter the dashboard to paid_search for weeks 1 through 4 and drill into the revenue "
+                            + "by channel chart."));
+            AgentResponse scale = agent.run(new AgentRequest(
+                    "Show the scale readiness plan for optional external connectors, pushdown SQL, sampling, "
+                            + "query cost estimates, result caching, and million-row datasets."));
+            String multiTable = runMultiTableDemo();
 
             AnalyticsEvidenceLog evalEvidence =
                     new AnalyticsEvidenceLog(tempFile("java-ai-agent-eval-evidence-", ".json"));
@@ -145,10 +162,27 @@ public final class AnalyticsInsightAgent {
                     sql.output(),
                     workbench.output(),
                     dashboardUpdate.output(),
+                    dashboardFilter.output(),
+                    multiTable,
+                    scale.output(),
                     analytics.rowCount(),
                     tokens.modelCalls(),
                     tokens.totalTokens(),
                     eval);
+        }
+    }
+
+    private static String runMultiTableDemo() {
+        Path database = tempFile("java-ai-agent-multitable-", ".sqlite");
+        Path customers = sampleCustomersCsv();
+        Path orders = sampleOrdersCsv();
+        Map<String, Path> sources = new java.util.LinkedHashMap<>();
+        sources.put("customers", customers);
+        sources.put("orders", orders);
+        try (AnalyticsMultiTableDatabase multi = AnalyticsMultiTableDatabase.importCsvs(database, sources)) {
+            return "Imported customers and orders; discovered relationship orders.customer_id -> "
+                    + "customers.customer_id; semantic segment rollup: "
+                    + multi.semanticQueryJson("Show total revenue and average conversion by customer segment and region.");
         }
     }
 
@@ -195,12 +229,19 @@ public final class AnalyticsInsightAgent {
                 .tool(tools.chartSpec())
                 .tool(tools.dashboardCreate())
                 .tool(tools.dashboardUpdate())
+                .tool(tools.dashboardFilterApply())
+                .tool(tools.datasetConnectorCatalog())
+                .tool(tools.queryCostEstimate())
+                .tool(tools.sampleRows())
+                .tool(tools.cachedSqlQuery())
+                .tool(tools.millionRowDemoPlan())
                 .tool(tools.evidenceManifest())
                 .tool(tools.decisionLogWrite())
                 .tool(tools.decisionLogRead())
                 .tool(tools.causalCheck())
                 .tool(tools.sqlQuery())
-                .toolApprover(ToolApprovers.denyEffectful("decision_log_write", "dashboard_update"))
+                .toolApprover(ToolApprovers.denyEffectful(
+                        "decision_log_write", "dashboard_update", "dashboard_filter_apply"))
                 .maxSteps(6)
                 .parallelToolCalls(false)
                 .toolTimeout(Duration.ofSeconds(10))
@@ -221,6 +262,40 @@ public final class AnalyticsInsightAgent {
                     .map(Message::content)
                     .orElse("")
                     .toLowerCase(Locale.ROOT);
+            if (!hasToolResults && lastUser.contains("scale readiness")) {
+                return new ModelResponse("", List.of(
+                        new ToolCall("connectors-1", "dataset_connector_catalog", "{}"),
+                        new ToolCall("million-row-1", "million_row_demo_plan", "{}"),
+                        new ToolCall(
+                                "estimate-1",
+                                "query_cost_estimate",
+                                "{\"provider\":\"hugging_face\","
+                                        + "\"id\":\"inria-soda/tabular-benchmark\","
+                                        + "\"url\":\"https://huggingface.co/datasets/inria-soda/tabular-benchmark\","
+                                        + "\"recommendedUse\":\"Large tabular benchmark subsets for scale tests.\","
+                                        + "\"sourceRows\":2500000,"
+                                        + "\"selectedColumns\":8,"
+                                        + "\"sampleRate\":0.005,"
+                                        + "\"predicate\":\"dataset split and target metric filters\","
+                                        + "\"pushdownSql\":true}"),
+                        new ToolCall(
+                                "sample-1",
+                                "sample_rows",
+                                "{\"requestedRows\":5,\"strategy\":\"deterministic_modulo\"}"),
+                        new ToolCall(
+                                "cache-1",
+                                "cached_sql_query",
+                                "{\"cacheKey\":\"channel-revenue-rollup\","
+                                        + "\"sql\":\"select channel, round(avg(revenue), 2) as avg_revenue "
+                                        + "from data group by channel order by avg_revenue desc\"}"),
+                        new ToolCall(
+                                "cache-2",
+                                "cached_sql_query",
+                                "{\"cacheKey\":\"channel-revenue-rollup\","
+                                        + "\"sql\":\"select channel, round(avg(revenue), 2) as avg_revenue "
+                                        + "from data group by channel order by avg_revenue desc\"}")),
+                        new Usage(840, 180));
+            }
             if (!hasToolResults && lastUser.contains("sql")) {
                 return new ModelResponse("", List.of(
                         new ToolCall(
@@ -290,6 +365,15 @@ public final class AnalyticsInsightAgent {
                                 + "\"evidence-3\",\"evidence-4\"]}")),
                         new Usage(420, 95));
             }
+            if (!hasToolResults && lastUser.contains("filter the dashboard")) {
+                return new ModelResponse("", List.of(new ToolCall(
+                        "dashboard-filter-1",
+                        "dashboard_filter_apply",
+                        "{\"filters\":{\"channel\":[\"paid_search\"],\"week\":{\"from\":1,\"to\":4}},"
+                                + "\"drilldownTileId\":\"chart-revenue-channel\","
+                                + "\"drilldownValue\":\"paid_search\"}")),
+                        new Usage(430, 90));
+            }
             if (!hasToolResults) {
                 return new ModelResponse("", List.of(
                         new ToolCall("profile-1", "dataset_profile", "{}"),
@@ -303,6 +387,16 @@ public final class AnalyticsInsightAgent {
                                 "causal_sanity_check",
                                 "{\"treatment\":\"discount_rate\",\"outcome\":\"revenue\"}")),
                         new Usage(680, 130));
+            }
+            if (lastUser.contains("scale readiness")) {
+                String toolData = toolData(request);
+                return ModelResponse.text(
+                        "Scale readiness completed: local CSV remains deterministic, optional Hugging Face, "
+                                + "Kaggle, and BigQuery public dataset connectors are represented as metadata "
+                                + "targets, warehouse-style pushdown and cost estimates are produced before "
+                                + "execution, row sampling keeps raw data out of model context, and repeated "
+                                + "governed SQL uses the result cache. Latest evidence: " + summarize(toolData),
+                        new Usage(500, 170));
             }
             if (lastUser.contains("sql")) {
                 String toolData = toolData(request);
@@ -330,6 +424,15 @@ public final class AnalyticsInsightAgent {
                                 + "dashboard model, the HTML artifact was re-rendered, and the update was linked "
                                 + "to supporting evidence. Latest evidence: " + summarize(toolData),
                         new Usage(360, 140));
+            }
+            if (lastUser.contains("filter the dashboard")) {
+                String toolData = toolData(request);
+                return ModelResponse.text(
+                        "Dashboard filter completed: paid_search weeks 1 through 4 were applied to the persisted "
+                                + "dashboard model, KPI/chart/table tile data were refreshed, and the revenue "
+                                + "chart drilldown returned row-level supporting data. Latest evidence: "
+                                + summarize(toolData),
+                        new Usage(380, 145));
             }
             return ModelResponse.text(
                     "Analytics summary: the uploaded CSV was imported into SQLite and profiled before answering. "
@@ -371,6 +474,7 @@ public final class AnalyticsInsightAgent {
         private final Path dashboardSpec;
         private final AnalyticsEvidenceLog evidence;
         private final AnalyticsDecisionLog decisions;
+        private final AnalyticsScaleEngine scale = new AnalyticsScaleEngine();
 
         private AnalyticsTools(
                 AnalyticsDatabase analytics,
@@ -593,7 +697,8 @@ public final class AnalyticsInsightAgent {
                 public ToolSpec spec() {
                     return new ToolSpec(
                             "regression_fit",
-                            "Fit single-feature linear regression screens against a numeric target.",
+                            "Fit single-feature linear regression screens with diagnostics, feature importance, "
+                                    + "evaluation report, and model card.",
                             "{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\"},"
                                     + "\"features\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},"
                                     + "\"required\":[\"target\",\"features\"]}",
@@ -717,6 +822,137 @@ public final class AnalyticsInsightAgent {
                             + update.revision() + "}");
                 }
             };
+        }
+
+        Tool dashboardFilterApply() {
+            return new Tool() {
+                @Override
+                public ToolSpec spec() {
+                    return new ToolSpec(
+                            "dashboard_filter_apply",
+                            "Apply dashboard filters, refresh tile data, and optionally execute a tile drilldown.",
+                            "{\"type\":\"object\",\"properties\":{\"filters\":{\"type\":\"object\"},"
+                                    + "\"drilldownTileId\":{\"type\":\"string\"},"
+                                    + "\"drilldownValue\":{\"type\":\"string\"}},"
+                                    + "\"required\":[\"filters\"]}",
+                            ToolEffect.EFFECTFUL);
+                }
+
+                @Override
+                public ToolResult invoke(String argumentsJson) {
+                    AnalyticsDashboard.DashboardFilterResult result = AnalyticsDashboard.applyFilters(
+                            analytics,
+                            dashboardSpec,
+                            dashboard,
+                            objectMap(argumentsJson, "filters"),
+                            optionalText(argumentsJson, "drilldownTileId", ""),
+                            optionalText(argumentsJson, "drilldownValue", ""));
+                    evidence.recordDashboardFilter(result.html(), result.spec(), result.result());
+                    return ToolResult.ok(MAPPER.valueToTree(Map.of(
+                                    "dashboard", result.html().toString(),
+                                    "dashboardSpec", result.spec().toString(),
+                                    "result", result.result()))
+                            .toString());
+                }
+            };
+        }
+
+        Tool datasetConnectorCatalog() {
+            return readOnly(
+                    "dataset_connector_catalog",
+                    "List local and optional external dataset connectors for scale demos.",
+                    "{}",
+                    scale::connectorCatalogJson);
+        }
+
+        Tool queryCostEstimate() {
+            return new Tool() {
+                @Override
+                public ToolSpec spec() {
+                    return new ToolSpec(
+                            "query_cost_estimate",
+                            "Estimate source rows, scanned bytes, sample size, and model-context policy.",
+                            "{\"type\":\"object\",\"properties\":{\"provider\":{\"type\":\"string\"},"
+                                    + "\"id\":{\"type\":\"string\"},\"url\":{\"type\":\"string\"},"
+                                    + "\"recommendedUse\":{\"type\":\"string\"},"
+                                    + "\"sourceRows\":{\"type\":\"integer\"},"
+                                    + "\"selectedColumns\":{\"type\":\"integer\"},"
+                                    + "\"sampleRate\":{\"type\":\"number\"},"
+                                    + "\"predicate\":{\"type\":\"string\"},"
+                                    + "\"pushdownSql\":{\"type\":\"boolean\"}},"
+                                    + "\"required\":[\"provider\",\"id\",\"sourceRows\",\"selectedColumns\"]}",
+                            ToolEffect.READ_ONLY);
+                }
+
+                @Override
+                public ToolResult invoke(String argumentsJson) {
+                    ExternalDatasetReference reference = new ExternalDatasetReference(
+                            text(argumentsJson, "provider"),
+                            text(argumentsJson, "id"),
+                            optionalText(argumentsJson, "url", ""),
+                            optionalText(argumentsJson, "recommendedUse", "Scale readiness dataset."));
+                    return ToolResult.ok(scale.queryCostEstimateJson(
+                            reference,
+                            optionalLong(argumentsJson, "sourceRows", 0),
+                            optionalInt(argumentsJson, "selectedColumns", 1),
+                            optionalDouble(argumentsJson, "sampleRate", 1.0),
+                            optionalText(argumentsJson, "predicate", ""),
+                            optionalBoolean(argumentsJson, "pushdownSql", false)));
+                }
+            };
+        }
+
+        Tool sampleRows() {
+            return new Tool() {
+                @Override
+                public ToolSpec spec() {
+                    return new ToolSpec(
+                            "sample_rows",
+                            "Fetch a bounded deterministic sample through SQL rather than model context upload.",
+                            "{\"type\":\"object\",\"properties\":{\"requestedRows\":{\"type\":\"integer\"},"
+                                    + "\"strategy\":{\"type\":\"string\"}},"
+                                    + "\"required\":[\"requestedRows\"]}",
+                            ToolEffect.READ_ONLY);
+                }
+
+                @Override
+                public ToolResult invoke(String argumentsJson) {
+                    return ToolResult.ok(scale.sampleRowsJson(
+                            analytics,
+                            optionalInt(argumentsJson, "requestedRows", 25),
+                            optionalText(argumentsJson, "strategy", "deterministic_modulo")));
+                }
+            };
+        }
+
+        Tool cachedSqlQuery() {
+            return new Tool() {
+                @Override
+                public ToolSpec spec() {
+                    return new ToolSpec(
+                            "cached_sql_query",
+                            "Run a governed SELECT query through a result cache keyed by logical query.",
+                            "{\"type\":\"object\",\"properties\":{\"cacheKey\":{\"type\":\"string\"},"
+                                    + "\"sql\":{\"type\":\"string\"}},"
+                                    + "\"required\":[\"cacheKey\",\"sql\"]}",
+                            ToolEffect.READ_ONLY);
+                }
+
+                @Override
+                public ToolResult invoke(String argumentsJson) {
+                    String key = text(argumentsJson, "cacheKey");
+                    String sql = text(argumentsJson, "sql");
+                    return ToolResult.ok(scale.cachedSqlJson(key, () -> analytics.sqlJson(sql)));
+                }
+            };
+        }
+
+        Tool millionRowDemoPlan() {
+            return readOnly(
+                    "million_row_demo_plan",
+                    "Return a deterministic warehouse-scale plan that demonstrates million-row handling.",
+                    "{}",
+                    scale::millionRowDemoPlanJson);
         }
 
         Tool evidenceManifest() {
@@ -857,6 +1093,21 @@ public final class AnalyticsInsightAgent {
             return node == null || !node.canConvertToInt() ? fallback : node.asInt();
         }
 
+        private static long optionalLong(String argumentsJson, String field, long fallback) {
+            JsonNode node = parse(argumentsJson).get(field);
+            return node == null || !node.canConvertToLong() ? fallback : node.asLong();
+        }
+
+        private static double optionalDouble(String argumentsJson, String field, double fallback) {
+            JsonNode node = parse(argumentsJson).get(field);
+            return node == null || !node.isNumber() ? fallback : node.asDouble();
+        }
+
+        private static boolean optionalBoolean(String argumentsJson, String field, boolean fallback) {
+            JsonNode node = parse(argumentsJson).get(field);
+            return node == null || !node.isBoolean() ? fallback : node.asBoolean();
+        }
+
         private static List<String> stringList(String argumentsJson, String field) {
             JsonNode node = parse(argumentsJson).get(field);
             if (node == null || !node.isArray()) {
@@ -875,6 +1126,15 @@ public final class AnalyticsInsightAgent {
             List<String> values = new java.util.ArrayList<>();
             node.forEach(item -> values.add(item.asText()));
             return values;
+        }
+
+        @SuppressWarnings("unchecked")
+        private static Map<String, Object> objectMap(String argumentsJson, String field) {
+            JsonNode node = parse(argumentsJson).get(field);
+            if (node == null || !node.isObject()) {
+                throw new IllegalArgumentException("missing required object field: " + field);
+            }
+            return MAPPER.convertValue(node, Map.class);
         }
 
         private static JsonNode parse(String argumentsJson) {
@@ -920,6 +1180,44 @@ public final class AnalyticsInsightAgent {
             return csv;
         } catch (IOException e) {
             throw new IllegalStateException("failed to write sample analytics CSV", e);
+        }
+    }
+
+    static Path sampleCustomersCsv() {
+        Path csv = tempFile("java-ai-agent-customers-", ".csv");
+        String data = """
+                customer_id,segment,region,signup_week
+                cust-001,enterprise,west,1
+                cust-002,enterprise,east,2
+                cust-003,midmarket,west,3
+                cust-004,self_serve,central,4
+                """;
+        try {
+            Files.writeString(csv, data, StandardCharsets.UTF_8);
+            return csv;
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to write sample customer CSV", e);
+        }
+    }
+
+    static Path sampleOrdersCsv() {
+        Path csv = tempFile("java-ai-agent-orders-", ".csv");
+        String data = """
+                order_id,customer_id,channel,week,revenue,conversion_rate
+                ord-1001,cust-001,paid_search,1,124200,0.057
+                ord-1002,cust-001,paid_search,2,148925,0.060
+                ord-1003,cust-002,direct,5,137475,0.072
+                ord-1004,cust-002,direct,6,151470,0.075
+                ord-1005,cust-003,email,9,80750,0.088
+                ord-1006,cust-003,email,10,95800,0.093
+                ord-1007,cust-004,social,13,47740,0.035
+                ord-1008,cust-004,social,14,53852,0.037
+                """;
+        try {
+            Files.writeString(csv, data, StandardCharsets.UTF_8);
+            return csv;
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to write sample order CSV", e);
         }
     }
 

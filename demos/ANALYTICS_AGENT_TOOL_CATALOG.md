@@ -68,13 +68,15 @@ These are the first-class tools to finish before expanding the surface area:
 | `correlation_analysis` | User explicitly wants correlation. | Tablesaw-backed Pearson/Spearman with caveats and missingness policy. |
 | `interesting_features` | Differentiator for augmented analytics. | Correlation, categorical lift, mutual information later. |
 | `hypothesis_test` | Separates serious analytics from charting. | t/proportion/chi-square with assumptions and effect size. |
-| `regression_fit` | Predictive/statistical bridge. | Start with linear/logistic baseline; report diagnostics. |
+| `regression_fit` | Predictive/statistical bridge. | Linear baseline now reports diagnostics, normalized feature importance, eval report, and model card. |
 | `causal_sanity_check` | Prevents irresponsible claims. | Explicit causal evidence gate and design recommendations. |
 | `anomaly_detection` | Operational analytics and monitoring path. | Robust z/MAD/change point later. |
 | `forecast_timeseries` | Executive/dashboard use case. | Baseline trend/seasonality first; richer models later. |
 | `chart_spec_generate` | UI/dashboard bridge. | Tablesaw-prepared data with Vega-Lite-compatible JSON. |
 | `dashboard_create` | Visible artifact that proves value. | Dashboard JSON object model plus rendered HTML now; interactive app later. |
 | `dashboard_update` | Makes dashboards iterative instead of one-shot artifacts. | Effectful follow-up tool adds/removes/renames tiles, re-renders HTML, and records update evidence. |
+| `dashboard_filter_apply` | Makes dashboards inspectable, not static reports. | Effectful filter/drilldown tool refreshes tile data from SQLite and records interaction evidence. |
+| `dashboard_host` | Makes the dashboard usable as an application surface. | Local HTTP server serves dashboard UI, dashboard JSON, and filter/drilldown APIs. |
 | `insight_brief_generate` | The agent's narrative layer. | Evidence-cited Markdown/HTML report. |
 | `audit_lineage_record` | Trust and reproducibility. | Persisted evidence manifest now records dataset, semantic plan, governed SQL, and dashboard artifact events. |
 
@@ -253,28 +255,31 @@ These are the first-class tools to finish before expanding the surface area:
 - [x] Basic HTML dashboard export.
 - [x] Dashboard object model with KPI tiles, charts, filters, layout, and drilldown metadata.
 - [x] Follow-up dashboard updates that add/remove/rename tiles and preserve evidence.
-- [ ] Interactive hosted dashboard UI.
+- [x] Dashboard filter and drilldown execution with refreshed tile data and interaction evidence.
+- [x] Local hosted dashboard UI with dashboard JSON and filter/drilldown endpoints.
 
 ### Milestone 3 — Multi-Table Semantic Analytics
 
-- [ ] Import multiple CSVs or connect to a relational database.
+- [x] Import multiple CSVs into SQLite.
 - [x] Initial semantic metric/dimension definitions for the sample analytics dataset.
 - [x] Initial governed SQL generation from natural language for metric-by-dimension questions.
-- [ ] Relationship discovery and multi-table semantic metric definitions.
+- [x] Relationship discovery across imported tables.
+- [x] Multi-table semantic metric definitions.
 
 ### Milestone 4 — Advanced Stats And ML
 
 - [x] Approximate hypothesis test, simple regression screen, anomaly detection, simple forecasting.
-- [ ] Full regression diagnostics, feature importance, clustering, model evaluation reports, model cards.
+- [x] Regression diagnostics, normalized feature importance, model evaluation reports, and model cards.
+- [ ] Clustering and richer model families.
 - [ ] Causal sanity checks with stronger designs where data supports them.
 
 ### Milestone 5 — Large Dataset And Warehouse Demo
 
 - [x] Connector seam and local CSV connector.
 - [x] Metadata-only external dataset references.
-- [ ] Optional connectors for Hugging Face, Kaggle, and BigQuery public datasets.
-- [ ] Sampling, pushdown SQL, query cost estimates, result caching.
-- [ ] Demonstrate millions of rows without loading everything into model context.
+- [x] Optional connectors for Hugging Face, Kaggle, and BigQuery public datasets.
+- [x] Sampling, pushdown SQL, query cost estimates, result caching.
+- [x] Demonstrate millions of rows without loading everything into model context.
 
 ## Public Dataset Candidates
 

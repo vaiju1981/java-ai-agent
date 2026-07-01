@@ -28,6 +28,14 @@ class AnalyticsInsightAgentTest {
         assertTrue(run.workbenchAnswer().contains("Workbench completed"));
         assertTrue(run.workbenchAnswer().contains("decision log"));
         assertTrue(run.dashboardUpdateAnswer().contains("Dashboard update completed"));
+        assertTrue(run.dashboardFilterAnswer().contains("Dashboard filter completed"));
+        assertTrue(run.multiTableAnswer().contains("orders.customer_id -> customers.customer_id"));
+        assertTrue(run.multiTableAnswer().contains("semantic segment rollup"));
+        assertTrue(run.multiTableAnswer().contains("enterprise"));
+        assertTrue(run.scaleAnswer().contains("Scale readiness completed"));
+        assertTrue(run.scaleAnswer().contains("Hugging Face"));
+        assertTrue(run.scaleAnswer().contains("BigQuery public"));
+        assertTrue(run.scaleAnswer().contains("cache"));
         assertTrue(Files.exists(run.dashboard()));
         assertFalse(Files.readString(run.dashboard()).isBlank());
         assertTrue(Files.exists(run.dashboardSpec()));
@@ -43,6 +51,10 @@ class AnalyticsInsightAgentTest {
         assertTrue(dashboardSpec.contains("\"changeLog\""));
         assertTrue(dashboardSpec.contains("insight-executive-causal"));
         assertTrue(dashboardSpec.contains("Executive Decision Guardrail"));
+        assertTrue(dashboardSpec.contains("\"lastFilterResult\""));
+        assertTrue(dashboardSpec.contains("\"channel\" : [ \"paid_search\" ]"));
+        assertTrue(dashboardSpec.contains("\"drilldown\""));
+        assertTrue(dashboardSpec.contains("\"week\""));
         assertTrue(Files.exists(run.evidence()));
         String evidence = Files.readString(run.evidence());
         assertTrue(evidence.contains("\"type\" : \"dataset\""));
@@ -50,8 +62,10 @@ class AnalyticsInsightAgentTest {
         assertTrue(evidence.contains("\"type\" : \"query\""));
         assertTrue(evidence.contains("\"type\" : \"artifact\""));
         assertTrue(evidence.contains("\"type\" : \"artifact_update\""));
+        assertTrue(evidence.contains("\"type\" : \"dashboard_interaction\""));
         assertTrue(evidence.contains("dashboard_create"));
         assertTrue(evidence.contains("dashboard_update"));
+        assertTrue(evidence.contains("dashboard_filter_apply"));
         assertTrue(evidence.contains(run.dashboardSpec().toAbsolutePath().toString()));
         assertTrue(Files.exists(run.decisionLog()));
         String decisions = Files.readString(run.decisionLog());
@@ -124,5 +138,23 @@ class AnalyticsInsightAgentTest {
         assertTrue(plan.contains("avg_revenue"));
         assertTrue(plan.contains("conversion_rate"));
         assertTrue(plan.contains("group by channel"));
+    }
+
+    @Test
+    void regressionFitIncludesDiagnosticsEvaluationAndModelCard() throws Exception {
+        Path database = tempDir.resolve("analytics.sqlite");
+        try (AnalyticsDatabase analytics = AnalyticsDatabase.importCsv(database, AnalyticsInsightAgent.sampleCsv())) {
+            String regression = analytics.regressionJson("revenue", java.util.List.of("visitors", "orders", "ad_spend"));
+
+            assertTrue(regression.contains("\"diagnostics\""));
+            assertTrue(regression.contains("\"rmse\""));
+            assertTrue(regression.contains("\"mae\""));
+            assertTrue(regression.contains("\"featureImportance\""));
+            assertTrue(regression.contains("\"modelEvalReport\""));
+            assertTrue(regression.contains("\"baselineRmse\""));
+            assertTrue(regression.contains("\"modelCard\""));
+            assertTrue(regression.contains("\"notFor\""));
+            assertTrue(regression.contains("no causal interpretation"));
+        }
     }
 }

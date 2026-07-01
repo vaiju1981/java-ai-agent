@@ -257,22 +257,21 @@ final class AnalyticsDatabase implements AutoCloseable {
         List<Map<String, Object>> models = new ArrayList<>();
         for (String featureName : featureNames) {
             Column feature = requireNumeric(featureName);
-            double r = pearson(feature, targetColumn);
-            double slope = covariance(feature, targetColumn) / variance(feature);
-            double intercept = mean(targetColumn) - slope * mean(feature);
-            models.add(Map.of(
-                    "feature", feature.name(),
-                    "slope", round(slope),
-                    "intercept", round(intercept),
-                    "r2", round(r * r),
-                    "pearson", round(r)));
+            models.add(regressionModel(feature, targetColumn));
         }
         models.sort(Comparator.comparingDouble(m -> -((Number) m.get("r2")).doubleValue()));
-        return json(Map.of(
-                "target", targetColumn.name(),
-                "model", "single_feature_linear_regression_screen",
-                "features", models,
-                "note", "Use as a baseline feature screen, not a production predictive model."));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("target", targetColumn.name());
+        result.put("model", "single_feature_linear_regression_screen");
+        result.put("features", models);
+        result.put("featureImportance", featureImportance(models));
+        result.put("modelEvalReport", modelEvalReport(targetColumn, models));
+        result.put("modelCard", modelCard(targetColumn, featureNames));
+        result.put(
+                "note",
+                "Baseline diagnostics for analyst triage. Use train/test validation and domain review before "
+                        + "production prediction.");
+        return json(result);
     }
 
     String anomalyJson(String columnName) {
@@ -617,6 +616,115 @@ final class AnalyticsDatabase implements AutoCloseable {
         } catch (SQLException e) {
             throw new IllegalStateException("failed to produce chart rows", e);
         }
+    }
+
+    private Map<String, Object> regressionModel(Column feature, Column target) {
+        double r = pearson(feature, target);
+        double featureVariance = variance(feature);
+        double slope = featureVariance == 0 ? 0 : covariance(feature, target) / featureVariance;
+        double intercept = mean(target) - slope * mean(feature);
+        Map<String, Object> model = new LinkedHashMap<>();
+        model.put("feature", feature.name());
+        model.put("slope", round(slope));
+        model.put("intercept", round(intercept));
+        model.put("r2", round(r * r));
+        model.put("pearson", round(r));
+        model.put("diagnostics", regressionDiagnostics(feature, target, slope, intercept));
+        return model;
+    }
+
+    private Map<String, Object> regressionDiagnostics(Column feature, Column target, double slope, double intercept) {
+        List<Double> residuals = new ArrayList<>();
+        double squaredError = 0;
+        double absoluteError = 0;
+        double maxAbsoluteResidual = 0;
+        try (Statement st = connection.createStatement();
+                ResultSet rs = st.executeQuery("select " + feature.sql() + ", " + target.sql() + " from " + TABLE
+                        + " where " + feature.sql() + " is not null and " + target.sql() + " is not null")) {
+            while (rs.next()) {
+                double prediction = intercept + slope * rs.getDouble(1);
+                double residual = rs.getDouble(2) - prediction;
+                residuals.add(residual);
+                squaredError += residual * residual;
+                absoluteError += Math.abs(residual);
+                maxAbsoluteResidual = Math.max(maxAbsoluteResidual, Math.abs(residual));
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("failed to compute regression diagnostics", e);
+        }
+        int n = residuals.size();
+        double meanResidual = residuals.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+        double residualVariance = n < 2
+                ? 0
+                : residuals.stream().mapToDouble(r -> Math.pow(r - meanResidual, 2)).sum() / (n - 1);
+        Map<String, Object> diagnostics = new LinkedHashMap<>();
+        diagnostics.put("rows", n);
+        diagnostics.put("rmse", round(Math.sqrt(squaredError / Math.max(1, n))));
+        diagnostics.put("mae", round(absoluteError / Math.max(1, n)));
+        diagnostics.put("meanResidual", round(meanResidual));
+        diagnostics.put("residualStddev", round(Math.sqrt(residualVariance)));
+        diagnostics.put("maxAbsoluteResidual", round(maxAbsoluteResidual));
+        diagnostics.put("residualCheck", Math.abs(meanResidual) < 1e-6 ? "centered" : "biased");
+        return diagnostics;
+    }
+
+    private List<Map<String, Object>> featureImportance(List<Map<String, Object>> models) {
+        double total = models.stream().mapToDouble(model -> ((Number) model.get("r2")).doubleValue()).sum();
+        List<Map<String, Object>> importance = new ArrayList<>();
+        int rank = 1;
+        for (Map<String, Object> model : models) {
+            double r2 = ((Number) model.get("r2")).doubleValue();
+            importance.add(Map.of(
+                    "rank", rank++,
+                    "feature", model.get("feature"),
+                    "importance", round(total == 0 ? 0 : r2 / total),
+                    "basis", "normalized_single_feature_r2"));
+        }
+        return importance;
+    }
+
+    private Map<String, Object> modelEvalReport(Column target, List<Map<String, Object>> models) {
+        Map<String, Object> best = models.isEmpty() ? Map.of() : models.getFirst();
+        Object bestFeatureRmse = 0;
+        if (best.get("diagnostics") instanceof Map<?, ?> diagnostics && diagnostics.get("rmse") != null) {
+            bestFeatureRmse = diagnostics.get("rmse");
+        }
+        return Map.of(
+                "evaluation", "in_sample_baseline",
+                "target", target.name(),
+                "baselineRmse", round(baselineRmse(target)),
+                "bestFeature", best.getOrDefault("feature", ""),
+                "bestFeatureRmse", bestFeatureRmse,
+                "bestFeatureR2", best.getOrDefault("r2", 0),
+                "warning", "In-sample metrics are optimistic; use holdout or cross-validation for production.");
+    }
+
+    private Map<String, Object> modelCard(Column target, List<String> featureNames) {
+        Map<String, Object> card = new LinkedHashMap<>();
+        card.put("modelType", "single_feature_linear_regression_screen");
+        card.put("target", target.name());
+        card.put("candidateFeatures", featureNames);
+        card.put("intendedUse", "Rank candidate numeric drivers and identify promising follow-up analysis paths.");
+        card.put("notFor", "Automated decisions, causal claims, or production forecasting without validation.");
+        card.put("trainingData", Map.of("table", TABLE, "rows", rowCount()));
+        card.put("assumptions", List.of(
+                "linear relationship per feature",
+                "numeric non-null rows only",
+                "independent observations",
+                "no causal interpretation"));
+        card.put("risks", List.of(
+                "confounding",
+                "multicollinearity",
+                "small sample size",
+                "in-sample evaluation bias"));
+        return card;
+    }
+
+    private double baselineRmse(Column target) {
+        double targetMean = mean(target);
+        List<Double> values = numericValues(target);
+        double squaredError = values.stream().mapToDouble(value -> Math.pow(value - targetMean, 2)).sum();
+        return Math.sqrt(squaredError / Math.max(1, values.size()));
     }
 
     private double quantile(Column column, double q) {
