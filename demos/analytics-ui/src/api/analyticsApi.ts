@@ -130,6 +130,42 @@ export type ChatResponse = {
   error?: string;
 };
 
+export type AnalysisKind =
+  | "profile"
+  | "correlations"
+  | "features"
+  | "segments"
+  | "regression"
+  | "anomalies"
+  | "forecast"
+  | "causal-check";
+
+export type AnalysisRequest = {
+  target?: string;
+  segment?: string;
+  treatment?: string;
+  outcome?: string;
+  timeColumn?: string;
+  periods?: number;
+  features?: string[];
+};
+
+export type AnalysisResponse = {
+  analysis: AnalysisKind | string;
+  title: string;
+  description: string;
+  visualization: string;
+  result: unknown;
+  tileCandidate: {
+    id: string;
+    type: string;
+    title: string;
+    source: string;
+    visualization: string;
+    result: unknown;
+  };
+};
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
   if (!response.ok) {
@@ -170,6 +206,10 @@ export async function loadDatasetPreview(): Promise<DatasetPreview> {
   return { schema, profile, quality, sample };
 }
 
+export async function loadSchemaSummary(): Promise<SchemaSummary> {
+  return getJson<SchemaSummary>("/api/schema");
+}
+
 export async function uploadDataset(file: File): Promise<UploadResult> {
   return postJson<UploadResult>("/api/upload", {
     filename: file.name,
@@ -188,4 +228,8 @@ export async function askData(question: string): Promise<ChatResponse> {
     throw new Error(payload.error ?? `/api/chat returned ${response.status}`);
   }
   return payload;
+}
+
+export async function runAnalysis(kind: AnalysisKind, request: AnalysisRequest): Promise<AnalysisResponse> {
+  return postJson<AnalysisResponse>(`/api/analysis/${kind}`, request);
 }

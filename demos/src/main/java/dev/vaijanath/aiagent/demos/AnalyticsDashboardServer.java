@@ -170,6 +170,11 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 respondJson(exchange, workspace.chat(chatRequest(exchange)));
                 return;
             }
+            if ("POST".equals(method) && path.startsWith("/api/analysis/")) {
+                String analysis = path.substring("/api/analysis/".length());
+                respondJson(exchange, workspace.analysis(analysis, analysisRequest(exchange)));
+                return;
+            }
             respond(exchange, 404, "text/plain; charset=utf-8", "not found");
         } catch (RuntimeException e) {
             respond(exchange, 500, "application/json; charset=utf-8", toJson(Map.of("error", e.getMessage())));
@@ -213,6 +218,17 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             throw new IllegalArgumentException("question is required");
         }
         return new ChatRequest(question);
+    }
+
+    private static Map<String, Object> analysisRequest(HttpExchange exchange) throws IOException {
+        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).strip();
+        if (body.isBlank()) {
+            return Map.of();
+        }
+        Map<String, Object> parsed = MAPPER.readValue(body, new TypeReference<>() {});
+        Map<String, Object> typed = new LinkedHashMap<>();
+        parsed.forEach((key, value) -> typed.put(String.valueOf(key), value));
+        return typed;
     }
 
     private static String hostedHtml() {
@@ -850,6 +866,94 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             return analytics.sqlJson("select * from data order by _row_id limit 25");
         }
 
+        synchronized String analysis(String analysis, Map<String, Object> request) {
+            String normalized = analysis.toLowerCase(Locale.ROOT);
+            String title;
+            String description;
+            String visualization;
+            String result;
+            switch (normalized) {
+                case "profile" -> {
+                    title = "Dataset Profile";
+                    description = "Column-level type, missingness, distribution, and cardinality summary.";
+                    visualization = "schema_table";
+                    result = analytics.profileJson();
+                }
+                case "correlations" -> {
+                    String target = option(request, "target", "revenue");
+                    title = "Correlation Explorer";
+                    description = "Pearson correlations between numeric columns and " + target + ".";
+                    visualization = "ranked_bar";
+                    result = analytics.correlationsJson(target);
+                }
+                case "features" -> {
+                    String target = option(request, "target", "revenue");
+                    title = "Feature Drivers";
+                    description = "Numeric correlations and categorical lift ranked for " + target + ".";
+                    visualization = "ranked_bar";
+                    result = analytics.interestingFeaturesJson(target);
+                }
+                case "segments" -> {
+                    String segment = option(request, "segment", "channel");
+                    String target = option(request, "target", "revenue");
+                    title = "Segment Comparison";
+                    description = "Group-level count, mean, min, and max for " + target + " by " + segment + ".";
+                    visualization = "segment_bar";
+                    result = analytics.distributionCompareJson(segment, target);
+                }
+                case "regression" -> {
+                    String target = option(request, "target", "revenue");
+                    List<String> features = options(request, "features", List.of("visitors", "orders", "ad_spend"))
+                            .stream()
+                            .filter(feature -> !feature.equals(target))
+                            .toList();
+                    title = "Regression Diagnostics";
+                    description = "Single-feature linear regression screen with model card and diagnostic notes.";
+                    visualization = "diagnostic_table";
+                    result = analytics.regressionJson(target, features);
+                }
+                case "anomalies" -> {
+                    String target = option(request, "target", "revenue");
+                    title = "Anomaly Detection";
+                    description = "Z-score based scan for unusual values in " + target + ".";
+                    visualization = "outlier_table";
+                    result = analytics.anomalyJson(target);
+                }
+                case "forecast" -> {
+                    String timeColumn = option(request, "timeColumn", "week");
+                    String target = option(request, "target", "revenue");
+                    int periods = intOption(request, "periods", 4);
+                    title = "Forecast Baseline";
+                    description = "Linear trend forecast for " + target + " over the next " + periods + " periods.";
+                    visualization = "forecast_line";
+                    result = analytics.forecastJson(timeColumn, target, periods);
+                }
+                case "causal-check" -> {
+                    String treatment = option(request, "treatment", "discount_rate");
+                    String outcome = option(request, "outcome", "revenue");
+                    title = "Causal Sanity Check";
+                    description = "Observational association check with explicit causal limitations.";
+                    visualization = "caveat_card";
+                    result = analytics.causalCheckJson(treatment, outcome);
+                }
+                default -> throw new IllegalArgumentException("Unknown analysis: " + analysis);
+            }
+            Object parsedResult = parseJson(result);
+            return toJson(Map.of(
+                    "analysis", normalized,
+                    "title", title,
+                    "description", description,
+                    "visualization", visualization,
+                    "result", parsedResult,
+                    "tileCandidate", Map.of(
+                            "id", "analysis-" + normalized,
+                            "type", "analysis",
+                            "title", title,
+                            "source", normalized,
+                            "visualization", visualization,
+                            "result", parsedResult)));
+        }
+
         synchronized AnalyticsDashboard.DashboardFilterResult applyFilters(
                 Map<String, Object> filters,
                 String drilldownTileId,
@@ -999,6 +1103,36 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 return "ad_spend";
             }
             return "revenue";
+        }
+
+        private static String option(Map<String, Object> request, String name, String fallback) {
+            String value = string(request.get(name)).strip();
+            return value.isBlank() ? fallback : value;
+        }
+
+        private static int intOption(Map<String, Object> request, String name, int fallback) {
+            Object value = request.get(name);
+            if (value instanceof Number number) {
+                return Math.max(1, Math.min(12, number.intValue()));
+            }
+            try {
+                return Math.max(1, Math.min(12, Integer.parseInt(string(value))));
+            } catch (NumberFormatException e) {
+                return fallback;
+            }
+        }
+
+        private static List<String> options(Map<String, Object> request, String name, List<String> fallback) {
+            Object value = request.get(name);
+            if (value instanceof List<?> values) {
+                List<String> selected = values.stream()
+                        .map(AnalyticsDashboardServer::string)
+                        .map(String::strip)
+                        .filter(item -> !item.isBlank())
+                        .toList();
+                return selected.isEmpty() ? fallback : selected;
+            }
+            return fallback;
         }
 
         @SuppressWarnings("unchecked")

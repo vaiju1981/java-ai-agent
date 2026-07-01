@@ -270,11 +270,11 @@ npm run build
 
 ### Milestone D: Analysis Workspace
 
-- Dedicated analysis tabs for profile, correlations, features, segments, regression, anomalies, forecast,
+- [x] Dedicated analysis tabs for profile, correlations, features, segments, regression, anomalies, forecast,
   and causal checks.
-- Result tables and charts.
-- Pin-to-dashboard actions.
-- Acceptance: each analysis can produce a visible result and a dashboard tile candidate.
+- [x] Result tables and charts.
+- [x] Pin-to-dashboard actions.
+- [x] Acceptance: each analysis can produce a visible result and a dashboard tile candidate.
 
 ### Milestone E: Dashboard Builder
 

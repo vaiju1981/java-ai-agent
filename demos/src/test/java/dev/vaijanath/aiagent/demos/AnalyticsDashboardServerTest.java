@@ -157,6 +157,29 @@ class AnalyticsDashboardServerTest {
                 assertEquals(200, causalResponse.statusCode());
                 assertTrue(causalResponse.body().contains("\"tool\" : \"causal_sanity_check\""));
                 assertTrue(causalResponse.body().contains("\"canClaimCausation\" : false"));
+
+                String[] analyses = {
+                    "profile",
+                    "correlations",
+                    "features",
+                    "segments",
+                    "regression",
+                    "anomalies",
+                    "forecast",
+                    "causal-check"
+                };
+                for (String analysis : analyses) {
+                    HttpRequest analysisRequest = HttpRequest.newBuilder(root.resolve("/api/analysis/" + analysis))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                            .build();
+                    HttpResponse<String> analysisResponse =
+                            client.send(analysisRequest, HttpResponse.BodyHandlers.ofString());
+                    assertEquals(200, analysisResponse.statusCode(), analysis);
+                    assertTrue(analysisResponse.body().contains("\"analysis\" : \"" + analysis + "\""), analysis);
+                    assertTrue(analysisResponse.body().contains("\"result\""), analysis);
+                    assertTrue(analysisResponse.body().contains("\"tileCandidate\""), analysis);
+                }
             }
         }
     }
