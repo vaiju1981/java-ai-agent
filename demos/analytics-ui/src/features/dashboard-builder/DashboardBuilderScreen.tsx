@@ -22,24 +22,23 @@ type DashboardBuilderScreenProps = {
   onDashboardChanged: (dashboard: DashboardModel) => void;
 };
 
-type FilterState = {
-  channel: string[];
-  week: {
-    from: number;
-    to: number;
-  };
-};
+type FilterState = Record<string, unknown>;
 
 function initialFilters(snapshot: AppSnapshot): FilterState {
-  const channel = snapshot.filterOptions?.filters.find((filter) => filter.id === "channel");
-  const week = snapshot.filterOptions?.filters.find((filter) => filter.id === "week");
-  return {
-    channel: channel?.values ?? [],
-    week: {
-      from: Math.floor(week?.range?.min ?? 1),
-      to: Math.ceil(week?.range?.max ?? 16)
-    }
-  };
+  return Object.fromEntries(
+    (snapshot.filterOptions?.filters ?? []).map((filter) => {
+      if (filter.type === "range") {
+        return [
+          filter.field,
+          {
+            from: Math.floor(filter.range?.min ?? 0),
+            to: Math.ceil(filter.range?.max ?? 0)
+          }
+        ];
+      }
+      return [filter.field, filter.values ?? []];
+    })
+  );
 }
 
 function tileById(dashboard: DashboardModel | null, id: string): DashboardTile | undefined {
@@ -68,6 +67,17 @@ function metricValue(row: Record<string, unknown>, preferred: string[]): number 
   return typeof discovered?.[1] === "number" ? discovered[1] : 0;
 }
 
+function firstNumeric(row: Record<string, unknown> | null | undefined): number | undefined {
+  const value = row ? Object.values(row).find((item) => typeof item === "number") : undefined;
+  return typeof value === "number" ? value : undefined;
+}
+
+function dashboardRoles(dashboard: DashboardModel | null): Record<string, string> {
+  const source = dashboard?.source;
+  const roles = source && typeof source === "object" ? source.roles : undefined;
+  return roles && typeof roles === "object" ? (roles as Record<string, string>) : {};
+}
+
 function downloadText(filename: string, text: string, type: string) {
   const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
@@ -80,12 +90,17 @@ function downloadText(filename: string, text: string, type: string) {
 
 function BarChart({
   rows,
-  onDrilldown
+  onDrilldown,
+  primaryMetric,
+  segment
 }: {
   rows: Array<Record<string, unknown>>;
   onDrilldown: (channel: string) => void;
+  segment: string;
+  primaryMetric: string;
 }) {
-  const max = Math.max(...rows.map((row) => metricValue(row, ["revenue", "avg_revenue", "mean"])), 1);
+  const preferred = [primaryMetric, `avg_${primaryMetric}`, `total_${primaryMetric}`, "revenue", "avg_revenue", "mean"];
+  const max = Math.max(...rows.map((row) => metricValue(row, preferred)), 1);
 
   if (rows.length === 0) {
     return <div className="empty-state">No chart rows available.</div>;
@@ -94,8 +109,8 @@ function BarChart({
   return (
     <div className="bar-list">
       {rows.map((row) => {
-        const channel = String(row.channel ?? "unknown");
-        const revenue = metricValue(row, ["revenue", "avg_revenue", "mean"]);
+        const channel = String(row[segment] ?? Object.values(row).find((value) => typeof value === "string") ?? "unknown");
+        const revenue = metricValue(row, preferred);
         return (
           <button className="drilldown-bar" key={channel} onClick={() => onDrilldown(channel)} type="button">
             <span>{channel}</span>
@@ -130,16 +145,16 @@ export function DashboardBuilderScreen({ onDashboardChanged, snapshot }: Dashboa
     [];
   const tableRows = filteredRows(filterResult, "table-channel") ?? tileById(dashboard, "table-channel")?.data?.rows ?? [];
   const drilldownRows = filterResult?.result.drilldown?.data?.rows ?? [];
+  const roles = dashboardRoles(dashboard);
+  const segment = roles.segment ?? "channel";
+  const primaryMetric = roles.primaryMetric ?? "revenue";
   const pinnedTiles = useMemo(
     () => dashboard?.tiles?.filter((tile) => tile.id.startsWith("pinned-") || tile.evidenceIds !== undefined) ?? [],
     [dashboard]
   );
 
   function currentFilters(): DashboardFilters {
-    return {
-      channel: filters.channel,
-      week: filters.week
-    };
+    return filters;
   }
 
   function updateDashboard(next: DashboardModel | undefined) {
@@ -236,20 +251,22 @@ export function DashboardBuilderScreen({ onDashboardChanged, snapshot }: Dashboa
     }
   }
 
-  function toggleChannel(channel: string) {
+  function toggleFilterValue(field: string, value: string) {
     setFilters((current) => ({
       ...current,
-      channel: current.channel.includes(channel)
-        ? current.channel.filter((item) => item !== channel)
-        : [...current.channel, channel]
+      [field]: Array.isArray(current[field]) && current[field].includes(value)
+        ? current[field].filter((item: unknown) => item !== value)
+        : [...(Array.isArray(current[field]) ? current[field] : []), value]
     }));
   }
 
-  const channelFilter = snapshot.filterOptions?.filters.find((filter) => filter.id === "channel");
-  const weekFilter = snapshot.filterOptions?.filters.find((filter) => filter.id === "week");
   const rowKpi = firstFilteredRow(filterResult, "kpi-rows");
   const revenueKpi = firstFilteredRow(filterResult, "kpi-revenue");
   const conversionKpi = firstFilteredRow(filterResult, "kpi-conversion");
+  const revenueTile = tileById(dashboard, "kpi-revenue");
+  const conversionTile = tileById(dashboard, "kpi-conversion");
+  const chartTile = tileById(dashboard, "chart-revenue-channel");
+  const tableTile = tileById(dashboard, "table-channel");
 
   return (
     <div className="dashboard-layout">
@@ -284,49 +301,61 @@ export function DashboardBuilderScreen({ onDashboardChanged, snapshot }: Dashboa
           </div>
 
           <div className="filter-stack">
-            <strong>Channel</strong>
-            <div className="checkbox-stack">
-              {(channelFilter?.values ?? []).map((channel) => (
-                <label className="checkbox-row" key={channel}>
-                  <input
-                    checked={filters.channel.includes(channel)}
-                    onChange={() => toggleChannel(channel)}
-                    type="checkbox"
-                  />
-                  <span>{channel}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="filter-stack">
-            <strong>Week Range</strong>
-            <div className="range-row">
-              <input
-                max={weekFilter?.range?.max}
-                min={weekFilter?.range?.min}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    week: { ...current.week, from: Number(event.target.value) }
-                  }))
-                }
-                type="number"
-                value={filters.week.from}
-              />
-              <input
-                max={weekFilter?.range?.max}
-                min={weekFilter?.range?.min}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    week: { ...current.week, to: Number(event.target.value) }
-                  }))
-                }
-                type="number"
-                value={filters.week.to}
-              />
-            </div>
+            {(snapshot.filterOptions?.filters ?? []).map((filter) => (
+              <div className="filter-stack" key={filter.field}>
+                <strong>{filter.label}</strong>
+                {filter.type === "range" ? (
+                  <div className="range-row">
+                    <input
+                      max={filter.range?.max}
+                      min={filter.range?.min}
+                      onChange={(event) =>
+                        setFilters((current) => ({
+                          ...current,
+                          [filter.field]: {
+                            ...((current[filter.field] as Record<string, unknown> | undefined) ?? {}),
+                            from: Number(event.target.value)
+                          }
+                        }))
+                      }
+                      type="number"
+                      value={Number((filters[filter.field] as { from?: number } | undefined)?.from ?? filter.range?.min ?? 0)}
+                    />
+                    <input
+                      max={filter.range?.max}
+                      min={filter.range?.min}
+                      onChange={(event) =>
+                        setFilters((current) => ({
+                          ...current,
+                          [filter.field]: {
+                            ...((current[filter.field] as Record<string, unknown> | undefined) ?? {}),
+                            to: Number(event.target.value)
+                          }
+                        }))
+                      }
+                      type="number"
+                      value={Number((filters[filter.field] as { to?: number } | undefined)?.to ?? filter.range?.max ?? 0)}
+                    />
+                  </div>
+                ) : (
+                  <div className="checkbox-stack">
+                    {(filter.values ?? []).map((value) => (
+                      <label className="checkbox-row" key={value}>
+                        <input
+                          checked={
+                            Array.isArray(filters[filter.field]) &&
+                            (filters[filter.field] as unknown[]).includes(value)
+                          }
+                          onChange={() => toggleFilterValue(filter.field, value)}
+                          type="checkbox"
+                        />
+                        <span>{value}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
           <div className="dashboard-action-grid">
@@ -370,15 +399,13 @@ export function DashboardBuilderScreen({ onDashboardChanged, snapshot }: Dashboa
               <span>{filterResult?.result.where ?? "all rows"}</span>
             </article>
             <article className="metric-card">
-              <p>Total Revenue</p>
-              <strong>{formatValue(revenueKpi?.total_revenue ?? tileById(dashboard, "kpi-revenue")?.value)}</strong>
+              <p>{revenueTile?.title ?? "Primary Metric"}</p>
+              <strong>{formatValue(firstNumeric(revenueKpi) ?? revenueTile?.value)}</strong>
               <span>Filtered sum</span>
             </article>
             <article className="metric-card">
-              <p>Avg Conversion</p>
-              <strong>
-                {formatValue(conversionKpi?.avg_conversion_rate ?? tileById(dashboard, "kpi-conversion")?.value)}
-              </strong>
+              <p>{conversionTile?.title ?? "Secondary Metric"}</p>
+              <strong>{formatValue(firstNumeric(conversionKpi) ?? conversionTile?.value)}</strong>
               <span>Filtered average</span>
             </article>
           </section>
@@ -387,18 +414,23 @@ export function DashboardBuilderScreen({ onDashboardChanged, snapshot }: Dashboa
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Chart</p>
-                <h3>Revenue By Channel</h3>
+                <h3>{chartTile?.title ?? "Segment Chart"}</h3>
               </div>
               <span className="pill">{chartRows.length} rows</span>
             </div>
-            <BarChart rows={chartRows} onDrilldown={(channel) => void applyFilters(channel)} />
+            <BarChart
+              primaryMetric={primaryMetric}
+              rows={chartRows}
+              segment={segment}
+              onDrilldown={(channel) => void applyFilters(channel)}
+            />
           </section>
 
           <section className="panel">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Table</p>
-                <h3>Channel Rollup</h3>
+                <h3>{tableTile?.title ?? "Segment Rollup"}</h3>
               </div>
               <span className="pill">{tableRows.length} rows</span>
             </div>
@@ -409,11 +441,11 @@ export function DashboardBuilderScreen({ onDashboardChanged, snapshot }: Dashboa
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Drilldown</p>
-                <h3>{filterResult?.result.drilldown?.value ?? "Select A Channel"}</h3>
+                <h3>{filterResult?.result.drilldown?.value ?? `Select A ${segment}`}</h3>
               </div>
               <span className="pill">{drilldownRows.length} rows</span>
             </div>
-            <ResultTable rows={drilldownRows} emptyText="Click a channel in the chart to inspect supporting rows." />
+            <ResultTable rows={drilldownRows} emptyText={`Click a ${segment} in the chart to inspect supporting rows.`} />
           </section>
 
           <section className="panel">

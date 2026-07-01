@@ -8,6 +8,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -79,6 +81,74 @@ class AnalyticsDashboardServerTest {
             assertEquals(200, uploadedSession.statusCode());
             assertTrue(uploadedSession.body().contains("\"rows\" : 2"));
             assertTrue(uploadedSession.body().contains("phase-g.csv"));
+        }
+    }
+
+    @Test
+    void derivesDashboardRolesFromUploadedPlayerVisitSchema() throws Exception {
+        Path csv = tempDir.resolve("player-visits.csv");
+        Files.writeString(
+                csv,
+                """
+                playerId,visitId,clubLevel,ticks,theoWin,gamingVisitCount,visitCount,freePlayUsed,coinIn,coinOut
+                101,v1,GOLD,1719187200000,42.5,1,1,0,200,160
+                102,v2,GOLD,1719273600000,54.0,1,1,5,260,210
+                103,v3,PLATINUM,1719360000000,110.0,2,2,20,600,510
+                104,v4,PLATINUM,1719446400000,125.0,2,2,25,640,520
+                105,v5,PRESIDENT,1719532800000,210.0,3,3,50,900,710
+                106,v6,PRESIDENT,1719619200000,230.0,3,3,60,980,760
+                """,
+                StandardCharsets.UTF_8);
+        Path database = tempDir.resolve("player-visits.sqlite");
+        Path spec = tempDir.resolve("player-dashboard.json");
+        Path html = tempDir.resolve("player-dashboard.html");
+        AnalyticsFrame frame = AnalyticsFrame.loadCsv(csv);
+
+        try (AnalyticsDatabase analytics = AnalyticsDatabase.importCsv(database, csv)) {
+            AnalyticsDashboard.create(analytics, frame, spec, html);
+
+            try (AnalyticsDashboardServer server = AnalyticsDashboardServer.start(analytics, spec, html)) {
+                HttpClient client = HttpClient.newHttpClient();
+                URI root = server.uri();
+
+                HttpResponse<String> schema = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/schema")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, schema.statusCode());
+                assertTrue(schema.body().contains("\"primaryMetric\":\"theoWin\""));
+                assertTrue(schema.body().contains("\"secondaryMetric\":\"gamingVisitCount\""));
+                assertTrue(schema.body().contains("\"segment\":\"clubLevel\""));
+                assertTrue(schema.body().contains("\"time\":\"ticks\""));
+                assertTrue(schema.body().contains("\"treatment\":\"freePlayUsed\""));
+
+                HttpResponse<String> filterOptions = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/filter-options")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, filterOptions.statusCode());
+                assertTrue(filterOptions.body().contains("\"field\" : \"clubLevel\""));
+                assertTrue(filterOptions.body().contains("\"field\" : \"ticks\""));
+                assertTrue(filterOptions.body().contains("PLATINUM"));
+                assertFalse(filterOptions.body().contains("\"field\" : \"channel\""));
+
+                HttpResponse<String> dashboard = client.send(
+                        HttpRequest.newBuilder(root.resolve("/api/dashboard")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, dashboard.statusCode());
+                assertTrue(dashboard.body().contains("Total Theo Win"));
+                assertTrue(dashboard.body().contains("Theo Win By Club Level"));
+
+                HttpRequest chat = HttpRequest.newBuilder(root.resolve("/api/chat"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(
+                                "{\"question\":\"What features are important for theoWin?\"}"))
+                        .build();
+                HttpResponse<String> chatResponse = client.send(chat, HttpResponse.BodyHandlers.ofString());
+                assertEquals(200, chatResponse.statusCode());
+                assertTrue(chatResponse.body().contains("\"tool\" : \"interesting_features\""));
+                assertTrue(chatResponse.body().contains("\"target\" : \"theoWin\""));
+                assertFalse(chatResponse.body().contains("\"feature\" : \"playerId\""));
+                assertFalse(chatResponse.body().contains("\"feature\" : \"visitId\""));
+            }
         }
     }
 

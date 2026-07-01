@@ -16,13 +16,6 @@ type ChatMessage = {
   response?: ChatResponse;
 };
 
-const quickQuestions = [
-  "What features are important for revenue?",
-  "Show correlations for revenue.",
-  "Does discount_rate cause revenue?",
-  "Average revenue by channel."
-];
-
 const tableKeys = [
   "features",
   "correlations",
@@ -116,6 +109,25 @@ export function AskDataScreen({ snapshot }: AskDataScreenProps) {
   const [submitting, setSubmitting] = useState(false);
 
   const datasetLabel = useMemo(() => fileName(snapshot.session?.csv), [snapshot.session?.csv]);
+  const roles = useMemo(() => {
+    const source = snapshot.dashboard?.source;
+    const candidate = source && typeof source === "object" ? source.roles : undefined;
+    return candidate && typeof candidate === "object" ? (candidate as Record<string, unknown>) : {};
+  }, [snapshot.dashboard?.source]);
+  const primaryMetric = String(roles.primaryMetric ?? "the primary metric");
+  const secondaryMetric = String(roles.secondaryMetric ?? "the secondary metric");
+  const segment = String(roles.segment ?? "the main segment");
+  const treatment = String(roles.treatment ?? "the treatment column");
+  const quickQuestions = useMemo(
+    () => [
+      `What features are important for ${primaryMetric}?`,
+      `Show correlations for ${primaryMetric}.`,
+      `Does ${treatment} cause ${primaryMetric}?`,
+      `Average ${primaryMetric} by ${segment}.`,
+      `What correlates with ${secondaryMetric}?`
+    ],
+    [primaryMetric, secondaryMetric, segment, treatment]
+  );
 
   async function submitQuestion(nextQuestion = question) {
     const trimmed = nextQuestion.trim();

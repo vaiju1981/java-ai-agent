@@ -488,14 +488,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                       </section>
                       <section class="stack">
                         <h2>Filters</h2>
-                        <div class="filter-group" id="channels"></div>
-                        <div>
-                          <label>Week Range</label>
-                          <div class="range">
-                            <input id="from" type="number" min="1" value="1">
-                            <input id="to" type="number" min="1" value="16">
-                          </div>
-                        </div>
+                        <div class="filter-group" id="filters"></div>
                         <button class="primary" id="apply">Apply Filters</button>
                       </section>
                       <section class="stack">
@@ -513,7 +506,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                         <div class="content-grid">
                           <section class="tile">
                             <div class="row">
-                              <h2>Revenue By Channel</h2>
+                              <h2 id="chartTitle">Segment Chart</h2>
                               <div class="spacer"></div>
                               <div class="status" id="chartStatus">Ready</div>
                             </div>
@@ -524,7 +517,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                             <div id="insight" class="empty"></div>
                           </section>
                           <section class="tile">
-                            <h2>Channel Rollup</h2>
+                            <h2 id="tableTitle">Segment Rollup</h2>
                             <div id="table"></div>
                           </section>
                           <section class="tile">
@@ -533,7 +526,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                           </section>
                           <section class="tile">
                             <h2>Ask The Data</h2>
-                            <textarea id="question" placeholder="Ask about correlations, features, causality, anomalies, forecasts, regression, or channel performance.">What features are important for revenue?</textarea>
+                            <textarea id="question" placeholder="Ask about correlations, features, causality, anomalies, forecasts, regression, or segment performance."></textarea>
                             <div class="row" style="margin-top:10px">
                               <button class="primary" id="ask">Ask</button>
                               <div class="status" id="chatStatus">Ready</div>
@@ -578,6 +571,21 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                       return key ? row[key] : undefined;
                     }
 
+                    function roles() {
+                      return state.dashboard?.source?.roles || {};
+                    }
+
+                    function title(value) {
+                      return String(value || '')
+                        .replace(/[_-]/g, ' ')
+                        .replace(/([a-z])([A-Z])/g, '$1 $2')
+                        .replace(/\\b\\w/g, c => c.toUpperCase());
+                    }
+
+                    function firstNumber(row) {
+                      return Object.values(row || {}).find(value => typeof value === 'number');
+                    }
+
                     function tile(id) {
                       return (state.dashboard?.tiles || []).find(item => item.id === id) || {};
                     }
@@ -598,24 +606,34 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                       return tile('table-channel')?.data?.rows || [];
                     }
 
-                    function renderChannelControls() {
-                      const channelFilter = (state.filterOptions?.filters || []).find(filter => filter.id === 'channel');
-                      const channels = channelFilter?.values || [];
-                      document.getElementById('channels').innerHTML = channels.map(channel => `
-                        <label class="check">
-                          <input type="checkbox" value="${channel}" checked>
-                          <span>${channel}</span>
-                        </label>
-                      `).join('') || '<div class="empty">No channel values found</div>';
-                      const weekFilter = (state.filterOptions?.filters || []).find(filter => filter.id === 'week');
-                      const min = Math.floor(Number(weekFilter?.range?.min ?? 1));
-                      const max = Math.ceil(Number(weekFilter?.range?.max ?? 16));
-                      document.getElementById('from').value = String(min);
-                      document.getElementById('to').value = String(max);
-                      document.getElementById('from').min = String(min);
-                      document.getElementById('from').max = String(max);
-                      document.getElementById('to').min = String(min);
-                      document.getElementById('to').max = String(max);
+                    function renderFilterControls() {
+                      const filters = state.filterOptions?.filters || [];
+                      document.getElementById('filters').innerHTML = filters.map(filter => {
+                        if (filter.type === 'range') {
+                          const min = Math.floor(Number(filter.range?.min ?? 0));
+                          const max = Math.ceil(Number(filter.range?.max ?? 0));
+                          return `
+                            <div>
+                              <label>${filter.label || title(filter.field)}</label>
+                              <div class="range" data-filter="${filter.field}" data-type="range">
+                                <input type="number" min="${min}" max="${max}" value="${min}" data-bound="from">
+                                <input type="number" min="${min}" max="${max}" value="${max}" data-bound="to">
+                              </div>
+                            </div>
+                          `;
+                        }
+                        return `
+                          <div data-filter="${filter.field}" data-type="multi_select">
+                            <label>${filter.label || title(filter.field)}</label>
+                            ${(filter.values || []).map(value => `
+                              <label class="check">
+                                <input type="checkbox" value="${value}" checked>
+                                <span>${value}</span>
+                              </label>
+                            `).join('')}
+                          </div>
+                        `;
+                      }).join('') || '<div class="empty">Upload a dataset to see filters</div>';
                     }
 
                     async function loadDashboard() {
@@ -624,7 +642,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                       const filterResponse = await fetch('/api/filter-options');
                       state.filterOptions = await filterResponse.json();
                       state.filterResult = null;
-                      renderChannelControls();
+                      renderFilterControls();
                       render();
                     }
 
@@ -650,18 +668,20 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                       state.filterOptions = payload.filterOptions;
                       state.filterResult = null;
                       document.getElementById('uploadStatus').textContent = `${file.name} loaded, ${payload.rows} rows`;
-                      renderChannelControls();
+                      renderFilterControls();
                       render();
                     }
 
                     function renderMetrics() {
                       const rowCount = filteredTile('kpi-rows')?.[0]?.rows ?? tile('kpi-rows').value;
-                      const revenue = filteredTile('kpi-revenue')?.[0]?.total_revenue ?? tile('kpi-revenue').value;
-                      const conversion = filteredTile('kpi-conversion')?.[0]?.avg_conversion_rate ?? tile('kpi-conversion').value;
+                      const primaryTile = tile('kpi-revenue');
+                      const secondaryTile = tile('kpi-conversion');
+                      const primary = firstNumber(filteredTile('kpi-revenue')?.[0]) ?? primaryTile.value;
+                      const secondary = firstNumber(filteredTile('kpi-conversion')?.[0]) ?? secondaryTile.value;
                       document.getElementById('metrics').innerHTML = [
                         ['Rows', fmt(rowCount), 'Imported records'],
-                        ['Total Revenue', money(revenue), 'Filtered revenue'],
-                        ['Avg Conversion', percent(conversion), 'Filtered conversion']
+                        [primaryTile.title || 'Primary Metric', fmt(primary), 'Filtered total'],
+                        [secondaryTile.title || 'Secondary Metric', fmt(secondary), 'Filtered average']
                       ].map(metric => `
                         <section class="tile">
                           <h3>${metric[0]}</h3>
@@ -673,19 +693,24 @@ final class AnalyticsDashboardServer implements AutoCloseable {
 
                     function renderChart() {
                       const rows = chartRows();
+                      const role = roles();
+                      const segment = role.segment || 'segment';
+                      const primary = role.primaryMetric || 'metric';
+                      const chartTile = tile('chart-revenue-channel');
+                      document.getElementById('chartTitle').textContent = chartTile.title || `${title(primary)} By ${title(segment)}`;
                       const values = rows.map(row => ({
-                        channel: String(row.channel ?? row.Channel ?? row.value ?? 'unknown'),
-                        revenue: number(rowValue(row, ['avg_revenue', 'total_revenue', 'revenue', 'mean']))
-                      })).filter(row => row.revenue > 0);
-                      const max = Math.max(1, ...values.map(row => row.revenue));
-                      document.getElementById('chartStatus').textContent = values.length + ' channels';
+                        segment: String(row[segment] ?? Object.values(row).find(value => typeof value === 'string') ?? 'unknown'),
+                        metric: number(rowValue(row, [primary, `avg_${primary}`, `total_${primary}`, 'mean']))
+                      })).filter(row => row.metric > 0);
+                      const max = Math.max(1, ...values.map(row => row.metric));
+                      document.getElementById('chartStatus').textContent = values.length + ' groups';
                       document.getElementById('chart').innerHTML = values.map(row => {
-                        const cls = row.channel.replace(/[^a-z0-9]/gi, '').toLowerCase();
+                        const cls = row.segment.replace(/[^a-z0-9]/gi, '').toLowerCase();
                         return `
                           <div class="bar-row">
-                            <div class="bar-label">${row.channel}</div>
-                            <div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(2, row.revenue / max * 100)}%"></div></div>
-                            <div class="bar-value">${money(row.revenue)}</div>
+                            <div class="bar-label">${row.segment}</div>
+                            <div class="bar-track"><div class="bar-fill ${cls}" style="width:${Math.max(2, row.metric / max * 100)}%"></div></div>
+                            <div class="bar-value">${fmt(row.metric)}</div>
                           </div>
                         `;
                       }).join('') || '<div class="empty">No chart rows</div>';
@@ -697,22 +722,13 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                         document.getElementById('table').innerHTML = '<div class="empty">No rows</div>';
                         return;
                       }
-                      const normalized = rows.map(row => ({
-                        channel: row.channel ?? row.Channel ?? 'unknown',
-                        avg: rowValue(row, ['avg_revenue', 'mean', 'revenue']),
-                        total: rowValue(row, ['total_revenue', 'sum']),
-                        rows: row.rows ?? row.Count ?? ''
-                      }));
+                      const columns = Object.keys(rows[0]);
+                      document.getElementById('tableTitle').textContent = tile('table-channel').title || 'Segment Rollup';
                       document.getElementById('table').innerHTML = `
                         <table>
-                          <thead><tr><th>Channel</th><th>Avg Revenue</th><th>Total Revenue</th><th>Rows</th></tr></thead>
-                          <tbody>${normalized.map(row => `
-                            <tr>
-                              <td>${row.channel}</td>
-                              <td>${row.avg === undefined ? '-' : money(row.avg)}</td>
-                              <td>${row.total === undefined ? '-' : money(row.total)}</td>
-                              <td>${row.rows}</td>
-                            </tr>
+                          <thead><tr>${columns.map(column => `<th>${title(column)}</th>`).join('')}</tr></thead>
+                          <tbody>${rows.map(row => `
+                            <tr>${columns.map(column => `<td>${typeof row[column] === 'number' ? fmt(row[column]) : row[column] ?? '-'}</td>`).join('')}</tr>
                           `).join('')}</tbody>
                         </table>
                       `;
@@ -731,18 +747,12 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                         document.getElementById('drilldown').innerHTML = '<div class="empty">No drilldown selected</div>';
                         return;
                       }
+                      const columns = Object.keys(rows[0]);
                       document.getElementById('drilldown').innerHTML = `
                         <table>
-                          <thead><tr><th>Week</th><th>Channel</th><th>Visitors</th><th>Orders</th><th>Revenue</th><th>Conversion</th></tr></thead>
+                          <thead><tr>${columns.slice(0, 8).map(column => `<th>${title(column)}</th>`).join('')}</tr></thead>
                           <tbody>${rows.map(row => `
-                            <tr>
-                              <td>${row.week}</td>
-                              <td>${row.channel}</td>
-                              <td>${fmt(row.visitors)}</td>
-                              <td>${fmt(row.orders)}</td>
-                              <td>${money(row.revenue)}</td>
-                              <td>${percent(row.conversion_rate)}</td>
-                            </tr>
+                            <tr>${columns.slice(0, 8).map(column => `<td>${typeof row[column] === 'number' ? fmt(row[column]) : row[column] ?? '-'}</td>`).join('')}</tr>
                           `).join('')}</tbody>
                         </table>
                       `;
@@ -771,17 +781,21 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                       const filters = state.dashboard?.lastFilterResult?.filters || state.filterResult?.result?.filters;
                       if (!filters) {
                         document.getElementById('selection').textContent = state.dashboard?.tiles?.length
-                          ? 'All channels'
+                          ? 'All rows'
                           : 'No dataset loaded';
                         return;
                       }
-                      const list = Array.isArray(filters.channel) ? filters.channel.join(', ') : 'all channels';
-                      const week = filters.week || {};
-                      document.getElementById('selection').textContent = `${list}, weeks ${week.from ?? 1}-${week.to ?? 16}`;
+                      document.getElementById('selection').textContent = Object.entries(filters)
+                        .map(([field, value]) => `${title(field)}: ${Array.isArray(value) ? value.join(', ') : JSON.stringify(value)}`)
+                        .join(' · ');
                     }
 
                     function render() {
                       if (!state.dashboard) return;
+                      const role = roles();
+                      const question = document.getElementById('question');
+                      const defaultQuestion = `What features are important for ${role.primaryMetric || 'the primary metric'}?`;
+                      if (!question.value) question.value = defaultQuestion;
                       status.textContent = `Revision ${state.dashboard.revision || 1}`;
                       output.textContent = JSON.stringify({dashboard: state.dashboard, filter: state.filterResult}, null, 2);
                       renderMetrics();
@@ -800,17 +814,34 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                       document.getElementById('tabJson').setAttribute('aria-selected', String(!overview));
                     }
 
+                    function currentFilters() {
+                      const filters = {};
+                      document.querySelectorAll('#filters [data-filter]').forEach(group => {
+                        const field = group.getAttribute('data-filter');
+                        const type = group.getAttribute('data-type');
+                        if (type === 'range') {
+                          filters[field] = {
+                            from: Number(group.querySelector('[data-bound="from"]').value),
+                            to: Number(group.querySelector('[data-bound="to"]').value)
+                          };
+                        } else {
+                          filters[field] = [...group.querySelectorAll('input:checked')].map(input => input.value);
+                        }
+                      });
+                      return filters;
+                    }
+
                     async function applyAndRender() {
-                      const selected = [...document.querySelectorAll('#channels input:checked')].map(input => input.value);
-                      const from = Number(document.getElementById('from').value);
-                      const to = Number(document.getElementById('to').value);
+                      const filters = currentFilters();
+                      const segment = roles().segment;
+                      const drilldownValue = segment && Array.isArray(filters[segment]) ? filters[segment][0] || '' : '';
                       const response = await fetch('/api/filter', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
-                          filters: {channel: selected, week: {from, to}},
+                          filters,
                           drilldownTileId: 'chart-revenue-channel',
-                          drilldownValue: selected[0] || ''
+                          drilldownValue
                         })
                       });
                       state.filterResult = await response.json();
@@ -993,20 +1024,21 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             if (analytics == null) {
                 return toJson(Map.of("filters", List.of()));
             }
+            AnalyticsDatabase.DatasetRoles roles = analytics.roles();
             return toJson(Map.of(
                     "filters", List.of(
                             Map.of(
-                                    "id", "channel",
-                                    "label", "Channel",
+                                    "id", roles.segment(),
+                                    "label", title(roles.segment()),
                                     "type", "multi_select",
-                                    "field", "channel",
-                                    "values", valuesFrom(analytics.distinctValuesJson("channel", 50))),
+                                    "field", roles.segment(),
+                                    "values", valuesFrom(analytics.distinctValuesJson(roles.segment(), 50))),
                             Map.of(
-                                    "id", "week",
-                                    "label", "Week Range",
+                                    "id", roles.time(),
+                                    "label", title(roles.time()) + " Range",
                                     "type", "range",
-                                    "field", "week",
-                                    "range", parseJson(analytics.numericRangeJson("week"))))));
+                                    "field", roles.time(),
+                                    "range", parseJson(analytics.numericRangeJson(roles.time()))))));
         }
 
         synchronized String connectorsJson() {
@@ -1052,6 +1084,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
 
         synchronized String analysis(String analysis, Map<String, Object> request) {
             AnalyticsDatabase analytics = requireAnalytics();
+            AnalyticsDatabase.DatasetRoles roles = analytics.roles();
             String normalized = analysis.toLowerCase(Locale.ROOT);
             String title;
             String description;
@@ -1065,30 +1098,30 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                     result = analytics.profileJson();
                 }
                 case "correlations" -> {
-                    String target = option(request, "target", "revenue");
+                    String target = option(request, "target", roles.primaryMetric());
                     title = "Correlation Explorer";
                     description = "Pearson correlations between numeric columns and " + target + ".";
                     visualization = "ranked_bar";
                     result = analytics.correlationsJson(target);
                 }
                 case "features" -> {
-                    String target = option(request, "target", "revenue");
+                    String target = option(request, "target", roles.primaryMetric());
                     title = "Feature Drivers";
                     description = "Numeric correlations and categorical lift ranked for " + target + ".";
                     visualization = "ranked_bar";
                     result = analytics.interestingFeaturesJson(target);
                 }
                 case "segments" -> {
-                    String segment = option(request, "segment", "channel");
-                    String target = option(request, "target", "revenue");
+                    String segment = option(request, "segment", roles.segment());
+                    String target = option(request, "target", roles.primaryMetric());
                     title = "Segment Comparison";
                     description = "Group-level count, mean, min, and max for " + target + " by " + segment + ".";
                     visualization = "segment_bar";
                     result = analytics.distributionCompareJson(segment, target);
                 }
                 case "regression" -> {
-                    String target = option(request, "target", "revenue");
-                    List<String> features = options(request, "features", List.of("visitors", "orders", "ad_spend"))
+                    String target = option(request, "target", roles.primaryMetric());
+                    List<String> features = options(request, "features", roles.regressionFeatures())
                             .stream()
                             .filter(feature -> !feature.equals(target))
                             .toList();
@@ -1098,15 +1131,15 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                     result = analytics.regressionJson(target, features);
                 }
                 case "anomalies" -> {
-                    String target = option(request, "target", "revenue");
+                    String target = option(request, "target", roles.primaryMetric());
                     title = "Anomaly Detection";
                     description = "Z-score based scan for unusual values in " + target + ".";
                     visualization = "outlier_table";
                     result = analytics.anomalyJson(target);
                 }
                 case "forecast" -> {
-                    String timeColumn = option(request, "timeColumn", "week");
-                    String target = option(request, "target", "revenue");
+                    String timeColumn = option(request, "timeColumn", roles.time());
+                    String target = option(request, "target", roles.primaryMetric());
                     int periods = intOption(request, "periods", 4);
                     title = "Forecast Baseline";
                     description = "Linear trend forecast for " + target + " over the next " + periods + " periods.";
@@ -1114,8 +1147,8 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                     result = analytics.forecastJson(timeColumn, target, periods);
                 }
                 case "causal-check" -> {
-                    String treatment = option(request, "treatment", "discount_rate");
-                    String outcome = option(request, "outcome", "revenue");
+                    String treatment = option(request, "treatment", roles.treatment());
+                    String outcome = option(request, "outcome", roles.primaryMetric());
                     title = "Causal Sanity Check";
                     description = "Observational association check with explicit causal limitations.";
                     visualization = "caveat_card";
@@ -1268,6 +1301,7 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                         "answer", "Upload or connect a dataset before asking analytics questions.",
                         "error", "No dataset loaded"));
             }
+            AnalyticsDatabase.DatasetRoles roles = analytics.roles();
             String question = request.question().strip();
             String lower = question.toLowerCase(Locale.ROOT);
             try {
@@ -1283,44 +1317,52 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                     result = analytics.dataQualityJson();
                     answer = "I scanned missingness, cardinality, and duplicate row groups.";
                 } else if (lower.contains("correlation") || lower.contains("correlate")) {
-                    String target = targetColumn(lower);
+                    String target = targetColumn(lower, roles, analytics);
                     tool = "correlation_analysis";
                     result = analytics.correlationsJson(target);
                     answer = "I computed numeric correlations against " + target + ".";
                 } else if (lower.contains("feature") || lower.contains("driver") || lower.contains("important")) {
-                    String target = targetColumn(lower);
+                    String target = targetColumn(lower, roles, analytics);
                     tool = "interesting_features";
                     result = analytics.interestingFeaturesJson(target);
                     answer = "I ranked numeric and categorical features for " + target + ".";
                 } else if (lower.contains("cause") || lower.contains("causal")) {
                     tool = "causal_sanity_check";
-                    result = analytics.causalCheckJson("discount_rate", "revenue");
-                    answer = "I checked the observational causal caveat for discount_rate and revenue.";
+                    result = analytics.causalCheckJson(roles.treatment(), roles.primaryMetric());
+                    answer = "I checked the observational causal caveat for " + roles.treatment() + " and "
+                            + roles.primaryMetric() + ".";
                 } else if (lower.contains("forecast")) {
                     tool = "forecast_timeseries";
-                    result = analytics.forecastJson("week", targetColumn(lower), 4);
+                    result = analytics.forecastJson(roles.time(), targetColumn(lower, roles, analytics), 4);
                     answer = "I generated a simple trend forecast.";
                 } else if (lower.contains("anomaly") || lower.contains("outlier")) {
                     tool = lower.contains("outlier") ? "outlier_scan" : "anomaly_detection";
                     result = lower.contains("outlier")
-                            ? analytics.outliersJson(targetColumn(lower))
-                            : analytics.anomalyJson(targetColumn(lower));
-                    answer = "I scanned " + targetColumn(lower) + " for unusual values.";
+                            ? analytics.outliersJson(targetColumn(lower, roles, analytics))
+                            : analytics.anomalyJson(targetColumn(lower, roles, analytics));
+                    answer = "I scanned " + targetColumn(lower, roles, analytics) + " for unusual values.";
                 } else if (lower.contains("regression") || lower.contains("model")) {
                     tool = "regression_fit";
-                    result = analytics.regressionJson("revenue", List.of("visitors", "orders", "ad_spend"));
+                    result = analytics.regressionJson(roles.primaryMetric(), roles.regressionFeatures());
                     answer = "I ran the regression feature screen with diagnostics and model card.";
-                } else if (lower.contains("channel") || lower.contains("segment") || lower.contains("average")) {
+                } else if (lower.contains("channel") || lower.contains("segment") || lower.contains("average")
+                        || lower.contains("club") || lower.contains("group")) {
                     tool = "sql_query";
-                    result = analytics.sqlJson("select channel, round(avg(revenue), 2) as avg_revenue, "
-                            + "round(avg(conversion_rate), 3) as avg_conversion_rate, count(*) as rows "
-                            + "from data group by channel order by avg_revenue desc");
-                    answer = "I grouped revenue and conversion by channel.";
+                    String segmentSql = analytics.columnSql(roles.segment());
+                    String primarySql = analytics.columnSql(roles.primaryMetric());
+                    String secondarySql = analytics.columnSql(roles.secondaryMetric());
+                    result = analytics.sqlJson("select " + segmentSql + " as \"" + roles.segment()
+                            + "\", round(avg(" + primarySql + "), 2) as \"avg_" + roles.primaryMetric()
+                            + "\", round(avg(" + secondarySql + "), 3) as \"avg_" + roles.secondaryMetric()
+                            + "\", count(*) as rows from data group by " + segmentSql
+                            + " order by \"avg_" + roles.primaryMetric() + "\" desc");
+                    answer = "I grouped " + roles.primaryMetric() + " and " + roles.secondaryMetric() + " by "
+                            + roles.segment() + ".";
                 } else {
                     tool = "dataset_profile";
                     result = analytics.profileJson();
                     answer = "I profiled the active dataset. Ask about correlations, features, causality, "
-                            + "anomalies, forecast, regression, or channel performance for a deeper pass.";
+                            + "anomalies, forecast, regression, or " + roles.segment() + " performance for a deeper pass.";
                 }
                 String model = "local_tool_router";
                 Optional<String> ollamaAnswer = ollamaAnswer(question, answer, tool, result);
@@ -1383,20 +1425,19 @@ final class AnalyticsDashboardServer implements AutoCloseable {
             return safe.isBlank() ? "uploaded.csv" : safe;
         }
 
-        private static String targetColumn(String lower) {
-            if (lower.contains("conversion")) {
-                return "conversion_rate";
+        private static String targetColumn(
+                String lower,
+                AnalyticsDatabase.DatasetRoles roles,
+                AnalyticsDatabase analytics) {
+            for (String column : analytics.numericColumnNames()) {
+                if (lower.contains(column.toLowerCase(Locale.ROOT))) {
+                    return column;
+                }
             }
-            if (lower.contains("order")) {
-                return "orders";
+            if (lower.contains("conversion") || lower.contains("visit rate")) {
+                return roles.secondaryMetric();
             }
-            if (lower.contains("visitor") || lower.contains("traffic")) {
-                return "visitors";
-            }
-            if (lower.contains("spend")) {
-                return "ad_spend";
-            }
-            return "revenue";
+            return roles.primaryMetric();
         }
 
         private static String option(Map<String, Object> request, String name, String fallback) {
@@ -1635,6 +1676,21 @@ final class AnalyticsDashboardServer implements AutoCloseable {
                 stripped = stripped.substring(0, stripped.length() - 1);
             }
             return stripped;
+        }
+
+        private static String title(String column) {
+            String spaced = column.replace('_', ' ').replace('-', ' ');
+            StringBuilder title = new StringBuilder();
+            boolean nextUpper = true;
+            for (int i = 0; i < spaced.length(); i++) {
+                char c = spaced.charAt(i);
+                if (Character.isUpperCase(c) && i > 0 && Character.isLowerCase(spaced.charAt(i - 1))) {
+                    title.append(' ');
+                }
+                title.append(nextUpper ? Character.toUpperCase(c) : c);
+                nextUpper = Character.isWhitespace(c);
+            }
+            return title.toString();
         }
     }
 

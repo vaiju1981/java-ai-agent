@@ -184,15 +184,21 @@ export function AnalysisWorkspaceScreen({ snapshot }: AnalysisWorkspaceScreenPro
   const columns = schema?.columns ?? [];
   const numericColumns = columns.filter((column) => column.type === "numeric").map((column) => column.name);
   const categoricalColumns = columns.filter((column) => column.type !== "numeric").map((column) => column.name);
-  const target = config.target ?? preferredColumn(numericColumns, "revenue");
-  const segment = config.segment ?? preferredColumn(categoricalColumns, "channel");
-  const treatment = config.treatment ?? preferredColumn(numericColumns, "discount_rate");
+  const target = config.target ?? preferredColumn(numericColumns, schema?.roles?.primaryMetric ?? "");
+  const segment = config.segment ?? preferredColumn(categoricalColumns, schema?.roles?.segment ?? "");
+  const treatment = config.treatment ?? preferredColumn(
+    [...numericColumns, ...categoricalColumns],
+    schema?.roles?.treatment ?? ""
+  );
   const outcome = config.outcome ?? target;
-  const timeColumn = config.timeColumn ?? preferredColumn(numericColumns, "week");
+  const timeColumn = config.timeColumn ?? preferredColumn(numericColumns, schema?.roles?.time ?? "");
   const periods = config.periods ?? 4;
   const regressionFeatures = useMemo(
-    () => numericColumns.filter((column) => column !== target).slice(0, 3),
-    [numericColumns, target]
+    () =>
+      schema?.roles?.regressionFeatures?.length
+        ? schema.roles.regressionFeatures.filter((column) => numericColumns.includes(column) && column !== target)
+        : numericColumns.filter((column) => column !== target).slice(0, 3),
+    [numericColumns, schema?.roles?.regressionFeatures, target]
   );
   const table = rowsFromResult(response?.result);
   const metrics = summaryRows(response?.result);

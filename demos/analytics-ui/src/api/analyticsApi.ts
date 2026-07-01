@@ -37,6 +37,15 @@ export type DashboardModel = {
   lastFilterResult?: Record<string, unknown>;
 };
 
+export type DatasetRoles = {
+  primaryMetric: string;
+  secondaryMetric: string;
+  segment: string;
+  time: string;
+  treatment: string;
+  regressionFeatures: string[];
+};
+
 export type FilterOptions = {
   filters: Array<{
     id: string;
@@ -66,6 +75,7 @@ export type SchemaColumn = {
 export type SchemaSummary = {
   table: string;
   rows: number;
+  roles?: DatasetRoles;
   columns: SchemaColumn[];
 };
 

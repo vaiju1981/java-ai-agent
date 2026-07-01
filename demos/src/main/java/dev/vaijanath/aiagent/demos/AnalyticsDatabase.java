@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 final class AnalyticsDatabase implements AutoCloseable {
 
@@ -60,12 +61,83 @@ final class AnalyticsDatabase implements AutoCloseable {
         return json(Map.of(
                 "table", TABLE,
                 "rows", rowCount(),
+                "roles", roles().asMap(),
                 "columns", columns.stream()
                         .map(column -> Map.of(
                                 "name", column.name(),
                                 "sqlName", column.sql().replace("\"", ""),
                                 "type", column.numeric() ? "numeric" : "categorical"))
                         .toList()));
+    }
+
+    DatasetRoles roles() {
+        Column primaryMetric = preferredNumeric(List.of(
+                        "revenue",
+                        "theowin",
+                        "netwin",
+                        "profit",
+                        "grosswin",
+                        "worth",
+                        "coinin",
+                        "orders",
+                        "sales",
+                        "amount"))
+                .orElse(firstNumeric().orElseThrow(() -> new IllegalStateException("dataset has no numeric columns")));
+        Column secondaryMetric = preferredNumeric(List.of(
+                        "conversionrate",
+                        "gamingvisitcount",
+                        "visitcount",
+                        "nettheowin",
+                        "grosswin",
+                        "pointsused",
+                        "freeplayused"))
+                .filter(column -> !column.name().equals(primaryMetric.name()))
+                .orElseGet(() -> firstNumericExcept(primaryMetric).orElse(primaryMetric));
+        Column segment = preferredCategorical(List.of(
+                        "channel",
+                        "clublevel",
+                        "segment",
+                        "agegroup",
+                        "geotype",
+                        "region",
+                        "state",
+                        "city",
+                        "productline",
+                        "campaign",
+                        "casino"))
+                .orElseGet(() -> firstLowCardinalityCategorical().orElseGet(() -> columns.stream()
+                        .filter(column -> !column.numeric())
+                        .findFirst()
+                        .orElse(primaryMetric)));
+        Column time = preferredNumeric(List.of("week", "ticks", "day", "date", "starttime", "period"))
+                .orElseGet(() -> firstNumericExcept(primaryMetric).orElse(primaryMetric));
+        Column treatment = preferredNumeric(List.of(
+                        "discountrate",
+                        "freeplayused",
+                        "pointsused",
+                        "compsused",
+                        "expenses",
+                        "adspend",
+                        "noncashableused",
+                        "promocoinin"))
+                .filter(column -> !column.name().equals(primaryMetric.name()))
+                .orElseGet(() -> firstNumericExcept(primaryMetric).orElse(primaryMetric));
+        List<String> regressionFeatures = columns.stream()
+                .filter(Column::numeric)
+                .filter(column -> !column.name().equals(primaryMetric.name()))
+                .filter(column -> !isIdentifierLike(column))
+                .limit(4)
+                .map(Column::name)
+                .toList();
+        return new DatasetRoles(
+                primaryMetric.name(),
+                secondaryMetric.name(),
+                segment.name(),
+                time.name(),
+                treatment.name(),
+                regressionFeatures.isEmpty()
+                        ? firstNumericExcept(primaryMetric).map(column -> List.of(column.name())).orElse(List.of())
+                        : regressionFeatures);
     }
 
     String profileJson() {
@@ -162,6 +234,9 @@ final class AnalyticsDatabase implements AutoCloseable {
             if (column.name().equals(targetColumn.name())) {
                 continue;
             }
+            if (isIdentifierLike(column)) {
+                continue;
+            }
             if (column.numeric()) {
                 double r = pearson(column, targetColumn);
                 features.add(Map.of(
@@ -170,6 +245,9 @@ final class AnalyticsDatabase implements AutoCloseable {
                         "score", round(Math.abs(r)),
                         "detail", "Pearson r=" + round(r)));
             } else {
+                if (!isUsefulDimension(column)) {
+                    continue;
+                }
                 GroupLift lift = categoricalLift(column, targetColumn);
                 features.add(Map.of(
                         "feature", column.name(),
@@ -319,10 +397,11 @@ final class AnalyticsDatabase implements AutoCloseable {
     }
 
     Path dashboardHtml(Path output) {
-        String channelRevenue = groupByJson("channel", "revenue", "avg");
-        String conversionFeatures = interestingFeaturesJson("conversion_rate");
-        String causal = causalCheckJson("discount_rate", "revenue");
-        String chart = chartSpecJson("bar", "channel", "revenue");
+        DatasetRoles roles = roles();
+        String segmentMetric = groupByJson(roles.segment(), roles.primaryMetric(), "avg");
+        String featureScan = interestingFeaturesJson(roles.secondaryMetric());
+        String causal = causalCheckJson(roles.treatment(), roles.primaryMetric());
+        String chart = chartSpecJson("bar", roles.segment(), roles.primaryMetric());
         String html = """
                 <!doctype html>
                 <html lang="en">
@@ -342,15 +421,22 @@ final class AnalyticsDatabase implements AutoCloseable {
                   <p>Generated from the uploaded CSV through SQLite-backed analytics tools.</p>
                   <div class="grid">
                     <section class="tile"><h2>Dataset Profile</h2><pre>%s</pre></section>
-                    <section class="tile"><h2>Revenue By Channel</h2><pre>%s</pre></section>
-                    <section class="tile"><h2>Conversion Feature Scan</h2><pre>%s</pre></section>
+                    <section class="tile"><h2>%s By %s</h2><pre>%s</pre></section>
+                    <section class="tile"><h2>%s Feature Scan</h2><pre>%s</pre></section>
                     <section class="tile"><h2>Causal Caveat</h2><pre>%s</pre></section>
                   </div>
                   <section class="tile"><h2>Chart Spec</h2><pre>%s</pre></section>
                 </body>
                 </html>
-                """.formatted(escapeHtml(profileJson()), escapeHtml(channelRevenue), escapeHtml(conversionFeatures),
-                escapeHtml(causal), escapeHtml(chart));
+                """.formatted(
+                escapeHtml(profileJson()),
+                escapeHtml(title(roles.primaryMetric())),
+                escapeHtml(title(roles.segment())),
+                escapeHtml(segmentMetric),
+                escapeHtml(title(roles.secondaryMetric())),
+                escapeHtml(featureScan),
+                escapeHtml(causal),
+                escapeHtml(chart));
         try {
             Files.writeString(output, html, StandardCharsets.UTF_8);
             return output;
@@ -419,6 +505,22 @@ final class AnalyticsDatabase implements AutoCloseable {
                 "max", number("select max(" + column.sql() + ") from " + TABLE)));
     }
 
+    String columnSql(String columnName) {
+        return requireColumn(columnName).sql();
+    }
+
+    boolean isNumericColumn(String columnName) {
+        return requireColumn(columnName).numeric();
+    }
+
+    List<String> numericColumnNames() {
+        return columns.stream().filter(Column::numeric).map(Column::name).toList();
+    }
+
+    List<String> columnNames() {
+        return columns.stream().map(Column::name).toList();
+    }
+
     @Override
     public void close() {
         try {
@@ -429,6 +531,24 @@ final class AnalyticsDatabase implements AutoCloseable {
     }
 
     private record Column(String name, String sql, boolean numeric) {}
+
+    record DatasetRoles(
+            String primaryMetric,
+            String secondaryMetric,
+            String segment,
+            String time,
+            String treatment,
+            List<String> regressionFeatures) {
+        Map<String, Object> asMap() {
+            return Map.of(
+                    "primaryMetric", primaryMetric,
+                    "secondaryMetric", secondaryMetric,
+                    "segment", segment,
+                    "time", time,
+                    "treatment", treatment,
+                    "regressionFeatures", regressionFeatures);
+        }
+    }
 
     private record GroupLift(String bestGroup, double bestMean, String worstGroup, double worstMean) {
         double delta() {
@@ -500,6 +620,121 @@ final class AnalyticsDatabase implements AutoCloseable {
         return column;
     }
 
+    private Optional<Column> preferredNumeric(List<String> preferredNames) {
+        return preferred(preferredNames, true);
+    }
+
+    private Optional<Column> preferredCategorical(List<String> preferredNames) {
+        for (String preferred : preferredNames) {
+            Optional<Column> exact = columns.stream()
+                    .filter(column -> !column.numeric())
+                    .filter(column -> normalized(column.name()).equals(preferred))
+                    .findFirst();
+            if (exact.isPresent() && isUsefulDimension(exact.get())) {
+                return exact;
+            }
+        }
+        for (String preferred : preferredNames) {
+            Optional<Column> partial = columns.stream()
+                    .filter(column -> !column.numeric())
+                    .filter(column -> normalized(column.name()).contains(preferred))
+                    .findFirst();
+            if (partial.isPresent() && isUsefulDimension(partial.get())) {
+                return partial;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Column> preferred(List<String> preferredNames, boolean numeric) {
+        for (String preferred : preferredNames) {
+            Optional<Column> exact = columns.stream()
+                    .filter(column -> column.numeric() == numeric)
+                    .filter(column -> normalized(column.name()).equals(preferred))
+                    .findFirst();
+            if (exact.isPresent()) {
+                return exact;
+            }
+        }
+        for (String preferred : preferredNames) {
+            Optional<Column> partial = columns.stream()
+                    .filter(column -> column.numeric() == numeric)
+                    .filter(column -> normalized(column.name()).contains(preferred))
+                    .filter(column -> !isIdentifierLike(column))
+                    .findFirst();
+            if (partial.isPresent()) {
+                return partial;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Column> firstNumeric() {
+        return columns.stream().filter(Column::numeric).filter(column -> !isIdentifierLike(column)).findFirst()
+                .or(() -> columns.stream().filter(Column::numeric).findFirst());
+    }
+
+    private Optional<Column> firstNumericExcept(Column excluded) {
+        return columns.stream()
+                .filter(Column::numeric)
+                .filter(column -> !column.name().equals(excluded.name()))
+                .filter(column -> !isIdentifierLike(column))
+                .findFirst()
+                .or(() -> columns.stream()
+                        .filter(Column::numeric)
+                        .filter(column -> !column.name().equals(excluded.name()))
+                        .findFirst());
+    }
+
+    private Optional<Column> firstLowCardinalityCategorical() {
+        return columns.stream()
+                .filter(column -> !column.numeric())
+                .filter(this::isUsefulDimension)
+                .findFirst();
+    }
+
+    private boolean isUsefulDimension(Column column) {
+        if (isIdentifierLike(column)) {
+            return false;
+        }
+        long distinct = scalar("select count(distinct " + column.sql() + ") from " + TABLE);
+        long rows = rowCount();
+        return distinct >= 2 && distinct <= Math.min(100, Math.max(2, rows / 2));
+    }
+
+    private static boolean isIdentifierLike(Column column) {
+        String normalized = normalized(column.name());
+        return normalized.equals("id")
+                || normalized.endsWith("id")
+                || normalized.contains("uuid")
+                || normalized.contains("visitid")
+                || normalized.contains("playerid")
+                || normalized.contains("zipcode")
+                || normalized.contains("birthdate")
+                || normalized.contains("starttime")
+                || normalized.contains("firstname")
+                || normalized.contains("lastname");
+    }
+
+    private static String normalized(String value) {
+        return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+
+    private static String title(String column) {
+        String spaced = column.replace('_', ' ').replace('-', ' ');
+        StringBuilder title = new StringBuilder();
+        boolean nextUpper = true;
+        for (int i = 0; i < spaced.length(); i++) {
+            char c = spaced.charAt(i);
+            if (Character.isUpperCase(c) && i > 0 && Character.isLowerCase(spaced.charAt(i - 1))) {
+                title.append(' ');
+            }
+            title.append(nextUpper ? Character.toUpperCase(c) : c);
+            nextUpper = Character.isWhitespace(c);
+        }
+        return title.toString();
+    }
+
     private double pearson(Column x, Column y) {
         try (Statement st = connection.createStatement();
                 ResultSet rs = st.executeQuery("select " + x.sql() + ", " + y.sql() + " from " + TABLE
@@ -532,9 +767,10 @@ final class AnalyticsDatabase implements AutoCloseable {
     }
 
     private GroupLift categoricalLift(Column group, Column target) {
+        long minimumGroupSize = Math.max(2, Math.min(20, rowCount() / 100));
         return lift("select " + group.sql() + ", avg(" + target.sql() + ") from " + TABLE
                 + " where " + group.sql() + " is not null and " + target.sql() + " is not null"
-                + " group by " + group.sql());
+                + " group by " + group.sql() + " having count(*) >= " + minimumGroupSize);
     }
 
     private GroupLift numericTreatmentLift(Column treatment, Column target) {
@@ -562,6 +798,9 @@ final class AnalyticsDatabase implements AutoCloseable {
                     worst = group;
                     worstMean = mean;
                 }
+            }
+            if (best.isBlank()) {
+                return new GroupLift("", 0, "", 0);
             }
             return new GroupLift(best, bestMean, worst, worstMean);
         } catch (SQLException e) {

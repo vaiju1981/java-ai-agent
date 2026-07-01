@@ -61,7 +61,16 @@ final class AnalyticsDashboard {
             String drilldownTileId,
             String drilldownValue) {
         Map<String, Object> spec = readSpec(specOutput);
-        String where = filterWhere(filters);
+        AnalyticsDatabase.DatasetRoles roles = analytics.roles();
+        String primary = roles.primaryMetric();
+        String secondary = roles.secondaryMetric();
+        String segment = roles.segment();
+        String time = roles.time();
+        String primarySql = analytics.columnSql(primary);
+        String secondarySql = analytics.columnSql(secondary);
+        String segmentSql = analytics.columnSql(segment);
+        String timeSql = analytics.columnSql(time);
+        String where = filterWhere(analytics, filters);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("appliedAt", Instant.now().toString());
         result.put("filters", filters == null ? Map.of() : filters);
@@ -72,30 +81,34 @@ final class AnalyticsDashboard {
                         "data", parse(analytics.sqlJson("select count(*) as rows from data" + where))),
                 Map.of(
                         "tileId", "kpi-revenue",
-                        "data", parse(analytics.sqlJson(
-                                "select round(sum(revenue), 2) as total_revenue from data" + where))),
+                        "data", parse(analytics.sqlJson("select round(sum(" + primarySql + "), 2) as "
+                                + quoteAlias("total_" + primary) + " from data" + where))),
                 Map.of(
                         "tileId", "kpi-conversion",
-                        "data", parse(analytics.sqlJson(
-                                "select round(avg(conversion_rate), 3) as avg_conversion_rate from data" + where))),
+                        "data", parse(analytics.sqlJson("select round(avg(" + secondarySql + "), 3) as "
+                                + quoteAlias("avg_" + secondary) + " from data" + where))),
                 Map.of(
                         "tileId", "chart-revenue-channel",
-                        "data", parse(analytics.sqlJson("select channel, round(avg(revenue), 2) as avg_revenue, "
-                                + "round(avg(conversion_rate), 3) as avg_conversion_rate, count(*) as rows "
-                                + "from data" + where + " group by channel order by avg_revenue desc"))),
+                        "data", parse(analytics.sqlJson("select " + segmentSql + " as " + quoteAlias(segment)
+                                + ", round(avg(" + primarySql + "), 2) as " + quoteAlias("avg_" + primary)
+                                + ", round(avg(" + secondarySql + "), 3) as " + quoteAlias("avg_" + secondary)
+                                + ", count(*) as rows from data" + where + " group by " + segmentSql
+                                + " order by " + quoteAlias("avg_" + primary) + " desc"))),
                 Map.of(
                         "tileId", "table-channel",
-                        "data", parse(analytics.sqlJson("select channel, round(avg(revenue), 2) as avg_revenue, "
-                                + "round(sum(revenue), 2) as total_revenue, count(*) as rows "
-                                + "from data" + where + " group by channel order by total_revenue desc")))));
+                        "data", parse(analytics.sqlJson("select " + segmentSql + " as " + quoteAlias(segment)
+                                + ", round(avg(" + primarySql + "), 2) as " + quoteAlias("avg_" + primary)
+                                + ", round(sum(" + primarySql + "), 2) as " + quoteAlias("total_" + primary)
+                                + ", count(*) as rows from data" + where + " group by " + segmentSql
+                                + " order by " + quoteAlias("total_" + primary) + " desc")))));
         if (drilldownTileId != null && !drilldownTileId.isBlank()
                 && drilldownValue != null && !drilldownValue.isBlank()) {
             result.put("drilldown", Map.of(
                     "tileId", drilldownTileId,
                     "value", drilldownValue,
-                    "data", parse(analytics.sqlJson("select week, channel, visitors, orders, revenue, "
-                            + "conversion_rate from data" + appendCondition(where, "channel = '"
-                            + escapeSql(drilldownValue) + "'") + " order by week"))));
+                    "data", parse(analytics.sqlJson("select * from data"
+                            + appendCondition(where, segmentSql + " = '" + escapeSql(drilldownValue) + "'")
+                            + " order by " + timeSql + " limit 25"))));
         }
         spec.put("lastFilterResult", result);
         spec.put("updatedAt", Instant.now().toString());
@@ -105,37 +118,45 @@ final class AnalyticsDashboard {
     }
 
     private static Map<String, Object> buildSpec(AnalyticsDatabase analytics, AnalyticsFrame frame) {
-        JsonNode totals = firstRow(analytics.sqlJson(
-                "select count(*) as rows, round(sum(revenue), 2) as total_revenue, "
-                        + "round(avg(conversion_rate), 3) as avg_conversion_rate, "
-                        + "round(avg(ad_spend), 2) as avg_ad_spend from data"));
-        JsonNode topChannel = firstRow(analytics.sqlJson(
-                "select channel, round(avg(revenue), 2) as avg_revenue from data "
-                        + "group by channel order by avg_revenue desc limit 1"));
-        Object channel = topChannel.path("channel").asText("unknown");
-        Object topRevenue = topChannel.path("avg_revenue").isNumber()
-                ? topChannel.path("avg_revenue").numberValue()
-                : topChannel.path("avg_revenue").asText();
+        AnalyticsDatabase.DatasetRoles roles = analytics.roles();
+        String primary = roles.primaryMetric();
+        String secondary = roles.secondaryMetric();
+        String segment = roles.segment();
+        String time = roles.time();
+        String primarySql = analytics.columnSql(primary);
+        String secondarySql = analytics.columnSql(secondary);
+        String segmentSql = analytics.columnSql(segment);
+        JsonNode totals = firstRow(analytics.sqlJson("select count(*) as rows, round(sum(" + primarySql
+                + "), 2) as " + quoteAlias("total_" + primary) + ", round(avg(" + secondarySql + "), 3) as "
+                + quoteAlias("avg_" + secondary) + " from data"));
+        JsonNode topSegment = firstRow(analytics.sqlJson("select " + segmentSql + " as " + quoteAlias(segment)
+                + ", round(avg(" + primarySql + "), 2) as " + quoteAlias("avg_" + primary)
+                + " from data group by " + segmentSql + " order by " + quoteAlias("avg_" + primary)
+                + " desc limit 1"));
+        Object segmentValue = topSegment.path(segment).asText("unknown");
+        Object topPrimary = topSegment.path("avg_" + primary).isNumber()
+                ? topSegment.path("avg_" + primary).numberValue()
+                : topSegment.path("avg_" + primary).asText();
 
         Map<String, Object> dashboard = new LinkedHashMap<>();
         dashboard.put("version", 1);
         dashboard.put("title", "Analytics Insight Dashboard");
         dashboard.put("generatedAt", Instant.now().toString());
-        dashboard.put("source", Map.of("table", "data", "engine", "sqlite+tablesaw"));
+        dashboard.put("source", Map.of("table", "data", "engine", "sqlite+tablesaw", "roles", roles.asMap()));
         dashboard.put("filters", List.of(
                 Map.of(
-                        "id", "channel",
-                        "label", "Channel",
+                        "id", segment,
+                        "label", title(segment),
                         "type", "multi_select",
-                        "field", "channel",
+                        "field", segment,
                         "default", "all",
-                        "drilldownField", "channel"),
+                        "drilldownField", segment),
                 Map.of(
-                        "id", "week",
-                        "label", "Week",
+                        "id", time,
+                        "label", title(time),
                         "type", "range",
-                        "field", "week",
-                        "default", Map.of("from", 1, "to", 16))));
+                        "field", time,
+                        "default", parse(analytics.numericRangeJson(time)))));
         dashboard.put("layout", List.of(
                 Map.of("tileId", "kpi-rows", "x", 0, "y", 0, "w", 1, "h", 1),
                 Map.of("tileId", "kpi-revenue", "x", 1, "y", 0, "w", 1, "h", 1),
@@ -147,42 +168,43 @@ final class AnalyticsDashboard {
                 kpi("kpi-rows", "Rows", totals.path("rows").asLong(), "Imported records", "dataset_profile"),
                 kpi(
                         "kpi-revenue",
-                        "Total Revenue",
-                        totals.path("total_revenue").numberValue(),
-                        "Sum of revenue",
+                        "Total " + title(primary),
+                        totals.path("total_" + primary).numberValue(),
+                        "Sum of " + primary,
                         "sql_query"),
                 kpi(
                         "kpi-conversion",
-                        "Avg Conversion",
-                        totals.path("avg_conversion_rate").numberValue(),
-                        "Average conversion_rate",
+                        "Avg " + title(secondary),
+                        totals.path("avg_" + secondary).numberValue(),
+                        "Average " + secondary,
                         "sql_query"),
                 Map.of(
                         "id", "chart-revenue-channel",
                         "type", "chart",
-                        "title", "Revenue By Channel",
-                        "chart", parse(frame.chartSpecJson("bar", "channel", "revenue")),
+                        "title", title(primary) + " By " + title(segment),
+                        "chart", parse(frame.chartSpecJson("bar", segment, primary)),
                         "drilldown", Map.of(
                                 "type", "sql",
-                                "label", "Inspect channel rows",
+                                "label", "Inspect " + segment + " rows",
                                 "queryTemplate",
-                                        "select * from data where channel = :channel order by week")),
+                                        "select * from data where " + segment + " = :value order by " + time)),
                 Map.of(
                         "id", "table-channel",
                         "type", "table",
-                        "title", "Channel Rollup",
-                        "data", parse(frame.groupByJson("channel", "revenue", "avg")),
+                        "title", title(segment) + " Rollup",
+                        "data", parse(frame.groupByJson(segment, primary, "avg")),
                         "drilldown", Map.of(
                                 "type", "tool",
                                 "tool", "distribution_compare",
-                                "arguments", Map.of("segment", "channel", "target", "revenue"))),
+                                "arguments", Map.of("segment", segment, "target", primary))),
                 Map.of(
                         "id", "insight-causal",
                         "type", "insight",
                         "title", "Decision Caveat",
                         "body",
-                                "Top revenue channel is " + channel + " with average revenue " + topRevenue
-                                        + ". Discount-rate relationships remain observational; require an "
+                                "Top " + title(segment) + " is " + segmentValue + " with average " + primary + " "
+                                        + topPrimary + ". Relationships between " + roles.treatment() + " and "
+                                        + primary + " remain observational; require an "
                                         + "experiment or stronger causal design before acting as a causal lever.",
                         "evidence", List.of("causal_sanity_check", "semantic_query_plan", "sql_query"))));
         return dashboard;
@@ -263,33 +285,59 @@ final class AnalyticsDashboard {
     }
 
     @SuppressWarnings("unchecked")
-    private static String filterWhere(Map<String, Object> filters) {
+    private static String filterWhere(AnalyticsDatabase analytics, Map<String, Object> filters) {
         if (filters == null || filters.isEmpty()) {
             return "";
         }
         List<String> conditions = new ArrayList<>();
-        Object channels = filters.get("channel");
-        if (channels instanceof List<?> values && !values.isEmpty()) {
-            String in = values.stream()
-                    .map(value -> "'" + escapeSql(String.valueOf(value)) + "'")
-                    .reduce((a, b) -> a + ", " + b)
-                    .orElse("");
-            conditions.add("channel in (" + in + ")");
-        } else if (channels instanceof String channel && !channel.isBlank() && !"all".equalsIgnoreCase(channel)) {
-            conditions.add("channel = '" + escapeSql(channel) + "'");
-        }
-        Object week = filters.get("week");
-        if (week instanceof Map<?, ?> weekRange) {
-            Object from = weekRange.get("from");
-            Object to = weekRange.get("to");
-            if (from instanceof Number fromNumber) {
-                conditions.add("week >= " + fromNumber.intValue());
+        filters.forEach((field, value) -> {
+            if (!analytics.columnNames().contains(field)) {
+                return;
             }
-            if (to instanceof Number toNumber) {
-                conditions.add("week <= " + toNumber.intValue());
+            String column = analytics.columnSql(field);
+            if (value instanceof List<?> values && !values.isEmpty()) {
+                String in = values.stream()
+                        .map(String::valueOf)
+                        .filter(item -> !item.isBlank())
+                        .map(item -> "'" + escapeSql(item) + "'")
+                        .reduce((a, b) -> a + ", " + b)
+                        .orElse("");
+                if (!in.isBlank()) {
+                    conditions.add(column + " in (" + in + ")");
+                }
+            } else if (value instanceof String text && !text.isBlank() && !"all".equalsIgnoreCase(text)) {
+                conditions.add(column + " = '" + escapeSql(text) + "'");
+            } else if (value instanceof Map<?, ?> range && analytics.isNumericColumn(field)) {
+                Object from = range.get("from");
+                Object to = range.get("to");
+                if (from instanceof Number fromNumber) {
+                    conditions.add(column + " >= " + fromNumber.doubleValue());
+                }
+                if (to instanceof Number toNumber) {
+                    conditions.add(column + " <= " + toNumber.doubleValue());
+                }
             }
-        }
+        });
         return conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions);
+    }
+
+    private static String title(String column) {
+        String spaced = column.replace('_', ' ').replace('-', ' ');
+        StringBuilder title = new StringBuilder();
+        boolean nextUpper = true;
+        for (int i = 0; i < spaced.length(); i++) {
+            char c = spaced.charAt(i);
+            if (Character.isUpperCase(c) && i > 0 && Character.isLowerCase(spaced.charAt(i - 1))) {
+                title.append(' ');
+            }
+            title.append(nextUpper ? Character.toUpperCase(c) : c);
+            nextUpper = Character.isWhitespace(c);
+        }
+        return title.toString();
+    }
+
+    private static String quoteAlias(String alias) {
+        return "\"" + alias.replace("\"", "\"\"") + "\"";
     }
 
     private static String appendCondition(String where, String condition) {
