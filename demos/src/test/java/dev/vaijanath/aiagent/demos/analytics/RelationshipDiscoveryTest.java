@@ -7,7 +7,6 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -27,9 +26,12 @@ class RelationshipDiscoveryTest {
         csvs.put("visits", visits);
         csvs.put("sessions", sessions);
         try (CsvSource src = CsvSource.of(tempDir.resolve("r.duckdb"), csvs)) {
-            Map<String, Set<String>> idLike = Map.of(
-                    "visits", Set.of("player_id"), "sessions", Set.of("player_id"));
-            List<Relationship> rels = RelationshipDiscovery.discover(src, idLike);
+            Map<String, Map<String, ColumnRole>> roles = Map.of(
+                    "visits", Map.of("visit_id", ColumnRole.IDENTIFIER,
+                            "player_id", ColumnRole.IDENTIFIER, "coin_in", ColumnRole.MEASURE_ADDITIVE),
+                    "sessions", Map.of("session_id", ColumnRole.IDENTIFIER,
+                            "player_id", ColumnRole.IDENTIFIER, "net_win", ColumnRole.MEASURE_ADDITIVE));
+            List<Relationship> rels = RelationshipDiscovery.discover(src, roles);
             assertTrue(rels.stream().anyMatch(r ->
                     r.fromColumn().equals("player_id") && r.toColumn().equals("player_id")
                             && r.cardinality().equals("shared_key")),

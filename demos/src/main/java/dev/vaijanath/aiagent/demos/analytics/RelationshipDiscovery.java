@@ -3,7 +3,6 @@ package dev.vaijanath.aiagent.demos.analytics;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 final class RelationshipDiscovery {
 
@@ -11,7 +10,7 @@ final class RelationshipDiscovery {
 
     private RelationshipDiscovery() {}
 
-    static List<Relationship> discover(CsvSource src, Map<String, Set<String>> idLikeByTable) {
+    static List<Relationship> discover(CsvSource src, Map<String, Map<String, ColumnRole>> rolesByTable) {
         List<TableSchema> tables = src.tables();
         List<Relationship> out = new ArrayList<>();
         for (TableSchema left : tables) {
@@ -21,7 +20,7 @@ final class RelationshipDiscovery {
                 }
                 for (ColumnSchema lc : left.columns()) {
                     for (ColumnSchema rc : right.columns()) {
-                        if (!candidate(left, lc, right, rc, idLikeByTable)) {
+                        if (!candidate(left, lc, right, rc, rolesByTable)) {
                             continue;
                         }
                         Relationship r = evaluate(src, left, lc, right, rc);
@@ -36,16 +35,30 @@ final class RelationshipDiscovery {
     }
 
     private static boolean candidate(TableSchema lt, ColumnSchema lc, TableSchema rt, ColumnSchema rc,
-            Map<String, Set<String>> idLike) {
+            Map<String, Map<String, ColumnRole>> rolesByTable) {
+        ColumnRole lr = roleOf(rolesByTable, lt.name(), lc.name());
+        ColumnRole rr = roleOf(rolesByTable, rt.name(), rc.name());
+        // You join on keys/dimensions, never on measures: two fact tables sharing a metric name
+        // (coinIn, netWin) have overlapping value ranges, but that is not a relationship.
+        if (isMeasure(lr) || isMeasure(rr)) {
+            return false;
+        }
         if (ColumnProfiler.isNumeric(lc.physicalType()) != ColumnProfiler.isNumeric(rc.physicalType())) {
             return false; // never intersect a text column with a numeric one
         }
         String ln = lc.name();
         String rn = rc.name();
-        boolean bothId = idLike.getOrDefault(lt.name(), Set.of()).contains(ln)
-                && idLike.getOrDefault(rt.name(), Set.of()).contains(rn);
+        boolean bothId = lr == ColumnRole.IDENTIFIER && rr == ColumnRole.IDENTIFIER;
         return ln.equalsIgnoreCase(rn) || bothId
                 || ln.equalsIgnoreCase(rt.name() + "_id") || rn.equalsIgnoreCase(lt.name() + "_id");
+    }
+
+    private static boolean isMeasure(ColumnRole r) {
+        return r == ColumnRole.MEASURE_ADDITIVE || r == ColumnRole.MEASURE_RATIO;
+    }
+
+    private static ColumnRole roleOf(Map<String, Map<String, ColumnRole>> roles, String table, String col) {
+        return roles.getOrDefault(table, Map.of()).getOrDefault(col, ColumnRole.UNKNOWN);
     }
 
     private static Relationship evaluate(CsvSource src, TableSchema lt, ColumnSchema lc,
@@ -71,7 +84,7 @@ final class RelationshipDiscovery {
         if (lUnique) {
             return new Relationship(lt.name(), lc.name(), rt.name(), rc.name(), "one_to_one", round(cov));
         }
-        // Neither side unique + high overlap on id-like keys = conformed key shared across facts.
+        // Neither side unique + high overlap on key/dimension columns = conformed key shared across facts.
         return new Relationship(lt.name(), lc.name(), rt.name(), rc.name(), "shared_key", round(cov));
     }
 
