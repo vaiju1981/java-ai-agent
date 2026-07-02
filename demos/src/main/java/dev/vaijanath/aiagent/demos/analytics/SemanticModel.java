@@ -53,8 +53,11 @@ record SemanticModel(
     String toJson() {
         try {
             return MAPPER.writeValueAsString(Map.of(
-                    "metrics", metrics,
-                    "dimensions", dimensions,
+                    "metrics", metrics.stream().map(m -> Map.of(
+                            "ref", m.ref(), "table", m.table(),
+                            "column", m.column(), "aggregation", m.aggregation())).toList(),
+                    "dimensions", dimensions.stream().map(d -> Map.of(
+                            "ref", d.ref(), "table", d.table(), "column", d.column())).toList(),
                     "entityKeys", entityKeys,
                     "relationships", relationships));
         } catch (JsonProcessingException e) {
