@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":agent-core"))
     implementation(libs.jackson.databind)
     implementation(libs.sqlite.jdbc)
+    implementation(libs.duckdb.jdbc)
     implementation(libs.tablesaw.core)
     runtimeOnly(libs.slf4j.simple)
 
