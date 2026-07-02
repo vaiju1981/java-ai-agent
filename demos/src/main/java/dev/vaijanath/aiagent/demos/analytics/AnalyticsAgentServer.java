@@ -8,6 +8,7 @@ import com.sun.net.httpserver.HttpServer;
 import dev.vaijanath.aiagent.agent.Agent;
 import dev.vaijanath.aiagent.agent.AgentRequest;
 import dev.vaijanath.aiagent.agent.AgentResponse;
+import dev.vaijanath.aiagent.agent.RequestContext;
 import dev.vaijanath.aiagent.model.ModelPort;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -110,7 +111,11 @@ final class AnalyticsAgentServer implements AutoCloseable {
                     "error", "no model configured; set ANALYTICS_MODEL_PROVIDER and ANALYTICS_MODEL")));
             return;
         }
-        AgentResponse response = agent.run(new AgentRequest(question));
+        // A stable session id keeps multi-turn context (follow-up questions). One default session
+        // for the single-user demo; a client may pass its own "session" to isolate conversations.
+        String session = String.valueOf(request.getOrDefault("session", "web")).strip();
+        AgentResponse response = agent.run(new AgentRequest(
+                question, RequestContext.session(session.isEmpty() ? "web" : session)));
         respond(exchange, 200, "application/json; charset=utf-8",
                 toJson(Map.of("answer", response.output(), "blocked", response.blocked())));
     }
