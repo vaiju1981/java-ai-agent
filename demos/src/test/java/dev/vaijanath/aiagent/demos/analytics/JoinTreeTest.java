@@ -40,4 +40,23 @@ class JoinTreeTest {
         assertThrows(UnsupportedOperationException.class,
                 () -> JoinTree.connect(model, Set.of("t0", "t7"), Set.of("t0")));
     }
+
+    @Test
+    void prunesUnrelatedBranchesBeforeTheTableCap() {
+        // Create a branching graph: 'a' fans out to 'b' (requested) and separately to 'c','d','e','f','g','h'.
+        // Total reachable: 8 tables (a,b,c,d,e,f,g,h), exceeding MAX_JOIN_TABLES=6.
+        // But the minimal tree connecting only {a,b} should have 2 tables and succeed.
+        Relationship ab = new Relationship("a", List.of("k"), "b", List.of("k"), "many_to_one", 1.0);
+        Relationship ac = new Relationship("a", List.of("k"), "c", List.of("k"), "many_to_one", 1.0);
+        Relationship ad = new Relationship("a", List.of("k"), "d", List.of("k"), "many_to_one", 1.0);
+        Relationship ae = new Relationship("a", List.of("k"), "e", List.of("k"), "many_to_one", 1.0);
+        Relationship af = new Relationship("a", List.of("k"), "f", List.of("k"), "many_to_one", 1.0);
+        Relationship ag = new Relationship("a", List.of("k"), "g", List.of("k"), "many_to_one", 1.0);
+        Relationship ah = new Relationship("a", List.of("k"), "h", List.of("k"), "many_to_one", 1.0);
+
+        SemanticModel model = modelOf(ab, ac, ad, ae, af, ag, ah);
+        JoinTree tree = JoinTree.connect(model, Set.of("a", "b"), Set.of("a"));
+
+        assertEquals(Set.of("a", "b"), tree.tables(), "unrelated branches should be pruned away");
+    }
 }
