@@ -2,8 +2,10 @@ package dev.vaijanath.aiagent.demos.analytics;
 
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,13 +51,58 @@ final class QueryPlanner {
         if (rel == null) {
             throw new IllegalArgumentException("no discovered relationship between " + a + " and " + b);
         }
-        if (!"many_to_one".equals(rel.cardinality()) && !"one_to_one".equals(rel.cardinality())) {
-            throw new UnsupportedOperationException(
-                    "fan-out-safe join for cardinality '" + rel.cardinality() + "' not implemented yet");
+        if ("shared_key".equals(rel.cardinality())) {
+            return fanOutSafe(ms, ds, rel);
         }
+        // many_to_one / one_to_one: the "to" side is unique, so a direct join cannot fan out.
         String from = q(rel.fromTable()) + " join " + q(rel.toTable())
                 + " on " + qcol(rel.fromTable(), rel.fromColumn()) + " = " + qcol(rel.toTable(), rel.toColumn());
         return groupByQuery(from, ms, ds);
+    }
+
+    /**
+     * Two fact tables linked by a shared key (neither side unique). A direct join multiplies rows
+     * and double-counts, so aggregate each fact to the shared-key grain first, then join the
+     * pre-aggregates. M2 supports grand totals; dimensioned two-fact queries come later.
+     */
+    private static String fanOutSafe(
+            List<SemanticModel.Metric> ms, List<SemanticModel.Dimension> ds, Relationship rel) {
+        if (!ds.isEmpty()) {
+            throw new UnsupportedOperationException(
+                    "dimensioned queries across two fact tables are not planned yet (M2)");
+        }
+        LinkedHashMap<String, List<SemanticModel.Metric>> byTable = new LinkedHashMap<>();
+        for (SemanticModel.Metric m : ms) {
+            byTable.computeIfAbsent(m.table(), t -> new ArrayList<>()).add(m);
+        }
+        if (byTable.size() != 2) {
+            throw new UnsupportedOperationException(
+                    "shared-key plan needs metrics from exactly two fact tables (M2)");
+        }
+        Map<String, String> alias = new LinkedHashMap<>();
+        List<String> cteDefs = new ArrayList<>();
+        int i = 0;
+        for (Map.Entry<String, List<SemanticModel.Metric>> e : byTable.entrySet()) {
+            String table = e.getKey();
+            String a = "f" + (i++);
+            alias.put(table, a);
+            String keyCol = table.equals(rel.fromTable()) ? rel.fromColumn() : rel.toColumn();
+            List<String> aggs = new ArrayList<>();
+            for (SemanticModel.Metric m : e.getValue()) {
+                aggs.add(m.aggregation() + "(" + q(m.column()) + ") as " + q(m.column()));
+            }
+            cteDefs.add(a + " as (select " + q(keyCol) + " as k, " + String.join(", ", aggs)
+                    + " from " + q(table) + " group by " + q(keyCol) + ")");
+        }
+        List<String> aliasList = new ArrayList<>(alias.values());
+        String join = aliasList.get(0) + " join " + aliasList.get(1)
+                + " on " + aliasList.get(0) + ".k = " + aliasList.get(1) + ".k";
+        List<String> select = new ArrayList<>();
+        for (SemanticModel.Metric m : ms) {
+            select.add("sum(" + alias.get(m.table()) + "." + q(m.column()) + ") as " + q(m.column()));
+        }
+        return "with " + String.join(", ", cteDefs)
+                + " select " + String.join(", ", select) + " from " + join;
     }
 
     private static String groupByQuery(
