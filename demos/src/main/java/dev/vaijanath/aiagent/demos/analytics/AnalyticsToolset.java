@@ -9,7 +9,10 @@ import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Generic, read-only analytics tools for the agent. Nothing is dataset-specific: the metric and
@@ -59,6 +62,10 @@ final class AnalyticsToolset {
                             "dimensions", model.dimensions().stream()
                                     .map(SemanticModel.Dimension::ref).toList(),
                             "timeColumns", model.timeColumns(),
+                            "tables", source.tables().stream().map(t -> Map.of(
+                                    "name", t.name(),
+                                    "columns", t.columns().stream()
+                                            .map(c -> c.name() + " " + c.physicalType()).toList())).toList(),
                             "relationships", model.relationships().stream()
                                     .map(r -> r.fromTable() + "." + r.fromColumn() + " ~ "
                                             + r.toTable() + "." + r.toColumn() + " (" + r.cardinality() + ")")
@@ -120,6 +127,68 @@ final class AnalyticsToolset {
                 }
             }
         };
+    }
+
+    Tool runSql() {
+        return new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec(
+                        "run_sql",
+                        "Run a read-only DuckDB SQL SELECT for anything run_query cannot express: arbitrary WHERE "
+                                + "filters, time spans (date_trunc, extract, INTERVAL, strftime), CASE, window "
+                                + "functions, subqueries. Only a single SELECT/WITH is allowed. Use exact table and "
+                                + "column names and types from describe_dataset ('tables'). When joining two fact "
+                                + "tables, aggregate each to its key grain first to avoid double-counting.",
+                        "{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\"}},"
+                                + "\"required\":[\"sql\"]}",
+                        ToolEffect.READ_ONLY);
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                try {
+                    JsonNode node = MAPPER.readTree(
+                            argumentsJson == null || argumentsJson.isBlank() ? "{}" : argumentsJson);
+                    String sql = node.path("sql").asText("").strip();
+                    if (!isReadOnlySelect(sql)) {
+                        return ToolResult.error("only a single read-only SELECT/WITH statement is allowed");
+                    }
+                    List<Map<String, Object>> rows = source.nativeQuery(sql, 1000);
+                    return ToolResult.ok(MAPPER.writeValueAsString(
+                            Map.of("sql", sql, "rows", rows, "rowLimit", 1000)));
+                } catch (RuntimeException | JsonProcessingException e) {
+                    return ToolResult.error(String.valueOf(e.getMessage()));
+                }
+            }
+        };
+    }
+
+    private static final Set<String> SQL_FORBIDDEN = Set.of(
+            "insert", "update", "delete", "drop", "alter", "create", "attach", "detach", "copy",
+            "install", "load", "pragma", "export", "truncate", "vacuum", "grant", "revoke");
+
+    static boolean isReadOnlySelect(String sql) {
+        if (sql == null) {
+            return false;
+        }
+        String s = sql.strip();
+        if (s.endsWith(";")) {
+            s = s.substring(0, s.length() - 1).strip();
+        }
+        if (s.isEmpty() || s.contains(";")) {
+            return false; // single statement only
+        }
+        String lower = s.toLowerCase(Locale.ROOT);
+        if (!lower.startsWith("select") && !lower.startsWith("with")) {
+            return false;
+        }
+        for (String forbidden : SQL_FORBIDDEN) {
+            if (Pattern.compile("\\b" + forbidden + "\\b").matcher(lower).find()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     Tool correlate() {

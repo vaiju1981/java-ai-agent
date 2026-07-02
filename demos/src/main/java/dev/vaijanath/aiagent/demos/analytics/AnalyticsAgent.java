@@ -24,17 +24,19 @@ final class AnalyticsAgent {
         DefaultAgent.Builder builder = DefaultAgent.builder()
                 .model(model)
                 .systemPrompt("You are a careful data analyst over an arbitrary dataset; never assume column "
-                        + "names. Steps: (1) call describe_dataset ONCE for the exact metric/dimension refs, the "
-                        + "timeColumns, and relationships; (2) call run_query with the correct refs — for a period "
-                        + "like 'last N days' set lastDays=N and timeColumn to a ref from timeColumns; use filters "
-                        + "for other constraints; for 'top N' set limit=N; for 'what correlates with / drives X' "
-                        + "call correlate with target=X; (3) then STOP calling tools and answer in plain text using the "
-                        + "returned numbers. If a requested time window or filter cannot be applied with the "
-                        + "available columns, SAY SO plainly — never present unfiltered numbers as if they were "
-                        + "filtered. Do not claim causation from correlation.")
+                        + "names. Steps: (1) call describe_dataset ONCE for the metric/dimension refs, timeColumns, "
+                        + "relationships, and the raw tables (names/columns/types); (2) call the right tool: "
+                        + "run_query for metrics grouped by dimensions (fan-out-safe joins; 'last N days' via "
+                        + "lastDays+timeColumn; 'top N' via limit; simple filters), correlate(target) for 'what "
+                        + "correlates with/drives X', or run_sql with read-only DuckDB SQL for anything else — "
+                        + "custom filters, time buckets (date_trunc), extract, CASE, window functions, subqueries — "
+                        + "using the exact table/column names from describe_dataset; (3) then STOP and answer in "
+                        + "plain text using the returned numbers. Never present unfiltered numbers as if filtered. "
+                        + "Do not claim causation from correlation.")
                 .tool(tools.describeDataset())
                 .tool(tools.runQuery())
                 .tool(tools.correlate())
+                .tool(tools.runSql())
                 .maxSteps(8)
                 .toolTimeout(Duration.ofMinutes(2))
                 .maxToolResultChars(16_000);

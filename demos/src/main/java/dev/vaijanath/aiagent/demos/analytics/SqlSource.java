@@ -82,13 +82,18 @@ final class SqlSource implements DataSource {
 
     @Override
     public List<Map<String, Object>> nativeQuery(String sql) {
+        return nativeQuery(sql, Integer.MAX_VALUE);
+    }
+
+    @Override
+    public List<Map<String, Object>> nativeQuery(String sql, int maxRows) {
         try (Statement st = connection.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             ResultSetMetaData meta = rs.getMetaData();
             List<Map<String, Object>> rows = new ArrayList<>();
-            while (rs.next()) {
+            while (rs.next() && rows.size() < maxRows) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 for (int i = 1; i <= meta.getColumnCount(); i++) {
-                    row.put(meta.getColumnLabel(i), rs.getObject(i));
+                    row.put(meta.getColumnLabel(i), Sql.jsonSafe(rs.getObject(i)));
                 }
                 rows.add(row);
             }

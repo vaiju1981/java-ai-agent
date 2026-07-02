@@ -12,6 +12,8 @@ interface DataSource extends AutoCloseable {
 
     List<Map<String, Object>> nativeQuery(String sql);
 
+    List<Map<String, Object>> nativeQuery(String sql, int maxRows);
+
     @Override
     void close();
 }
