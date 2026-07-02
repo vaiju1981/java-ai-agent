@@ -24,6 +24,16 @@ application {
         .orElse("dev.vaijanath.aiagent.demos.IncidentResponseWarRoom"))
 }
 
+tasks.test {
+    useJUnitPlatform {
+        // Manual/real-data tests are excluded from the default (CI) run.
+        // Run them explicitly with: ./gradlew :demos:test -PrunManual
+        if (!project.hasProperty("runManual")) {
+            excludeTags("manual")
+        }
+    }
+}
+
 tasks.named<Copy>("processResources") {
     val analyticsUiDist = layout.projectDirectory.dir("analytics-ui/dist")
     from(analyticsUiDist) {
