@@ -97,11 +97,16 @@ final class QueryPlanner {
             conditions.add(qcol(r.table(), r.column()) + " " + op + " " + literal(r.numeric(), f.value()));
         }
         if (spec.lastDays() != null && spec.timeColumn() != null && !spec.timeColumn().isBlank()) {
-            Resolved t = resolveRef(model, spec.timeColumn().trim());
-            // The DB computes the cutoff from the data's own latest date, so "last N days" is exact
-            // and different N values produce different windows.
-            conditions.add(qcol(t.table(), t.column()) + " >= (select max(" + q(t.column()) + ") from "
-                    + q(t.table()) + ") - INTERVAL '" + Math.max(0, spec.lastDays()) + " days'");
+            String ref = spec.timeColumn().trim();
+            SemanticModel.TimeColumn tc = model.timeColumn(ref)
+                    .orElseThrow(() -> new IllegalArgumentException("not a time column: " + ref));
+            // Normalize to a real timestamp per the column's encoding (native DATE / epoch / text), so the
+            // window works whether time is a DATE or an epoch long. The DB computes the cutoff from the
+            // data's own latest value, so "last N days" is exact and different N give different windows.
+            String outer = tc.toTimestamp(qcol(tc.table(), tc.column()));
+            String inner = tc.toTimestamp(q(tc.column()));
+            conditions.add(outer + " >= (select max(" + inner + ") from " + q(tc.table())
+                    + ") - INTERVAL '" + Math.max(0, spec.lastDays()) + " days'");
         }
         return conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions);
     }

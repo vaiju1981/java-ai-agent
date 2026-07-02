@@ -61,7 +61,8 @@ final class AnalyticsToolset {
                                     .map(SemanticModel.Metric::ref).toList(),
                             "dimensions", model.dimensions().stream()
                                     .map(SemanticModel.Dimension::ref).toList(),
-                            "timeColumns", model.timeColumns(),
+                            "timeColumns", model.timeColumns().stream()
+                                    .map(t -> t.ref() + " (" + t.encoding() + ")").toList(),
                             "tables", source.tables().stream().map(t -> Map.of(
                                     "name", t.name(),
                                     "columns", t.columns().stream()
@@ -139,7 +140,9 @@ final class AnalyticsToolset {
                                 + "filters, time spans (date_trunc, extract, INTERVAL, strftime), CASE, window "
                                 + "functions, subqueries. Only a single SELECT/WITH is allowed. Use exact table and "
                                 + "column names and types from describe_dataset ('tables'). When joining two fact "
-                                + "tables, aggregate each to its key grain first to avoid double-counting.",
+                                + "tables, aggregate each to its key grain first to avoid double-counting. Time "
+                                + "columns list an encoding in describe_dataset — for EPOCH_MILLIS use "
+                                + "to_timestamp(col/1000), EPOCH_SECONDS use to_timestamp(col), before date math.",
                         "{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\"}},"
                                 + "\"required\":[\"sql\"]}",
                         ToolEffect.READ_ONLY);
