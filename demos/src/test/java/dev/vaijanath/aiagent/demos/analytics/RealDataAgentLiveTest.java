@@ -61,13 +61,14 @@ class RealDataAgentLiveTest {
         try (CsvSource src = CsvSource.of(tempDir.resolve("real-agent.duckdb"), csvs)) {
             Agent agent = AnalyticsAgent.create(src, OllamaModelPorts.ollama(base, modelName), trace);
             AgentResponse resp = agent.run(new AgentRequest(
-                    "What is the total coinIn by clubLevel in the last 30 days? List each club level."));
+                    "Show total coinIn by month for the last 6 months. List each month with its total."));
             System.out.println("AGENT ANSWER: " + resp.output());
 
             assertFalse(resp.blocked(), "agent should not be blocked");
-            boolean appliedWindow = toolCalls.stream().anyMatch(c -> c.startsWith("run_query")
-                    && (c.contains("lastDays") || c.toLowerCase(Locale.ROOT).contains("day")));
-            assertTrue(appliedWindow, "agent must apply a time window for 'last 30 days', calls were: " + toolCalls);
+            // A monthly time-bucket can't be expressed by run_query, so the agent must reach for run_sql.
+            boolean usedSql = toolCalls.stream().anyMatch(c -> c.startsWith("run_sql")
+                    && c.toLowerCase(Locale.ROOT).contains("month"));
+            assertTrue(usedSql, "agent should use run_sql with a monthly bucket, calls were: " + toolCalls);
         }
     }
 
