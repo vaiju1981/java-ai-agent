@@ -48,8 +48,10 @@ final class CsvSource implements DataSource {
 
     private static String readCsv(Path csv, Map<String, String> overrides) {
         String path = csv.toAbsolutePath().toString();
+        // sample_size=-1: infer each column's type from the whole file so a stray value deep in a
+        // large CSV widens the column to text instead of failing the import. No rows are dropped.
         if (overrides.isEmpty()) {
-            return "read_csv_auto('" + path + "')";
+            return "read_csv_auto('" + path + "', sample_size=-1)";
         }
         StringBuilder types = new StringBuilder();
         overrides.forEach((col, type) -> {
@@ -58,7 +60,7 @@ final class CsvSource implements DataSource {
             }
             types.append("'").append(col).append("': '").append(type).append("'");
         });
-        return "read_csv('" + path + "', auto_detect=true, types={" + types + "})";
+        return "read_csv('" + path + "', auto_detect=true, sample_size=-1, types={" + types + "})";
     }
 
     Connection connection() {
