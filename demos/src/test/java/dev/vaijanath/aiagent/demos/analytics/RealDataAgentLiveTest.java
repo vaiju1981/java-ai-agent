@@ -15,14 +15,16 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Capstone: the agent answers a natural-language question over the real multi-GB REDROCK data. */
+/** Capstone: the agent answers a time-scoped NL question over the real multi-GB REDROCK data. */
 @Tag("manual")
 class RealDataAgentLiveTest {
 
@@ -30,7 +32,7 @@ class RealDataAgentLiveTest {
     Path tempDir;
 
     @Test
-    void agentAnswersOverRealRedrockData() throws Exception {
+    void agentAppliesTimeWindowOverRealRedrockData() throws Exception {
         String dir = System.getenv("ANALYTICS_REAL_DATA_DIR");
         assumeTrue(dir != null && Files.isDirectory(Path.of(dir)), "set ANALYTICS_REAL_DATA_DIR");
         String base = System.getenv().getOrDefault("OLLAMA_BASE_URL", "http://localhost:11434");
@@ -39,12 +41,12 @@ class RealDataAgentLiveTest {
 
         Map<String, Path> csvs = new LinkedHashMap<>();
         csvs.put("playerVisits", Path.of(dir, "STATION_playerVisits_REDROCK.csv"));
-        csvs.put("sessions", Path.of(dir, "STATION_sessions_REDROCK.csv"));
-        csvs.put("assetDaily", Path.of(dir, "STATION_assetDaily_REDROCK.csv"));
 
+        List<String> toolCalls = new ArrayList<>();
         AgentObserver trace = new AgentObserver() {
             @Override
             public void onToolCall(ToolCall call) {
+                toolCalls.add(call.name() + " " + call.argumentsJson());
                 System.out.println("TOOLCALL " + call.name() + " args=" + call.argumentsJson());
             }
 
@@ -59,13 +61,13 @@ class RealDataAgentLiveTest {
         try (CsvSource src = CsvSource.of(tempDir.resolve("real-agent.duckdb"), csvs)) {
             Agent agent = AnalyticsAgent.create(src, OllamaModelPorts.ollama(base, modelName), trace);
             AgentResponse resp = agent.run(new AgentRequest(
-                    "What is the total coinIn by clubLevel? List each club level with its total."));
+                    "What is the total coinIn by clubLevel in the last 30 days? List each club level."));
             System.out.println("AGENT ANSWER: " + resp.output());
 
             assertFalse(resp.blocked(), "agent should not be blocked");
-            String lower = resp.output().toLowerCase(Locale.ROOT);
-            assertTrue(lower.contains("chairman") || lower.contains("president") || lower.contains("gold"),
-                    "answer should reference a real club level, was: " + resp.output());
+            boolean appliedWindow = toolCalls.stream().anyMatch(c -> c.startsWith("run_query")
+                    && (c.contains("lastDays") || c.toLowerCase(Locale.ROOT).contains("day")));
+            assertTrue(appliedWindow, "agent must apply a time window for 'last 30 days', calls were: " + toolCalls);
         }
     }
 
