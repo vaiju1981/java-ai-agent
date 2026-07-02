@@ -24,8 +24,12 @@ final class AnalyticsToolset {
     private final SemanticModel model;
 
     AnalyticsToolset(CsvSource source) {
+        this(source, SemanticModel.fromProfile(DatasetProfiler.profile(source)));
+    }
+
+    AnalyticsToolset(CsvSource source, SemanticModel model) {
         this.source = source;
-        this.model = SemanticModel.fromProfile(DatasetProfiler.profile(source));
+        this.model = model;
     }
 
     SemanticModel model() {

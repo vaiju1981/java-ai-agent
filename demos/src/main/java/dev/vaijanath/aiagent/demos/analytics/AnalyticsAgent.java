@@ -16,7 +16,11 @@ final class AnalyticsAgent {
     private AnalyticsAgent() {}
 
     static Agent create(CsvSource source, ModelPort model, AgentObserver... observers) {
-        AnalyticsToolset tools = new AnalyticsToolset(source);
+        return create(source, SemanticModel.fromProfile(DatasetProfiler.profile(source)), model, observers);
+    }
+
+    static Agent create(CsvSource source, SemanticModel semantic, ModelPort model, AgentObserver... observers) {
+        AnalyticsToolset tools = new AnalyticsToolset(source, semantic);
         DefaultAgent.Builder builder = DefaultAgent.builder()
                 .model(model)
                 .systemPrompt("You are a careful data analyst over an arbitrary dataset; never assume column "
