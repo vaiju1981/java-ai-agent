@@ -1,6 +1,7 @@
 package dev.vaijanath.aiagent.demos.analytics;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -34,6 +35,15 @@ class CsvSourceTest {
                     "select c.segment, count(*) n from orders o "
                             + "join customers c on o.customer_id = c.customer_id group by 1 order by 1");
             assertTrue(joined.stream().anyMatch(r -> "enterprise".equals(String.valueOf(r.get("segment")))));
+        }
+    }
+
+    @Test
+    void locksDownExternalFileAccessAfterImport() throws Exception {
+        Map<String, Path> csvs = Map.of("customers", Fixtures.customers(tempDir));
+        try (CsvSource source = CsvSource.of(tempDir.resolve("m2.duckdb"), csvs)) {
+            assertThrows(RuntimeException.class,
+                    () -> source.nativeQuery("select * from read_csv_auto('" + Fixtures.orders(tempDir) + "')"));
         }
     }
 }

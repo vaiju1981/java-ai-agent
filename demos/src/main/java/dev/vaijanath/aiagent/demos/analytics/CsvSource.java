@@ -39,6 +39,9 @@ final class CsvSource implements DataSource {
                             + readCsv(e.getValue(), typeOverrides.getOrDefault(name, Map.of())));
                     names.add(name);
                 }
+                // Import is done; lock the connection down so the run_sql tool (which hands the LLM raw
+                // DuckDB SQL) can't read arbitrary files off disk via read_csv/read_parquet/ATTACH/COPY.
+                st.execute("set enable_external_access = false");
             }
             return new CsvSource(c, names);
         } catch (SQLException ex) {
