@@ -27,12 +27,14 @@ final class AnalyticsAgent {
                         + "names. Steps: (1) call describe_dataset ONCE for the exact metric/dimension refs, the "
                         + "timeColumns, and relationships; (2) call run_query with the correct refs — for a period "
                         + "like 'last N days' set lastDays=N and timeColumn to a ref from timeColumns; use filters "
-                        + "for other constraints; (3) then STOP calling tools and answer in plain text using the "
+                        + "for other constraints; for 'top N' set limit=N; for 'what correlates with / drives X' "
+                        + "call correlate with target=X; (3) then STOP calling tools and answer in plain text using the "
                         + "returned numbers. If a requested time window or filter cannot be applied with the "
                         + "available columns, SAY SO plainly — never present unfiltered numbers as if they were "
                         + "filtered. Do not claim causation from correlation.")
                 .tool(tools.describeDataset())
                 .tool(tools.runQuery())
+                .tool(tools.correlate())
                 .maxSteps(8)
                 .toolTimeout(Duration.ofMinutes(2))
                 .maxToolResultChars(16_000);

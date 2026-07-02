@@ -81,7 +81,8 @@ final class AnalyticsToolset {
                                 + "and a time window. Use exact refs from describe_dataset. For a period like "
                                 + "'last 90 days', set lastDays=90 and timeColumn to a ref from the dataset's "
                                 + "timeColumns. For other constraints use filters, each {column, op, value} with op "
-                                + "one of = != < <= > >=. Joins are planned automatically and fan-out-safe.",
+                                + "one of = != < <= > >=. For 'top N', set limit=N (optionally orderBy to a metric "
+                                + "ref; defaults to the first metric, descending). Joins are fan-out-safe.",
                         "{\"type\":\"object\",\"properties\":{"
                                 + "\"metrics\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},"
                                 + "\"dimensions\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},"
@@ -89,7 +90,10 @@ final class AnalyticsToolset {
                                 + "\"column\":{\"type\":\"string\"},\"op\":{\"type\":\"string\"},"
                                 + "\"value\":{\"type\":\"string\"}}}},"
                                 + "\"lastDays\":{\"type\":\"integer\"},"
-                                + "\"timeColumn\":{\"type\":\"string\"}},"
+                                + "\"timeColumn\":{\"type\":\"string\"},"
+                                + "\"orderBy\":{\"type\":\"string\"},"
+                                + "\"descending\":{\"type\":\"boolean\"},"
+                                + "\"limit\":{\"type\":\"integer\"}},"
                                 + "\"required\":[\"metrics\"]}",
                         ToolEffect.READ_ONLY);
             }
@@ -104,10 +108,74 @@ final class AnalyticsToolset {
                     List<QueryPlanner.Filter> filters = toFilters(node.get("filters"));
                     Integer lastDays = node.hasNonNull("lastDays") ? node.get("lastDays").asInt() : null;
                     String timeColumn = node.hasNonNull("timeColumn") ? node.get("timeColumn").asText() : null;
-                    String sql = QueryPlanner.plan(model,
-                            new QueryPlanner.QuerySpec(metrics, dimensions, filters, lastDays, timeColumn));
+                    String orderBy = node.hasNonNull("orderBy") ? node.get("orderBy").asText() : null;
+                    boolean descending = !node.hasNonNull("descending") || node.get("descending").asBoolean();
+                    Integer limit = node.hasNonNull("limit") ? node.get("limit").asInt() : null;
+                    String sql = QueryPlanner.plan(model, new QueryPlanner.QuerySpec(
+                            metrics, dimensions, filters, lastDays, timeColumn, orderBy, descending, limit));
                     List<Map<String, Object>> rows = source.nativeQuery(sql);
                     return ToolResult.ok(MAPPER.writeValueAsString(Map.of("sql", sql, "rows", rows)));
+                } catch (RuntimeException | JsonProcessingException e) {
+                    return ToolResult.error(String.valueOf(e.getMessage()));
+                }
+            }
+        };
+    }
+
+    Tool correlate() {
+        return new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec(
+                        "correlate",
+                        "Pearson correlation between a target metric and the other numeric measures in its table, "
+                                + "ranked by strength (1=strong positive, -1=strong negative). Arg: target = a "
+                                + "metric ref (e.g. 'orders.revenue'). Correlation is not causation.",
+                        "{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\"}},"
+                                + "\"required\":[\"target\"]}",
+                        ToolEffect.READ_ONLY);
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                try {
+                    JsonNode node = MAPPER.readTree(
+                            argumentsJson == null || argumentsJson.isBlank() ? "{}" : argumentsJson);
+                    String targetRef = node.path("target").asText("").trim();
+                    int annotation = targetRef.indexOf(" (");
+                    if (annotation > 0) {
+                        targetRef = targetRef.substring(0, annotation).trim();
+                    }
+                    final String ref = targetRef;
+                    SemanticModel.Metric target = model.metrics().stream()
+                            .filter(m -> m.ref().equals(ref)).findFirst()
+                            .orElseThrow(() -> new IllegalArgumentException("unknown target metric: " + ref));
+                    List<SemanticModel.Metric> others = model.metrics().stream()
+                            .filter(m -> m.table().equals(target.table()) && !m.column().equals(target.column()))
+                            .toList();
+                    if (others.isEmpty()) {
+                        return ToolResult.ok("{\"target\":\"" + ref + "\",\"correlations\":[]}");
+                    }
+                    List<String> selects = new ArrayList<>();
+                    for (SemanticModel.Metric o : others) {
+                        selects.add("corr(cast(" + Sql.quote(target.column()) + " as double), cast("
+                                + Sql.quote(o.column()) + " as double)) as " + Sql.quote(o.column()));
+                    }
+                    Map<String, Object> row = source.nativeQuery(
+                            "select " + String.join(", ", selects) + " from " + Sql.quote(target.table())).get(0);
+                    List<Map<String, Object>> results = new ArrayList<>();
+                    for (SemanticModel.Metric o : others) {
+                        Object v = row.get(o.column());
+                        if (v instanceof Number n && Double.isFinite(n.doubleValue())) {
+                            results.add(Map.of("column", o.ref(),
+                                    "correlation", Math.round(n.doubleValue() * 1000.0) / 1000.0));
+                        }
+                    }
+                    results.sort((x, y) -> Double.compare(
+                            Math.abs(((Number) y.get("correlation")).doubleValue()),
+                            Math.abs(((Number) x.get("correlation")).doubleValue())));
+                    return ToolResult.ok(MAPPER.writeValueAsString(
+                            Map.of("target", target.ref(), "correlations", results)));
                 } catch (RuntimeException | JsonProcessingException e) {
                     return ToolResult.error(String.valueOf(e.getMessage()));
                 }

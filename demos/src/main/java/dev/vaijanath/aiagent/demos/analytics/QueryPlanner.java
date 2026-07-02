@@ -24,11 +24,17 @@ final class QueryPlanner {
 
     record QuerySpec(
             List<String> metrics, List<String> dimensions, List<Filter> filters,
-            Integer lastDays, String timeColumn) {
+            Integer lastDays, String timeColumn,
+            String orderBy, boolean descending, Integer limit) {
         QuerySpec {
             metrics = metrics == null ? List.of() : List.copyOf(metrics);
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
             filters = filters == null ? List.of() : List.copyOf(filters);
+        }
+
+        QuerySpec(List<String> metrics, List<String> dimensions, List<Filter> filters,
+                Integer lastDays, String timeColumn) {
+            this(metrics, dimensions, filters, lastDays, timeColumn, null, true, null);
         }
 
         QuerySpec(List<String> metrics, List<String> dimensions) {
@@ -46,13 +52,38 @@ final class QueryPlanner {
         Set<String> tables = new LinkedHashSet<>();
         ms.forEach(m -> tables.add(m.table()));
         ds.forEach(d -> tables.add(d.table()));
+        String sql;
         if (tables.size() == 1) {
-            return groupByQuery(q(tables.iterator().next()), ms, ds, where);
+            sql = groupByQuery(q(tables.iterator().next()), ms, ds, where);
+        } else if (tables.size() == 2) {
+            sql = twoTable(model, tables, ms, ds, where);
+        } else {
+            throw new UnsupportedOperationException("queries spanning more than two tables are not planned yet");
         }
-        if (tables.size() == 2) {
-            return twoTable(model, tables, ms, ds, where);
+        return applyOrderLimit(sql, ms, ds, spec);
+    }
+
+    private static String applyOrderLimit(String sql, List<SemanticModel.Metric> ms,
+            List<SemanticModel.Dimension> ds, QuerySpec spec) {
+        if (ds.isEmpty() || (spec.orderBy() == null && spec.limit() == null)) {
+            return sql;
         }
-        throw new UnsupportedOperationException("queries spanning more than two tables are not planned yet");
+        String column;
+        if (spec.orderBy() != null && !spec.orderBy().isBlank()) {
+            String ref = spec.orderBy().trim();
+            column = ms.stream().filter(m -> m.ref().equals(ref)).findFirst()
+                    .map(SemanticModel.Metric::column)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "orderBy must be one of the selected metrics: " + ref));
+        } else {
+            column = ms.get(0).column();
+        }
+        StringBuilder out = new StringBuilder(sql)
+                .append(" order by ").append(q(column)).append(spec.descending() ? " desc" : " asc");
+        if (spec.limit() != null && spec.limit() > 0) {
+            out.append(" limit ").append(spec.limit());
+        }
+        return out.toString();
     }
 
     private static String buildWhere(SemanticModel model, QuerySpec spec) {
