@@ -76,16 +76,16 @@ final class RelationshipDiscovery {
         boolean lUnique = ld == lt.rows();
         boolean rUnique = rd == rt.rows();
         if (rUnique && !lUnique) {
-            return new Relationship(lt.name(), lc.name(), rt.name(), rc.name(), "many_to_one", round(cov));
+            return new Relationship(lt.name(), List.of(lc.name()), rt.name(), List.of(rc.name()), "many_to_one", round(cov));
         }
         if (lUnique && !rUnique) {
-            return new Relationship(rt.name(), rc.name(), lt.name(), lc.name(), "many_to_one", round(cov));
+            return new Relationship(rt.name(), List.of(rc.name()), lt.name(), List.of(lc.name()), "many_to_one", round(cov));
         }
         if (lUnique) {
-            return new Relationship(lt.name(), lc.name(), rt.name(), rc.name(), "one_to_one", round(cov));
+            return new Relationship(lt.name(), List.of(lc.name()), rt.name(), List.of(rc.name()), "one_to_one", round(cov));
         }
         // Neither side unique + high overlap on key/dimension columns = conformed key shared across facts.
-        return new Relationship(lt.name(), lc.name(), rt.name(), rc.name(), "shared_key", round(cov));
+        return new Relationship(lt.name(), List.of(lc.name()), rt.name(), List.of(rc.name()), "shared_key", round(cov));
     }
 
     private static long distinct(DataSource src, String table, String col) {

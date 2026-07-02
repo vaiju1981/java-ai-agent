@@ -36,8 +36,16 @@ record TableSchema(String name, long rows, List<ColumnSchema> columns) {}
 
 record Relationship(
         String fromTable,
-        String fromColumn,
+        List<String> fromColumns,
         String toTable,
-        String toColumn,
+        List<String> toColumns,
         String cardinality,
-        double coverage) {}
+        double coverage) {
+    String fromColumn() {
+        return fromColumns.get(0);
+    }
+
+    String toColumn() {
+        return toColumns.get(0);
+    }
+}
