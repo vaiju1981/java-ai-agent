@@ -29,7 +29,7 @@ final class AnalyticsAgent {
                 .tool(tools.runQuery())
                 .maxSteps(8)
                 .toolTimeout(Duration.ofMinutes(2))
-                .maxToolResultChars(8_000);
+                .maxToolResultChars(16_000);
         for (AgentObserver observer : observers) {
             builder.observer(observer);
         }

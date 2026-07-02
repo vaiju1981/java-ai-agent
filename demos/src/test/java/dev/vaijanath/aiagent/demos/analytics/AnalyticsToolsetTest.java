@@ -24,7 +24,7 @@ class AnalyticsToolsetTest {
             AnalyticsToolset tools = new AnalyticsToolset(src);
 
             String described = tools.describeDataset().invoke("{}").content();
-            assertTrue(described.contains("\"ref\":\"orders.revenue\""), "describe exposes exact metric refs");
+            assertTrue(described.contains("orders.revenue"), "describe exposes exact metric refs");
 
             ToolResult result = tools.runQuery().invoke(
                     "{\"metrics\":[\"orders.revenue\"],\"dimensions\":[\"customers.segment\"]}");

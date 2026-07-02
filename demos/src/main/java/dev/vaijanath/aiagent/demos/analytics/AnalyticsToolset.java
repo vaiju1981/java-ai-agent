@@ -47,7 +47,21 @@ final class AnalyticsToolset {
 
             @Override
             public ToolResult invoke(String argumentsJson) {
-                return ToolResult.ok(model.toJson());
+                try {
+                    // Compact catalog: scannable refs, small enough for wide (100+ column) datasets.
+                    Map<String, Object> catalog = Map.of(
+                            "metrics", model.metrics().stream()
+                                    .map(SemanticModel.Metric::ref).toList(),
+                            "dimensions", model.dimensions().stream()
+                                    .map(SemanticModel.Dimension::ref).toList(),
+                            "relationships", model.relationships().stream()
+                                    .map(r -> r.fromTable() + "." + r.fromColumn() + " ~ "
+                                            + r.toTable() + "." + r.toColumn() + " (" + r.cardinality() + ")")
+                                    .toList());
+                    return ToolResult.ok(MAPPER.writeValueAsString(catalog));
+                } catch (JsonProcessingException e) {
+                    return ToolResult.error(String.valueOf(e.getMessage()));
+                }
             }
         };
     }
@@ -103,6 +117,11 @@ final class AnalyticsToolset {
 
     private static void add(List<String> out, String value) {
         String trimmed = value == null ? "" : value.trim();
+        // Tolerate refs the model annotates, e.g. "orders.revenue (sum)" -> "orders.revenue".
+        int annotation = trimmed.indexOf(" (");
+        if (annotation > 0) {
+            trimmed = trimmed.substring(0, annotation).trim();
+        }
         if (!trimmed.isEmpty()) {
             out.add(trimmed);
         }
