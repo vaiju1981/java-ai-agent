@@ -39,6 +39,26 @@ final class AnalyticsToolset {
         return model;
     }
 
+    /** Compact schema the agent needs to write queries — small enough to embed in the system prompt. */
+    String catalogJson() {
+        try {
+            return MAPPER.writeValueAsString(Map.of(
+                    "metrics", model.metrics().stream().map(SemanticModel.Metric::ref).toList(),
+                    "dimensions", model.dimensions().stream().map(SemanticModel.Dimension::ref).toList(),
+                    "timeColumns", model.timeColumns().stream()
+                            .map(t -> t.ref() + " (" + t.encoding() + ")").toList(),
+                    "tables", source.tables().stream().map(t -> Map.of(
+                            "name", t.name(),
+                            "columns", t.columns().stream()
+                                    .map(c -> c.name() + " " + c.physicalType()).toList())).toList(),
+                    "relationships", model.relationships().stream()
+                            .map(r -> r.fromTable() + "." + r.fromColumn() + " ~ "
+                                    + r.toTable() + "." + r.toColumn() + " (" + r.cardinality() + ")").toList()));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize catalog", e);
+        }
+    }
+
     Tool describeDataset() {
         return new Tool() {
             @Override
@@ -54,27 +74,7 @@ final class AnalyticsToolset {
 
             @Override
             public ToolResult invoke(String argumentsJson) {
-                try {
-                    // Compact catalog: scannable refs, small enough for wide (100+ column) datasets.
-                    Map<String, Object> catalog = Map.of(
-                            "metrics", model.metrics().stream()
-                                    .map(SemanticModel.Metric::ref).toList(),
-                            "dimensions", model.dimensions().stream()
-                                    .map(SemanticModel.Dimension::ref).toList(),
-                            "timeColumns", model.timeColumns().stream()
-                                    .map(t -> t.ref() + " (" + t.encoding() + ")").toList(),
-                            "tables", source.tables().stream().map(t -> Map.of(
-                                    "name", t.name(),
-                                    "columns", t.columns().stream()
-                                            .map(c -> c.name() + " " + c.physicalType()).toList())).toList(),
-                            "relationships", model.relationships().stream()
-                                    .map(r -> r.fromTable() + "." + r.fromColumn() + " ~ "
-                                            + r.toTable() + "." + r.toColumn() + " (" + r.cardinality() + ")")
-                                    .toList());
-                    return ToolResult.ok(MAPPER.writeValueAsString(catalog));
-                } catch (JsonProcessingException e) {
-                    return ToolResult.error(String.valueOf(e.getMessage()));
-                }
+                return ToolResult.ok(catalogJson());
             }
         };
     }
@@ -128,6 +128,153 @@ final class AnalyticsToolset {
                 }
             }
         };
+    }
+
+    Tool summarize() {
+        return new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec("summarize",
+                        "Distribution of one numeric measure: count, non-null, min, p25, median, p75, max, mean, "
+                                + "stddev. Arg: metric = a metric ref (e.g. 'orders.revenue').",
+                        "{\"type\":\"object\",\"properties\":{\"metric\":{\"type\":\"string\"}},"
+                                + "\"required\":[\"metric\"]}",
+                        ToolEffect.READ_ONLY);
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                try {
+                    SemanticModel.Metric m = requireMetric(readArgs(argumentsJson).path("metric").asText(""));
+                    String c = Sql.quote(m.column());
+                    String cd = "cast(" + c + " as double)";
+                    String base = "select count(*) n, count(" + c + ") non_null, min(" + cd + ") min, "
+                            + "approx_quantile(" + cd + ", 0.25) p25, median(" + cd + ") median, "
+                            + "approx_quantile(" + cd + ", 0.75) p75, max(" + cd + ") max, avg(" + cd + ") mean";
+                    String from = " from " + Sql.quote(m.table());
+                    Map<String, Object> row;
+                    try {
+                        row = source.nativeQuery(base + ", stddev_pop(" + cd + ") stddev" + from).get(0);
+                    } catch (RuntimeException overflow) {
+                        row = source.nativeQuery(base + from).get(0); // stddev can overflow on extreme values
+                    }
+                    return ToolResult.ok(MAPPER.writeValueAsString(Map.of("metric", m.ref(), "summary", row)));
+                } catch (RuntimeException | JsonProcessingException e) {
+                    return ToolResult.error(String.valueOf(e.getMessage()));
+                }
+            }
+        };
+    }
+
+    Tool outliers() {
+        return new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec("outliers",
+                        "Rows with unusual values of a measure by z-score (|value-mean|/stddev). Args: metric (ref), "
+                                + "optional threshold (default 3). Returns up to 20 rows with the value, z_score, "
+                                + "and the table's dimensions.",
+                        "{\"type\":\"object\",\"properties\":{\"metric\":{\"type\":\"string\"},"
+                                + "\"threshold\":{\"type\":\"number\"}},\"required\":[\"metric\"]}",
+                        ToolEffect.READ_ONLY);
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                try {
+                    JsonNode node = readArgs(argumentsJson);
+                    SemanticModel.Metric m = requireMetric(node.path("metric").asText(""));
+                    double threshold = node.path("threshold").isNumber() ? node.get("threshold").asDouble() : 3.0;
+                    String cd = "cast(" + Sql.quote(m.column()) + " as double)";
+                    String dims = model.dimensions().stream().filter(d -> d.table().equals(m.table()))
+                            .map(d -> Sql.quote(d.column())).reduce((a, b) -> a + ", " + b)
+                            .map(s -> s + ", ").orElse("");
+                    String z = "((" + cd + " - stats.m) / nullif(stats.sd, 0))";
+                    String sql = "with stats as (select avg(" + cd + ") m, stddev_pop(" + cd + ") sd from "
+                            + Sql.quote(m.table()) + ") select " + dims + Sql.quote(m.column())
+                            + ", round(" + z + ", 2) as z_score from " + Sql.quote(m.table()) + ", stats "
+                            + "where abs(" + z + ") > " + threshold + " order by abs(" + z + ") desc limit 20";
+                    return ToolResult.ok(MAPPER.writeValueAsString(Map.of(
+                            "metric", m.ref(), "threshold", threshold, "outliers", source.nativeQuery(sql, 20))));
+                } catch (RuntimeException | JsonProcessingException e) {
+                    return ToolResult.error(String.valueOf(e.getMessage()));
+                }
+            }
+        };
+    }
+
+    Tool regression() {
+        return new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec("regression",
+                        "Single-variable linear fit (slope and R^2) of a target measure against each other numeric "
+                                + "measure in its table, ranked by R^2 (variance explained). Arg: target = a metric "
+                                + "ref. Association, not causation.",
+                        "{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\"}},"
+                                + "\"required\":[\"target\"]}",
+                        ToolEffect.READ_ONLY);
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                try {
+                    SemanticModel.Metric target = requireMetric(readArgs(argumentsJson).path("target").asText(""));
+                    List<SemanticModel.Metric> others = model.metrics().stream()
+                            .filter(m -> m.table().equals(target.table()) && !m.column().equals(target.column()))
+                            .toList();
+                    if (others.isEmpty()) {
+                        return ToolResult.ok("{\"target\":\"" + target.ref() + "\",\"predictors\":[]}");
+                    }
+                    String y = "cast(" + Sql.quote(target.column()) + " as double)";
+                    List<String> selects = new ArrayList<>();
+                    for (SemanticModel.Metric o : others) {
+                        String x = "cast(" + Sql.quote(o.column()) + " as double)";
+                        selects.add("regr_r2(" + y + ", " + x + ") as " + Sql.quote(o.column()));
+                        selects.add("regr_slope(" + y + ", " + x + ") as " + Sql.quote("slope__" + o.column()));
+                    }
+                    Map<String, Object> row = source.nativeQuery(
+                            "select " + String.join(", ", selects) + " from " + Sql.quote(target.table())).get(0);
+                    List<Map<String, Object>> predictors = new ArrayList<>();
+                    for (SemanticModel.Metric o : others) {
+                        Object r2 = row.get(o.column());
+                        if (r2 instanceof Number n && Double.isFinite(n.doubleValue())) {
+                            Object slope = row.get("slope__" + o.column());
+                            predictors.add(Map.of(
+                                    "column", o.ref(),
+                                    "r2", Math.round(n.doubleValue() * 1000.0) / 1000.0,
+                                    "slope", slope instanceof Number s
+                                            ? Math.round(s.doubleValue() * 1000.0) / 1000.0 : 0.0));
+                        }
+                    }
+                    predictors.sort((a, b) -> Double.compare(
+                            ((Number) b.get("r2")).doubleValue(), ((Number) a.get("r2")).doubleValue()));
+                    return ToolResult.ok(MAPPER.writeValueAsString(
+                            Map.of("target", target.ref(), "predictors", predictors)));
+                } catch (RuntimeException | JsonProcessingException e) {
+                    return ToolResult.error(String.valueOf(e.getMessage()));
+                }
+            }
+        };
+    }
+
+    private JsonNode readArgs(String argumentsJson) {
+        try {
+            return MAPPER.readTree(argumentsJson == null || argumentsJson.isBlank() ? "{}" : argumentsJson);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("invalid tool arguments");
+        }
+    }
+
+    private SemanticModel.Metric requireMetric(String ref) {
+        String r = ref == null ? "" : ref.trim();
+        int annotation = r.indexOf(" (");
+        if (annotation > 0) {
+            r = r.substring(0, annotation).trim();
+        }
+        final String resolved = r;
+        return model.metrics().stream().filter(m -> m.ref().equals(resolved)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown metric: " + resolved));
     }
 
     Tool runSql() {
