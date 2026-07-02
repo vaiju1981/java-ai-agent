@@ -31,7 +31,7 @@ class RelationshipDiscoveryTest {
                             "player_id", ColumnRole.IDENTIFIER, "coin_in", ColumnRole.MEASURE_ADDITIVE),
                     "sessions", Map.of("session_id", ColumnRole.IDENTIFIER,
                             "player_id", ColumnRole.IDENTIFIER, "net_win", ColumnRole.MEASURE_ADDITIVE));
-            List<Relationship> rels = RelationshipDiscovery.discover(src, roles);
+            List<Relationship> rels = RelationshipDiscovery.discover(src, roles, Map.of());
             assertTrue(rels.stream().anyMatch(r ->
                     r.fromColumn().equals("player_id") && r.toColumn().equals("player_id")
                             && r.cardinality().equals("shared_key")),

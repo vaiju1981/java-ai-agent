@@ -34,7 +34,15 @@ final class DatasetProfiler {
             typedTables.add(new TableSchema(table.name(), table.rows(), typedCols));
         }
 
-        List<Relationship> relationships = RelationshipDiscovery.discover(src, rolesByTable);
+        List<Relationship> relationships = RelationshipDiscovery.discover(src, rolesByTable, statsByRef(columns));
         return new DatasetProfile(typedTables, columns, relationships, importPlan);
+    }
+
+    private static Map<String, ColumnProfile> statsByRef(List<ColumnProfile> columns) {
+        Map<String, ColumnProfile> stats = new LinkedHashMap<>();
+        for (ColumnProfile cp : columns) {
+            stats.put(cp.table() + "." + cp.name(), cp);
+        }
+        return stats;
     }
 }

@@ -7,10 +7,14 @@ import java.util.Map;
 final class RelationshipDiscovery {
 
     private static final double MIN_COVERAGE = 0.8;
-
     private RelationshipDiscovery() {}
 
     static List<Relationship> discover(DataSource src, Map<String, Map<String, ColumnRole>> rolesByTable) {
+        return discover(src, rolesByTable, Map.of());
+    }
+
+    static List<Relationship> discover(DataSource src, Map<String, Map<String, ColumnRole>> rolesByTable,
+            Map<String, ColumnProfile> statsByRef) {
         List<TableSchema> tables = src.tables();
         List<Relationship> out = new ArrayList<>();
         for (TableSchema left : tables) {
@@ -23,9 +27,10 @@ final class RelationshipDiscovery {
                         if (!candidate(left, lc, right, rc, rolesByTable)) {
                             continue;
                         }
-                        Relationship r = evaluate(src, left, lc, right, rc);
-                        if (r != null) {
-                            out.add(r);
+                        Coverage cov = coverageOf(src, left.name(), List.of(lc.name()),
+                                right.name(), List.of(rc.name()), statsByRef);
+                        if (cov.ratio() >= MIN_COVERAGE) {
+                            out.add(cardinalityRelationship(left, List.of(lc.name()), right, List.of(rc.name()), cov));
                         }
                     }
                 }
@@ -61,46 +66,63 @@ final class RelationshipDiscovery {
         return roles.getOrDefault(table, Map.of()).getOrDefault(col, ColumnRole.UNKNOWN);
     }
 
-    private static Relationship evaluate(DataSource src, TableSchema lt, ColumnSchema lc,
-            TableSchema rt, ColumnSchema rc) {
-        long ld = distinct(src, lt.name(), lc.name());
-        long rd = distinct(src, rt.name(), rc.name());
-        if (ld == 0 || rd == 0) {
-            return null;
+    record Coverage(long leftDistinct, long rightDistinct, long overlap) {
+        double ratio() {
+            return leftDistinct == 0 || rightDistinct == 0 ? -1.0
+                    : (double) overlap / Math.min(leftDistinct, rightDistinct);
         }
-        long overlap = overlap(src, lt.name(), lc.name(), rt.name(), rc.name());
-        double cov = (double) overlap / Math.min(ld, rd);
-        if (cov < MIN_COVERAGE) {
-            return null;
+    }
+
+    private static Coverage coverageOf(DataSource src, String lt, List<String> lc, String rt, List<String> rc,
+            Map<String, ColumnProfile> statsByRef) {
+        long ld = distinctOf(src, lt, lc, statsByRef);
+        long rd = distinctOf(src, rt, rc, statsByRef);
+        long overlap = (ld == 0 || rd == 0) ? 0 : overlapOf(src, lt, lc, rt, rc);
+        return new Coverage(ld, rd, overlap);
+    }
+
+    private static long distinctOf(DataSource src, String table, List<String> cols,
+            Map<String, ColumnProfile> statsByRef) {
+        if (cols.size() == 1) {
+            ColumnProfile cp = statsByRef.get(table + "." + cols.get(0));
+            if (cp != null) {
+                return cp.distinct();
+            }
         }
-        boolean lUnique = ld == lt.rows();
-        boolean rUnique = rd == rt.rows();
+        String select = cols.stream().map(Sql::quote).reduce((a, b) -> a + ", " + b).orElseThrow();
+        String whereNotNull = cols.stream().map(c -> Sql.quote(c) + " is not null")
+                .reduce((a, b) -> a + " and " + b).orElseThrow();
+        return ((Number) src.nativeQuery("select count(*) d from (select distinct " + select
+                + " from " + Sql.quote(table) + " where " + whereNotNull + ")").get(0).get("d")).longValue();
+    }
+
+    private static long overlapOf(DataSource src, String lt, List<String> lc, String rt, List<String> rc) {
+        String lSelect = lc.stream().map(Sql::quote).reduce((a, b) -> a + ", " + b).orElseThrow();
+        String rSelect = rc.stream().map(Sql::quote).reduce((a, b) -> a + ", " + b).orElseThrow();
+        String lWhere = lc.stream().map(c -> Sql.quote(c) + " is not null")
+                .reduce((a, b) -> a + " and " + b).orElseThrow();
+        String rWhere = rc.stream().map(c -> Sql.quote(c) + " is not null")
+                .reduce((a, b) -> a + " and " + b).orElseThrow();
+        return ((Number) src.nativeQuery("select count(*) n from (select distinct " + lSelect + " from "
+                + Sql.quote(lt) + " where " + lWhere + " intersect select distinct " + rSelect + " from "
+                + Sql.quote(rt) + " where " + rWhere + ")").get(0).get("n")).longValue();
+    }
+
+    private static Relationship cardinalityRelationship(TableSchema lt, List<String> lc, TableSchema rt,
+            List<String> rc, Coverage cov) {
+        boolean lUnique = cov.leftDistinct() == lt.rows();
+        boolean rUnique = cov.rightDistinct() == rt.rows();
+        double c = round(cov.ratio());
         if (rUnique && !lUnique) {
-            return new Relationship(lt.name(), List.of(lc.name()), rt.name(), List.of(rc.name()), "many_to_one", round(cov));
+            return new Relationship(lt.name(), lc, rt.name(), rc, "many_to_one", c);
         }
         if (lUnique && !rUnique) {
-            return new Relationship(rt.name(), List.of(rc.name()), lt.name(), List.of(lc.name()), "many_to_one", round(cov));
+            return new Relationship(rt.name(), rc, lt.name(), lc, "many_to_one", c);
         }
         if (lUnique) {
-            return new Relationship(lt.name(), List.of(lc.name()), rt.name(), List.of(rc.name()), "one_to_one", round(cov));
+            return new Relationship(lt.name(), lc, rt.name(), rc, "one_to_one", c);
         }
-        // Neither side unique + high overlap on key/dimension columns = conformed key shared across facts.
-        return new Relationship(lt.name(), List.of(lc.name()), rt.name(), List.of(rc.name()), "shared_key", round(cov));
-    }
-
-    private static long distinct(DataSource src, String table, String col) {
-        return ((Number) src.nativeQuery("select count(distinct " + Sql.quote(col) + ") d from "
-                + Sql.quote(table) + " where " + Sql.quote(col) + " is not null")
-                .get(0).get("d")).longValue();
-    }
-
-    private static long overlap(DataSource src, String lt, String lc, String rt, String rc) {
-        return ((Number) src.nativeQuery(
-                "select count(*) n from (select distinct " + Sql.quote(lc) + " v from " + Sql.quote(lt)
-                        + " where " + Sql.quote(lc) + " is not null intersect select distinct "
-                        + Sql.quote(rc) + " from " + Sql.quote(rt)
-                        + " where " + Sql.quote(rc) + " is not null)")
-                .get(0).get("n")).longValue();
+        return new Relationship(lt.name(), lc, rt.name(), rc, "shared_key", c);
     }
 
     private static double round(double v) {
