@@ -24,14 +24,19 @@ final class CsvSource implements DataSource {
     }
 
     static CsvSource of(Path dbFile, Map<String, Path> namedCsvs) {
+        return of(dbFile, namedCsvs, Map.of());
+    }
+
+    static CsvSource of(Path dbFile, Map<String, Path> namedCsvs,
+            Map<String, Map<String, String>> typeOverrides) {
         try {
             Connection c = DriverManager.getConnection("jdbc:duckdb:" + dbFile.toAbsolutePath());
             List<String> names = new ArrayList<>();
             try (Statement st = c.createStatement()) {
                 for (Map.Entry<String, Path> e : namedCsvs.entrySet()) {
                     String name = identifier(e.getKey());
-                    st.execute("create or replace table " + quote(name) + " as "
-                            + "select * from read_csv_auto('" + e.getValue().toAbsolutePath() + "')");
+                    st.execute("create or replace table " + quote(name) + " as select * from "
+                            + readCsv(e.getValue(), typeOverrides.getOrDefault(name, Map.of())));
                     names.add(name);
                 }
             }
@@ -39,6 +44,21 @@ final class CsvSource implements DataSource {
         } catch (SQLException ex) {
             throw new IllegalStateException("failed to import CSVs into DuckDB", ex);
         }
+    }
+
+    private static String readCsv(Path csv, Map<String, String> overrides) {
+        String path = csv.toAbsolutePath().toString();
+        if (overrides.isEmpty()) {
+            return "read_csv_auto('" + path + "')";
+        }
+        StringBuilder types = new StringBuilder();
+        overrides.forEach((col, type) -> {
+            if (types.length() > 0) {
+                types.append(", ");
+            }
+            types.append("'").append(col).append("': '").append(type).append("'");
+        });
+        return "read_csv('" + path + "', auto_detect=true, types={" + types + "})";
     }
 
     Connection connection() {
