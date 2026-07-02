@@ -8,6 +8,7 @@ description = "Full-fledged showcase demos for java-ai-agent."
 
 dependencies {
     implementation(project(":agent-core"))
+    implementation(project(":agent-langchain4j"))
     implementation(libs.jackson.databind)
     implementation(libs.sqlite.jdbc)
     implementation(libs.duckdb.jdbc)
