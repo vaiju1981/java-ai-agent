@@ -64,9 +64,8 @@ final class RelationshipDiscovery {
                 }
             }
         }
-        List<Relationship> composites = discoverComposite(src, rolesByTable, seeds, statsByRef);
-        Set<String> superseded = new java.util.HashSet<>();
-        composites.forEach(c -> superseded.add(c.fromTable() + "|" + c.toTable()));
+        Map<String, List<Relationship>> compositesByPair = discoverComposite(src, rolesByTable, seeds, statsByRef);
+        Set<String> superseded = compositesByPair.keySet();
 
         List<Relationship> out = new ArrayList<>(confident);
         coarseByTablePair.forEach((pair, rel) -> {
@@ -74,16 +73,18 @@ final class RelationshipDiscovery {
                 out.add(rel);
             }
         });
-        out.addAll(composites);
+        compositesByPair.values().forEach(out::addAll);
         return out;
     }
 
-    private static List<Relationship> discoverComposite(DataSource src,
+    private static Map<String, List<Relationship>> discoverComposite(DataSource src,
             Map<String, Map<String, ColumnRole>> rolesByTable, Map<String, List<PartialMatch>> seedsByTablePair,
             Map<String, ColumnProfile> statsByRef) {
-        List<Relationship> out = new ArrayList<>();
+        Map<String, List<Relationship>> out = new LinkedHashMap<>();
         Set<String> seen = new java.util.LinkedHashSet<>();
-        for (List<PartialMatch> seeds : seedsByTablePair.values()) {
+        for (Map.Entry<String, List<PartialMatch>> entry : seedsByTablePair.entrySet()) {
+            String pairKey = entry.getKey();
+            List<PartialMatch> seeds = entry.getValue();
             for (PartialMatch seed : seeds) {
                 TableSchema left = seed.left();
                 TableSchema right = seed.right();
@@ -107,7 +108,8 @@ final class RelationshipDiscovery {
                         }
                         Coverage cov = coverageOf(src, left.name(), fromCols, right.name(), toCols, statsByRef);
                         if (cov.ratio() >= MIN_COVERAGE) {
-                            out.add(cardinalityRelationship(left, fromCols, right, toCols, cov));
+                            out.computeIfAbsent(pairKey, k -> new ArrayList<>())
+                                    .add(cardinalityRelationship(left, fromCols, right, toCols, cov));
                         }
                     }
                 }

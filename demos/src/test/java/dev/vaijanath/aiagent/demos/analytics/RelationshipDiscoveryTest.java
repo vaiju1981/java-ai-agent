@@ -74,6 +74,43 @@ class RelationshipDiscoveryTest {
     }
 
     @Test
+    void supersedesTheCoarseMatchEvenWhenCardinalitySwapsFromToTable() throws Exception {
+        // "accounts" sorts before "charges", so accounts is always `left` in discover()'s outer loop.
+        // The composite (region, year) uniquely identifies each of accounts' 3 rows, but charges has
+        // two (east,2024) rows out of 4 -- so accounts is the unique side. cardinalityRelationship's
+        // lUnique && !rUnique branch then swaps: it returns fromTable=charges, toTable=accounts, the
+        // reverse of the natural "accounts|charges" pair key. The supersede check must key off that
+        // natural pair, not off the (possibly swapped) Relationship.fromTable()/toTable().
+        Path accounts = tempDir.resolve("accounts.csv");
+        Files.writeString(accounts, "region,year,name\neast,2024,A\nwest,2024,B\neast,2025,C\n");
+        Path charges = tempDir.resolve("charges.csv");
+        Files.writeString(charges, "region,year,amount\neast,2024,10\neast,2024,20\nwest,2024,30\neast,2025,40\n");
+
+        Map<String, Path> csvs = new LinkedHashMap<>();
+        csvs.put("accounts", accounts);
+        csvs.put("charges", charges);
+        try (CsvSource src = CsvSource.of(tempDir.resolve("ck4.duckdb"), csvs)) {
+            Map<String, Map<String, ColumnRole>> roles = Map.of(
+                    "accounts", Map.of("region", ColumnRole.DIMENSION, "year", ColumnRole.DIMENSION,
+                            "name", ColumnRole.DIMENSION),
+                    "charges", Map.of("region", ColumnRole.DIMENSION, "year", ColumnRole.DIMENSION,
+                            "amount", ColumnRole.MEASURE_ADDITIVE));
+            List<Relationship> rels = RelationshipDiscovery.discover(src, roles, Map.of());
+
+            assertTrue(rels.stream().anyMatch(r ->
+                    Set.copyOf(r.fromColumns()).equals(Set.of("region", "year"))
+                            && Set.copyOf(r.toColumns()).equals(Set.of("region", "year"))
+                            && Set.of(r.fromTable(), r.toTable()).equals(Set.of("accounts", "charges"))),
+                    "composite (region, year) key between accounts and charges must be found: " + rels);
+            assertTrue(rels.stream().noneMatch(r ->
+                    Set.of(r.fromTable(), r.toTable()).equals(Set.of("accounts", "charges"))
+                            && (r.fromColumns().equals(List.of("region")) || r.fromColumns().equals(List.of("year")))),
+                    "coarse standalone region/year match must be superseded even when the composite's "
+                            + "cardinality swap reverses fromTable/toTable: " + rels);
+        }
+    }
+
+    @Test
     void doesNotInventACompositeWhenNoSecondColumnTightensTheJoin() throws Exception {
         // "player_id" is a genuine shared_key on its own (visit_id/session_id are unrelated identifiers,
         // not composite-key material) -- the existing single-column relationship must survive untouched.
