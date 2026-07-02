@@ -126,9 +126,17 @@ final class QueryPlanner {
             }
             return fanOutSafe(ms, ds, rel);
         }
-        String from = q(rel.fromTable()) + " join " + q(rel.toTable())
-                + " on " + qcol(rel.fromTable(), rel.fromColumn()) + " = " + qcol(rel.toTable(), rel.toColumn());
+        String from = q(rel.fromTable()) + " join " + q(rel.toTable()) + " on " + joinCondition(rel);
         return groupByQuery(from, ms, ds, where);
+    }
+
+    private static String joinCondition(Relationship rel) {
+        List<String> conditions = new ArrayList<>();
+        for (int i = 0; i < rel.fromColumns().size(); i++) {
+            conditions.add(qcol(rel.fromTable(), rel.fromColumns().get(i)) + " = "
+                    + qcol(rel.toTable(), rel.toColumns().get(i)));
+        }
+        return String.join(" and ", conditions);
     }
 
     private static String fanOutSafe(
@@ -151,23 +159,31 @@ final class QueryPlanner {
             String table = e.getKey();
             String a = "f" + (i++);
             alias.put(table, a);
-            String keyCol = table.equals(rel.fromTable()) ? rel.fromColumn() : rel.toColumn();
+            List<String> keyCols = table.equals(rel.fromTable()) ? rel.fromColumns() : rel.toColumns();
+            List<String> keySelect = new ArrayList<>();
+            List<String> keyGroup = new ArrayList<>();
+            for (int k = 0; k < keyCols.size(); k++) {
+                keySelect.add(q(keyCols.get(k)) + " as k" + k);
+                keyGroup.add(q(keyCols.get(k)));
+            }
             List<String> aggs = new ArrayList<>();
             for (SemanticModel.Metric m : e.getValue()) {
                 aggs.add(m.aggregation() + "(" + q(m.column()) + ") as " + q(m.column()));
             }
-            cteDefs.add(a + " as (select " + q(keyCol) + " as k, " + String.join(", ", aggs)
-                    + " from " + q(table) + " group by " + q(keyCol) + ")");
+            cteDefs.add(a + " as (select " + String.join(", ", keySelect) + ", " + String.join(", ", aggs)
+                    + " from " + q(table) + " group by " + String.join(", ", keyGroup) + ")");
         }
         List<String> aliasList = new ArrayList<>(alias.values());
-        String join = aliasList.get(0) + " join " + aliasList.get(1)
-                + " on " + aliasList.get(0) + ".k = " + aliasList.get(1) + ".k";
+        List<String> joinConds = new ArrayList<>();
+        for (int k = 0; k < rel.fromColumns().size(); k++) {
+            joinConds.add(aliasList.get(0) + ".k" + k + " = " + aliasList.get(1) + ".k" + k);
+        }
+        String join = aliasList.get(0) + " join " + aliasList.get(1) + " on " + String.join(" and ", joinConds);
         List<String> select = new ArrayList<>();
         for (SemanticModel.Metric m : ms) {
             select.add("sum(" + alias.get(m.table()) + "." + q(m.column()) + ") as " + q(m.column()));
         }
-        return "with " + String.join(", ", cteDefs)
-                + " select " + String.join(", ", select) + " from " + join;
+        return "with " + String.join(", ", cteDefs) + " select " + String.join(", ", select) + " from " + join;
     }
 
     private static String groupByQuery(String from, List<SemanticModel.Metric> ms,
