@@ -22,13 +22,20 @@ final class ColumnProfiler {
         String t = CsvSource.quote(table);
         boolean numeric = isNumeric(col.physicalType());
 
-        Map<String, Object> agg = src.nativeQuery(
-                "select count(*) n_rows, count(distinct " + c + ") n_distinct, "
-                        + "count(*) filter (where " + c + " is null) n_nulls"
-                        + (numeric
-                                ? ", min(" + c + ") mn, max(" + c + ") mx, avg(" + c + ") av, stddev_pop(" + c + ") sd"
-                                : "")
-                        + " from " + t).get(0);
+        // Aggregate numerics in DOUBLE, and make the stats best-effort: extreme real-world values
+        // can overflow stddev/variance even in double, and one bad column must not abort the whole
+        // profile. Fall back full -> drop stddev -> counts only; missing stats are reported null.
+        String cd = "cast(" + c + " as double)";
+        String base = "select count(*) n_rows, count(distinct " + c + ") n_distinct, "
+                + "count(*) filter (where " + c + " is null) n_nulls";
+        String mma = ", min(" + cd + ") mn, max(" + cd + ") mx, avg(" + cd + ") av";
+        String sd = ", stddev_pop(" + cd + ") sd";
+        Map<String, Object> agg = numeric
+                ? firstOk(src,
+                        base + mma + sd + " from " + t,
+                        base + mma + " from " + t,
+                        base + " from " + t)
+                : src.nativeQuery(base + " from " + t).get(0);
 
         List<String> samples = new ArrayList<>();
         for (Map<String, Object> r : src.nativeQuery(
@@ -77,6 +84,18 @@ final class ColumnProfiler {
         String s = duckType.toUpperCase(Locale.ROOT);
         return s.contains("DOUBLE") || s.contains("FLOAT") || s.contains("REAL")
                 || s.contains("DECIMAL") || s.contains("NUMERIC");
+    }
+
+    private static Map<String, Object> firstOk(CsvSource src, String... sqls) {
+        RuntimeException last = null;
+        for (String sql : sqls) {
+            try {
+                return src.nativeQuery(sql).get(0);
+            } catch (RuntimeException e) {
+                last = e;
+            }
+        }
+        throw last;
     }
 
     private static long num(Object o) {
