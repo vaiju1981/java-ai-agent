@@ -1,5 +1,3 @@
-import org.gradle.api.tasks.Copy
-
 plugins {
     application
 }
@@ -12,7 +10,6 @@ dependencies {
     implementation(libs.jackson.databind)
     implementation(libs.sqlite.jdbc)
     implementation(libs.duckdb.jdbc)
-    implementation(libs.tablesaw.core)
     runtimeOnly(libs.slf4j.simple)
 
     testImplementation(platform(libs.junit.bom))
@@ -32,12 +29,5 @@ tasks.test {
         if (!project.hasProperty("runManual")) {
             excludeTags("manual")
         }
-    }
-}
-
-tasks.named<Copy>("processResources") {
-    val analyticsUiDist = layout.projectDirectory.dir("analytics-ui/dist")
-    from(analyticsUiDist) {
-        into("analytics-ui")
     }
 }
