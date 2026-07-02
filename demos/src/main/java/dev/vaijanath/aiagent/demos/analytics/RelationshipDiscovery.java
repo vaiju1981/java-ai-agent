@@ -1,13 +1,29 @@
 package dev.vaijanath.aiagent.demos.analytics;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+/**
+ * Discovers join relationships between tables, including composite (multi-column) keys.
+ * A single-column match that isn't a confident key becomes a "seed" that {@link #discoverComposite}
+ * pairs with a second column to search for a tighter join. Composite search is currently capped at
+ * {@link #MAX_COMPOSITE_KEY_SIZE} (2) columns; widening it requires generalizing the single extra-column
+ * loop in {@code discoverComposite} into a combinations-of-size-(MAX-1) loop.
+ */
 final class RelationshipDiscovery {
 
     private static final double MIN_COVERAGE = 0.8;
+    private static final double MIN_PARTIAL_COVERAGE = 0.05;
+    // A composite key is two columns together; raising past 2 needs generalizing discoverComposite's
+    // single extra-column loop into a combinations-of-size-(MAX-1) loop, not a redesign.
+    private static final int MAX_COMPOSITE_KEY_SIZE = 2;
+
     private RelationshipDiscovery() {}
+
+    private record PartialMatch(TableSchema left, ColumnSchema leftCol, TableSchema right, ColumnSchema rightCol) {}
 
     static List<Relationship> discover(DataSource src, Map<String, Map<String, ColumnRole>> rolesByTable) {
         return discover(src, rolesByTable, Map.of());
@@ -16,12 +32,15 @@ final class RelationshipDiscovery {
     static List<Relationship> discover(DataSource src, Map<String, Map<String, ColumnRole>> rolesByTable,
             Map<String, ColumnProfile> statsByRef) {
         List<TableSchema> tables = src.tables();
-        List<Relationship> out = new ArrayList<>();
+        List<Relationship> confident = new ArrayList<>();
+        Map<String, Relationship> coarseByTablePair = new LinkedHashMap<>();
+        Map<String, List<PartialMatch>> seeds = new LinkedHashMap<>();
         for (TableSchema left : tables) {
             for (TableSchema right : tables) {
                 if (left.name().compareTo(right.name()) >= 0) {
                     continue; // each unordered pair once
                 }
+                String pairKey = left.name() + "|" + right.name();
                 for (ColumnSchema lc : left.columns()) {
                     for (ColumnSchema rc : right.columns()) {
                         if (!candidate(left, lc, right, rc, rolesByTable)) {
@@ -29,8 +48,66 @@ final class RelationshipDiscovery {
                         }
                         Coverage cov = coverageOf(src, left.name(), List.of(lc.name()),
                                 right.name(), List.of(rc.name()), statsByRef);
+                        double ratio = cov.ratio();
+                        if (ratio >= MIN_COVERAGE) {
+                            Relationship rel = cardinalityRelationship(left, List.of(lc.name()), right, List.of(rc.name()), cov);
+                            if ("shared_key".equals(rel.cardinality())) {
+                                coarseByTablePair.putIfAbsent(pairKey, rel);
+                                seeds.computeIfAbsent(pairKey, k -> new ArrayList<>()).add(new PartialMatch(left, lc, right, rc));
+                            } else {
+                                confident.add(rel);
+                            }
+                        } else if (ratio >= MIN_PARTIAL_COVERAGE) {
+                            seeds.computeIfAbsent(pairKey, k -> new ArrayList<>()).add(new PartialMatch(left, lc, right, rc));
+                        }
+                    }
+                }
+            }
+        }
+        List<Relationship> composites = discoverComposite(src, rolesByTable, seeds, statsByRef);
+        Set<String> superseded = new java.util.HashSet<>();
+        composites.forEach(c -> superseded.add(c.fromTable() + "|" + c.toTable()));
+
+        List<Relationship> out = new ArrayList<>(confident);
+        coarseByTablePair.forEach((pair, rel) -> {
+            if (!superseded.contains(pair)) {
+                out.add(rel);
+            }
+        });
+        out.addAll(composites);
+        return out;
+    }
+
+    private static List<Relationship> discoverComposite(DataSource src,
+            Map<String, Map<String, ColumnRole>> rolesByTable, Map<String, List<PartialMatch>> seedsByTablePair,
+            Map<String, ColumnProfile> statsByRef) {
+        List<Relationship> out = new ArrayList<>();
+        Set<String> seen = new java.util.LinkedHashSet<>();
+        for (List<PartialMatch> seeds : seedsByTablePair.values()) {
+            for (PartialMatch seed : seeds) {
+                TableSchema left = seed.left();
+                TableSchema right = seed.right();
+                for (ColumnSchema lc2 : left.columns()) {
+                    if (lc2.name().equals(seed.leftCol().name())) {
+                        continue;
+                    }
+                    for (ColumnSchema rc2 : right.columns()) {
+                        if (rc2.name().equals(seed.rightCol().name()) || !candidate(left, lc2, right, rc2, rolesByTable)) {
+                            continue;
+                        }
+                        List<String> fromCols = new ArrayList<>(List.of(seed.leftCol().name(), lc2.name()));
+                        List<String> toCols = new ArrayList<>(List.of(seed.rightCol().name(), rc2.name()));
+                        if (fromCols.get(0).compareTo(fromCols.get(1)) > 0) {
+                            java.util.Collections.reverse(fromCols);
+                            java.util.Collections.reverse(toCols);
+                        }
+                        String key = left.name() + fromCols + ">" + right.name() + toCols;
+                        if (!seen.add(key)) {
+                            continue;
+                        }
+                        Coverage cov = coverageOf(src, left.name(), fromCols, right.name(), toCols, statsByRef);
                         if (cov.ratio() >= MIN_COVERAGE) {
-                            out.add(cardinalityRelationship(left, List.of(lc.name()), right, List.of(rc.name()), cov));
+                            out.add(cardinalityRelationship(left, fromCols, right, toCols, cov));
                         }
                     }
                 }
