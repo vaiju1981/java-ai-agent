@@ -20,14 +20,14 @@ final class AnalyticsToolset {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private final CsvSource source;
+    private final DataSource source;
     private final SemanticModel model;
 
-    AnalyticsToolset(CsvSource source) {
+    AnalyticsToolset(DataSource source) {
         this(source, SemanticModel.fromProfile(DatasetProfiler.profile(source)));
     }
 
-    AnalyticsToolset(CsvSource source, SemanticModel model) {
+    AnalyticsToolset(DataSource source, SemanticModel model) {
         this.source = source;
         this.model = model;
     }

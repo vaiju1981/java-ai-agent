@@ -9,7 +9,7 @@ final class DatasetProfiler {
 
     private DatasetProfiler() {}
 
-    static DatasetProfile profile(CsvSource src) {
+    static DatasetProfile profile(DataSource src) {
         List<TableSchema> tables = src.tables();
         List<ColumnProfile> columns = new ArrayList<>();
         Map<String, Map<String, ColumnRole>> rolesByTable = new LinkedHashMap<>();

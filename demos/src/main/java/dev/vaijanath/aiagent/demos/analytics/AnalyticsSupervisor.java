@@ -17,11 +17,11 @@ final class AnalyticsSupervisor {
 
     private AnalyticsSupervisor() {}
 
-    static Agent create(CsvSource source, SemanticModel semantic, ModelPort model) {
+    static Agent create(DataSource source, SemanticModel semantic, ModelPort model) {
         return create(source, semantic, model, new LlmRouter(model));
     }
 
-    static Agent create(CsvSource source, SemanticModel semantic, ModelPort model, Router router) {
+    static Agent create(DataSource source, SemanticModel semantic, ModelPort model, Router router) {
         AnalyticsToolset tools = new AnalyticsToolset(source, semantic);
         Agent analyst = AnalyticsAgent.create(source, semantic, model);
         Agent schemaGuide = DefaultAgent.builder()

@@ -135,6 +135,6 @@ final class CsvSource implements DataSource {
     }
 
     static String quote(String id) {
-        return "\"" + id.replace("\"", "\"\"") + "\"";
+        return Sql.quote(id);
     }
 }

@@ -17,9 +17,9 @@ final class ColumnProfiler {
 
     private ColumnProfiler() {}
 
-    static ColumnProfile profile(CsvSource src, String table, ColumnSchema col) {
-        String c = CsvSource.quote(col.name());
-        String t = CsvSource.quote(table);
+    static ColumnProfile profile(DataSource src, String table, ColumnSchema col) {
+        String c = Sql.quote(col.name());
+        String t = Sql.quote(table);
         boolean numeric = isNumeric(col.physicalType());
 
         // Aggregate numerics in DOUBLE, and make the stats best-effort: extreme real-world values
@@ -86,7 +86,7 @@ final class ColumnProfiler {
                 || s.contains("DECIMAL") || s.contains("NUMERIC");
     }
 
-    private static Map<String, Object> firstOk(CsvSource src, String... sqls) {
+    private static Map<String, Object> firstOk(DataSource src, String... sqls) {
         RuntimeException last = null;
         for (String sql : sqls) {
             try {

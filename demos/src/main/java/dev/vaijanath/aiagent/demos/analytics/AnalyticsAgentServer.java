@@ -46,7 +46,7 @@ final class AnalyticsAgentServer implements AutoCloseable {
         this.agent = agent;
     }
 
-    static AnalyticsAgentServer start(CsvSource source, ModelPort model) {
+    static AnalyticsAgentServer start(DataSource source, ModelPort model) {
         DatasetProfile profile = DatasetProfiler.profile(source);
         SemanticModel semantic = SemanticModel.fromProfile(profile);
         Agent agent = model == null ? null : AnalyticsAgent.create(source, semantic, model);

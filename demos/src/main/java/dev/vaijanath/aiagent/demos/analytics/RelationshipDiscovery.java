@@ -10,7 +10,7 @@ final class RelationshipDiscovery {
 
     private RelationshipDiscovery() {}
 
-    static List<Relationship> discover(CsvSource src, Map<String, Map<String, ColumnRole>> rolesByTable) {
+    static List<Relationship> discover(DataSource src, Map<String, Map<String, ColumnRole>> rolesByTable) {
         List<TableSchema> tables = src.tables();
         List<Relationship> out = new ArrayList<>();
         for (TableSchema left : tables) {
@@ -61,7 +61,7 @@ final class RelationshipDiscovery {
         return roles.getOrDefault(table, Map.of()).getOrDefault(col, ColumnRole.UNKNOWN);
     }
 
-    private static Relationship evaluate(CsvSource src, TableSchema lt, ColumnSchema lc,
+    private static Relationship evaluate(DataSource src, TableSchema lt, ColumnSchema lc,
             TableSchema rt, ColumnSchema rc) {
         long ld = distinct(src, lt.name(), lc.name());
         long rd = distinct(src, rt.name(), rc.name());
@@ -88,18 +88,18 @@ final class RelationshipDiscovery {
         return new Relationship(lt.name(), lc.name(), rt.name(), rc.name(), "shared_key", round(cov));
     }
 
-    private static long distinct(CsvSource src, String table, String col) {
-        return ((Number) src.nativeQuery("select count(distinct " + CsvSource.quote(col) + ") d from "
-                + CsvSource.quote(table) + " where " + CsvSource.quote(col) + " is not null")
+    private static long distinct(DataSource src, String table, String col) {
+        return ((Number) src.nativeQuery("select count(distinct " + Sql.quote(col) + ") d from "
+                + Sql.quote(table) + " where " + Sql.quote(col) + " is not null")
                 .get(0).get("d")).longValue();
     }
 
-    private static long overlap(CsvSource src, String lt, String lc, String rt, String rc) {
+    private static long overlap(DataSource src, String lt, String lc, String rt, String rc) {
         return ((Number) src.nativeQuery(
-                "select count(*) n from (select distinct " + CsvSource.quote(lc) + " v from " + CsvSource.quote(lt)
-                        + " where " + CsvSource.quote(lc) + " is not null intersect select distinct "
-                        + CsvSource.quote(rc) + " from " + CsvSource.quote(rt)
-                        + " where " + CsvSource.quote(rc) + " is not null)")
+                "select count(*) n from (select distinct " + Sql.quote(lc) + " v from " + Sql.quote(lt)
+                        + " where " + Sql.quote(lc) + " is not null intersect select distinct "
+                        + Sql.quote(rc) + " from " + Sql.quote(rt)
+                        + " where " + Sql.quote(rc) + " is not null)")
                 .get(0).get("n")).longValue();
     }
 

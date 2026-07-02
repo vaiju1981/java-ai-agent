@@ -149,10 +149,10 @@ final class QueryPlanner {
     }
 
     private static String q(String id) {
-        return CsvSource.quote(id);
+        return Sql.quote(id);
     }
 
     private static String qcol(String table, String column) {
-        return CsvSource.quote(table) + "." + CsvSource.quote(column);
+        return Sql.quote(table) + "." + Sql.quote(column);
     }
 }

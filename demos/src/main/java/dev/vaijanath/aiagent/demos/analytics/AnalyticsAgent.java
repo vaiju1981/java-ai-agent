@@ -15,11 +15,11 @@ final class AnalyticsAgent {
 
     private AnalyticsAgent() {}
 
-    static Agent create(CsvSource source, ModelPort model, AgentObserver... observers) {
+    static Agent create(DataSource source, ModelPort model, AgentObserver... observers) {
         return create(source, SemanticModel.fromProfile(DatasetProfiler.profile(source)), model, observers);
     }
 
-    static Agent create(CsvSource source, SemanticModel semantic, ModelPort model, AgentObserver... observers) {
+    static Agent create(DataSource source, SemanticModel semantic, ModelPort model, AgentObserver... observers) {
         AnalyticsToolset tools = new AnalyticsToolset(source, semantic);
         DefaultAgent.Builder builder = DefaultAgent.builder()
                 .model(model)
