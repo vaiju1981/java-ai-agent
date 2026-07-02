@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,14 @@ class RealDataAcceptanceTest {
                     r.fromColumn().toLowerCase().contains("playerid")
                             || r.fromColumn().toLowerCase().contains("assetid")),
                     "entity-key relationship discovered on playerId/assetId");
+
+            // M2: the planner answers a real grouped question on the real data.
+            SemanticModel model = SemanticModel.fromProfile(profile);
+            String sql = QueryPlanner.plan(model, new QueryPlanner.QuerySpec(
+                    List.of("playervisits.coinIn"), List.of("playervisits.clubLevel")));
+            List<Map<String, Object>> byClub = src.nativeQuery(sql);
+            System.out.println("coinIn by clubLevel: " + byClub);
+            assertTrue(!byClub.isEmpty(), "planner answered a real grouped query");
         }
     }
 }
