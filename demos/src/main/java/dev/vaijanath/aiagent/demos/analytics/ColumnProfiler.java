@@ -49,7 +49,11 @@ final class ColumnProfiler {
             signals.add("bool-like");
         }
         boolean nameId = col.name().toLowerCase(Locale.ROOT).matches(".*(id|key|code|uuid|guid)$");
-        if (nameId || (rows > 0 && (double) distinct / rows > 0.95)) {
+        // High cardinality means identity only for integer/text columns; a floating-point column
+        // that happens to be all-distinct is a continuous measure (revenue, theoWin), not an id.
+        boolean highCardKey = !isFloatingPoint(col.physicalType())
+                && rows > 0 && (double) distinct / rows > 0.95;
+        if (nameId || highCardKey) {
             signals.add("id-like");
         }
         Double min = numeric ? dbl(agg.get("mn")) : null;
@@ -67,6 +71,12 @@ final class ColumnProfiler {
         String s = duckType.toUpperCase(Locale.ROOT);
         return s.contains("INT") || s.contains("DECIMAL") || s.contains("DOUBLE")
                 || s.contains("FLOAT") || s.contains("REAL") || s.contains("NUMERIC") || s.contains("HUGEINT");
+    }
+
+    static boolean isFloatingPoint(String duckType) {
+        String s = duckType.toUpperCase(Locale.ROOT);
+        return s.contains("DOUBLE") || s.contains("FLOAT") || s.contains("REAL")
+                || s.contains("DECIMAL") || s.contains("NUMERIC");
     }
 
     private static long num(Object o) {
