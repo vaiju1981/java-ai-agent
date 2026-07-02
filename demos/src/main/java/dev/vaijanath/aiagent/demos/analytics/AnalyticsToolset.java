@@ -58,6 +58,7 @@ final class AnalyticsToolset {
                                     .map(SemanticModel.Metric::ref).toList(),
                             "dimensions", model.dimensions().stream()
                                     .map(SemanticModel.Dimension::ref).toList(),
+                            "timeColumns", model.timeColumns(),
                             "relationships", model.relationships().stream()
                                     .map(r -> r.fromTable() + "." + r.fromColumn() + " ~ "
                                             + r.toTable() + "." + r.toColumn() + " (" + r.cardinality() + ")")
@@ -76,12 +77,19 @@ final class AnalyticsToolset {
             public ToolSpec spec() {
                 return new ToolSpec(
                         "run_query",
-                        "Aggregate one or more metrics grouped by zero or more dimensions. Use exact refs from "
-                                + "describe_dataset (metric e.g. 'orders.revenue', dimension e.g. 'customers.segment'). "
-                                + "Joins are planned automatically and are fan-out-safe.",
+                        "Aggregate one or more metrics grouped by zero or more dimensions, with optional filters "
+                                + "and a time window. Use exact refs from describe_dataset. For a period like "
+                                + "'last 90 days', set lastDays=90 and timeColumn to a ref from the dataset's "
+                                + "timeColumns. For other constraints use filters, each {column, op, value} with op "
+                                + "one of = != < <= > >=. Joins are planned automatically and fan-out-safe.",
                         "{\"type\":\"object\",\"properties\":{"
                                 + "\"metrics\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},"
-                                + "\"dimensions\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},"
+                                + "\"dimensions\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},"
+                                + "\"filters\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{"
+                                + "\"column\":{\"type\":\"string\"},\"op\":{\"type\":\"string\"},"
+                                + "\"value\":{\"type\":\"string\"}}}},"
+                                + "\"lastDays\":{\"type\":\"integer\"},"
+                                + "\"timeColumn\":{\"type\":\"string\"}},"
                                 + "\"required\":[\"metrics\"]}",
                         ToolEffect.READ_ONLY);
             }
@@ -93,7 +101,11 @@ final class AnalyticsToolset {
                             argumentsJson == null || argumentsJson.isBlank() ? "{}" : argumentsJson);
                     List<String> metrics = toList(node.get("metrics"));
                     List<String> dimensions = toList(node.get("dimensions"));
-                    String sql = QueryPlanner.plan(model, new QueryPlanner.QuerySpec(metrics, dimensions));
+                    List<QueryPlanner.Filter> filters = toFilters(node.get("filters"));
+                    Integer lastDays = node.hasNonNull("lastDays") ? node.get("lastDays").asInt() : null;
+                    String timeColumn = node.hasNonNull("timeColumn") ? node.get("timeColumn").asText() : null;
+                    String sql = QueryPlanner.plan(model,
+                            new QueryPlanner.QuerySpec(metrics, dimensions, filters, lastDays, timeColumn));
                     List<Map<String, Object>> rows = source.nativeQuery(sql);
                     return ToolResult.ok(MAPPER.writeValueAsString(Map.of("sql", sql, "rows", rows)));
                 } catch (RuntimeException | JsonProcessingException e) {
@@ -101,6 +113,25 @@ final class AnalyticsToolset {
                 }
             }
         };
+    }
+
+    private static List<QueryPlanner.Filter> toFilters(JsonNode node) {
+        List<QueryPlanner.Filter> out = new ArrayList<>();
+        if (node != null && node.isArray()) {
+            for (JsonNode f : node) {
+                String column = f.path("column").asText("");
+                String op = f.path("op").asText("");
+                String value = f.path("value").asText("");
+                int annotation = column.indexOf(" (");
+                if (annotation > 0) {
+                    column = column.substring(0, annotation);
+                }
+                if (!column.isBlank() && !op.isBlank()) {
+                    out.add(new QueryPlanner.Filter(column.trim(), op.trim(), value));
+                }
+            }
+        }
+        return out;
     }
 
     private static List<String> toList(JsonNode node) {

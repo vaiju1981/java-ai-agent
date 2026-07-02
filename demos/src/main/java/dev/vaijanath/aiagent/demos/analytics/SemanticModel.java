@@ -9,12 +9,14 @@ import java.util.Map;
 /**
  * Query-oriented model generated from a {@link DatasetProfile}. Nothing here is hardcoded to a
  * dataset: measures become metrics (additive -> sum, ratio -> avg), dimensions/dates/booleans
- * become groupable dimensions, identifiers become entity keys used for joins.
+ * become groupable dimensions, identifiers become entity keys used for joins, and date/timestamp
+ * columns are also surfaced as {@code timeColumns} for time-window filtering.
  */
 record SemanticModel(
         List<Metric> metrics,
         List<Dimension> dimensions,
         List<String> entityKeys,
+        List<String> timeColumns,
         List<Relationship> relationships) {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -35,19 +37,23 @@ record SemanticModel(
         List<Metric> metrics = new ArrayList<>();
         List<Dimension> dimensions = new ArrayList<>();
         List<String> entityKeys = new ArrayList<>();
+        List<String> timeColumns = new ArrayList<>();
         for (TableSchema table : profile.tables()) {
             for (ColumnSchema column : table.columns()) {
                 switch (column.role()) {
                     case MEASURE_ADDITIVE -> metrics.add(new Metric(table.name(), column.name(), "sum"));
                     case MEASURE_RATIO -> metrics.add(new Metric(table.name(), column.name(), "avg"));
-                    case DIMENSION, DATE, TIMESTAMP, BOOLEAN ->
-                            dimensions.add(new Dimension(table.name(), column.name()));
+                    case DATE, TIMESTAMP -> {
+                        dimensions.add(new Dimension(table.name(), column.name()));
+                        timeColumns.add(table.name() + "." + column.name());
+                    }
+                    case DIMENSION, BOOLEAN -> dimensions.add(new Dimension(table.name(), column.name()));
                     case IDENTIFIER -> entityKeys.add(table.name() + "." + column.name());
-                    default -> { /* TEXT / UNKNOWN: not directly queryable in M2 */ }
+                    default -> { /* TEXT / UNKNOWN: not directly queryable */ }
                 }
             }
         }
-        return new SemanticModel(metrics, dimensions, entityKeys, profile.relationships());
+        return new SemanticModel(metrics, dimensions, entityKeys, timeColumns, profile.relationships());
     }
 
     String toJson() {
@@ -59,6 +65,7 @@ record SemanticModel(
                     "dimensions", dimensions.stream().map(d -> Map.of(
                             "ref", d.ref(), "table", d.table(), "column", d.column())).toList(),
                     "entityKeys", entityKeys,
+                    "timeColumns", timeColumns,
                     "relationships", relationships));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("failed to serialize SemanticModel", e);

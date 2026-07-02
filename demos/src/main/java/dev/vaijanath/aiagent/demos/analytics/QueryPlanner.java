@@ -9,15 +9,32 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Turns a metric/dimension request into read-only SQL over the {@link SemanticModel}. Single-table
- * requests group by directly; two-table requests join on the discovered relationship. Joins across
- * two fact tables (shared keys) are aggregated to grain first to stay fan-out-safe (see M2 Task 3).
+ * Turns a metric/dimension/filter request into read-only SQL over the {@link SemanticModel}.
+ * Single-table requests group by directly; two-table requests join on the discovered relationship
+ * (shared-key two-fact joins pre-aggregate to grain to stay fan-out-safe). Filters and a
+ * DB-computed "last N days" window are applied as a WHERE clause.
  */
 final class QueryPlanner {
 
+    private static final Set<String> OPERATORS = Set.of("=", "!=", "<>", "<", "<=", ">", ">=");
+
     private QueryPlanner() {}
 
-    record QuerySpec(List<String> metrics, List<String> dimensions) {}
+    record Filter(String column, String op, String value) {}
+
+    record QuerySpec(
+            List<String> metrics, List<String> dimensions, List<Filter> filters,
+            Integer lastDays, String timeColumn) {
+        QuerySpec {
+            metrics = metrics == null ? List.of() : List.copyOf(metrics);
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+            filters = filters == null ? List.of() : List.copyOf(filters);
+        }
+
+        QuerySpec(List<String> metrics, List<String> dimensions) {
+            this(metrics, dimensions, List.of(), null, null);
+        }
+    }
 
     static String plan(SemanticModel model, QuerySpec spec) {
         List<SemanticModel.Metric> ms = resolveMetrics(model, spec.metrics());
@@ -25,25 +42,41 @@ final class QueryPlanner {
         if (ms.isEmpty()) {
             throw new IllegalArgumentException("at least one metric is required");
         }
+        String where = buildWhere(model, spec);
         Set<String> tables = new LinkedHashSet<>();
         ms.forEach(m -> tables.add(m.table()));
         ds.forEach(d -> tables.add(d.table()));
         if (tables.size() == 1) {
-            return singleTable(tables.iterator().next(), ms, ds);
+            return groupByQuery(q(tables.iterator().next()), ms, ds, where);
         }
         if (tables.size() == 2) {
-            return twoTable(model, tables, ms, ds);
+            return twoTable(model, tables, ms, ds, where);
         }
         throw new UnsupportedOperationException("queries spanning more than two tables are not planned yet");
     }
 
-    private static String singleTable(
-            String table, List<SemanticModel.Metric> ms, List<SemanticModel.Dimension> ds) {
-        return groupByQuery(q(table), ms, ds);
+    private static String buildWhere(SemanticModel model, QuerySpec spec) {
+        List<String> conditions = new ArrayList<>();
+        for (Filter f : spec.filters()) {
+            Resolved r = resolveRef(model, f.column());
+            String op = f.op() == null ? "" : f.op().trim();
+            if (!OPERATORS.contains(op)) {
+                throw new IllegalArgumentException("unsupported filter operator: " + f.op());
+            }
+            conditions.add(qcol(r.table(), r.column()) + " " + op + " " + literal(r.numeric(), f.value()));
+        }
+        if (spec.lastDays() != null && spec.timeColumn() != null && !spec.timeColumn().isBlank()) {
+            Resolved t = resolveRef(model, spec.timeColumn().trim());
+            // The DB computes the cutoff from the data's own latest date, so "last N days" is exact
+            // and different N values produce different windows.
+            conditions.add(qcol(t.table(), t.column()) + " >= (select max(" + q(t.column()) + ") from "
+                    + q(t.table()) + ") - INTERVAL '" + Math.max(0, spec.lastDays()) + " days'");
+        }
+        return conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions);
     }
 
     private static String twoTable(SemanticModel model, Set<String> tables,
-            List<SemanticModel.Metric> ms, List<SemanticModel.Dimension> ds) {
+            List<SemanticModel.Metric> ms, List<SemanticModel.Dimension> ds, String where) {
         Iterator<String> it = tables.iterator();
         String a = it.next();
         String b = it.next();
@@ -52,32 +85,28 @@ final class QueryPlanner {
             throw new IllegalArgumentException("no discovered relationship between " + a + " and " + b);
         }
         if ("shared_key".equals(rel.cardinality())) {
+            if (!where.isEmpty()) {
+                throw new UnsupportedOperationException("filters across two fact tables are not planned yet");
+            }
             return fanOutSafe(ms, ds, rel);
         }
-        // many_to_one / one_to_one: the "to" side is unique, so a direct join cannot fan out.
         String from = q(rel.fromTable()) + " join " + q(rel.toTable())
                 + " on " + qcol(rel.fromTable(), rel.fromColumn()) + " = " + qcol(rel.toTable(), rel.toColumn());
-        return groupByQuery(from, ms, ds);
+        return groupByQuery(from, ms, ds, where);
     }
 
-    /**
-     * Two fact tables linked by a shared key (neither side unique). A direct join multiplies rows
-     * and double-counts, so aggregate each fact to the shared-key grain first, then join the
-     * pre-aggregates. M2 supports grand totals; dimensioned two-fact queries come later.
-     */
     private static String fanOutSafe(
             List<SemanticModel.Metric> ms, List<SemanticModel.Dimension> ds, Relationship rel) {
         if (!ds.isEmpty()) {
             throw new UnsupportedOperationException(
-                    "dimensioned queries across two fact tables are not planned yet (M2)");
+                    "dimensioned queries across two fact tables are not planned yet");
         }
         LinkedHashMap<String, List<SemanticModel.Metric>> byTable = new LinkedHashMap<>();
         for (SemanticModel.Metric m : ms) {
             byTable.computeIfAbsent(m.table(), t -> new ArrayList<>()).add(m);
         }
         if (byTable.size() != 2) {
-            throw new UnsupportedOperationException(
-                    "shared-key plan needs metrics from exactly two fact tables (M2)");
+            throw new UnsupportedOperationException("shared-key plan needs metrics from exactly two fact tables");
         }
         Map<String, String> alias = new LinkedHashMap<>();
         List<String> cteDefs = new ArrayList<>();
@@ -105,8 +134,8 @@ final class QueryPlanner {
                 + " select " + String.join(", ", select) + " from " + join;
     }
 
-    private static String groupByQuery(
-            String from, List<SemanticModel.Metric> ms, List<SemanticModel.Dimension> ds) {
+    private static String groupByQuery(String from, List<SemanticModel.Metric> ms,
+            List<SemanticModel.Dimension> ds, String where) {
         List<String> select = new ArrayList<>();
         for (SemanticModel.Dimension d : ds) {
             select.add(qcol(d.table(), d.column()) + " as " + q(d.column()));
@@ -114,7 +143,7 @@ final class QueryPlanner {
         for (SemanticModel.Metric m : ms) {
             select.add(m.aggregation() + "(" + qcol(m.table(), m.column()) + ") as " + q(m.column()));
         }
-        StringBuilder sql = new StringBuilder("select " + String.join(", ", select) + " from " + from);
+        StringBuilder sql = new StringBuilder("select " + String.join(", ", select) + " from " + from + where);
         if (!ds.isEmpty()) {
             List<String> group = ds.stream().map(d -> qcol(d.table(), d.column())).toList();
             sql.append(" group by ").append(String.join(", ", group));
@@ -146,6 +175,41 @@ final class QueryPlanner {
                     .orElseThrow(() -> new IllegalArgumentException("unknown dimension: " + ref)));
         }
         return out;
+    }
+
+    private record Resolved(String table, String column, boolean numeric) {}
+
+    private static Resolved resolveRef(SemanticModel model, String ref) {
+        for (SemanticModel.Metric m : model.metrics()) {
+            if (m.ref().equals(ref)) {
+                return new Resolved(m.table(), m.column(), true);
+            }
+        }
+        for (SemanticModel.Dimension d : model.dimensions()) {
+            if (d.ref().equals(ref)) {
+                return new Resolved(d.table(), d.column(), false);
+            }
+        }
+        for (String key : model.entityKeys()) {
+            if (key.equals(ref)) {
+                int dot = ref.indexOf('.');
+                return new Resolved(ref.substring(0, dot), ref.substring(dot + 1), false);
+            }
+        }
+        throw new IllegalArgumentException("unknown column: " + ref);
+    }
+
+    private static String literal(boolean numeric, String value) {
+        String v = value == null ? "" : value.trim();
+        if (numeric) {
+            try {
+                Double.parseDouble(v);
+                return v;
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("numeric filter value expected, got: " + value);
+            }
+        }
+        return "'" + v.replace("'", "''") + "'";
     }
 
     private static String q(String id) {

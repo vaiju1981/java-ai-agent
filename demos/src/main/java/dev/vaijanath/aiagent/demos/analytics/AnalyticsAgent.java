@@ -24,11 +24,13 @@ final class AnalyticsAgent {
         DefaultAgent.Builder builder = DefaultAgent.builder()
                 .model(model)
                 .systemPrompt("You are a careful data analyst over an arbitrary dataset; never assume column "
-                        + "names. Follow exactly three steps: (1) call describe_dataset ONCE to get the exact "
-                        + "metric/dimension 'ref' values; (2) call run_query ONCE with the correct refs; (3) then "
-                        + "STOP calling tools and reply with a short plain-text answer using the numbers from "
-                        + "run_query. Never call a tool again once you have the query results. Do not claim "
-                        + "causation from correlation.")
+                        + "names. Steps: (1) call describe_dataset ONCE for the exact metric/dimension refs, the "
+                        + "timeColumns, and relationships; (2) call run_query with the correct refs — for a period "
+                        + "like 'last N days' set lastDays=N and timeColumn to a ref from timeColumns; use filters "
+                        + "for other constraints; (3) then STOP calling tools and answer in plain text using the "
+                        + "returned numbers. If a requested time window or filter cannot be applied with the "
+                        + "available columns, SAY SO plainly — never present unfiltered numbers as if they were "
+                        + "filtered. Do not claim causation from correlation.")
                 .tool(tools.describeDataset())
                 .tool(tools.runQuery())
                 .maxSteps(8)
