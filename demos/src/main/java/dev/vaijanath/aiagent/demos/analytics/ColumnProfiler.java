@@ -58,8 +58,10 @@ final class ColumnProfiler {
         boolean nameId = col.name().toLowerCase(Locale.ROOT).matches(".*(id|key|code|uuid|guid)$");
         // High cardinality means identity only for integer/text columns; a floating-point column
         // that happens to be all-distinct is a continuous measure (revenue, theoWin), not an id.
+        // Cardinality-based identity needs enough rows to be meaningful; on tiny data a plain measure
+        // can be accidentally all-distinct. Name-based id detection (above) still applies below this.
         boolean highCardKey = !isFloatingPoint(col.physicalType())
-                && rows > 0 && (double) distinct / rows > 0.95;
+                && rows >= 50 && (double) distinct / rows > 0.95;
         if (nameId || highCardKey) {
             signals.add("id-like");
         }
