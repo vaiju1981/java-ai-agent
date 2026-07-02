@@ -15,6 +15,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -159,7 +160,12 @@ final class AnalyticsAgentServer implements AutoCloseable {
             String file = eq > 0 ? arg.substring(eq + 1) : arg;
             csvs.put(name, Path.of(file));
         }
-        CsvSource source = CsvSource.of(Path.of("workspace", "analytics.duckdb"), csvs);
+        Path dbFile = Path.of(System.getenv().getOrDefault("ANALYTICS_DB", "workspace/analytics.duckdb"));
+        Path dbDir = dbFile.toAbsolutePath().getParent();
+        if (dbDir != null) {
+            Files.createDirectories(dbDir);
+        }
+        CsvSource source = CsvSource.of(dbFile, csvs);
         ModelPort model;
         try {
             model = AnalyticsModels.fromEnv();
