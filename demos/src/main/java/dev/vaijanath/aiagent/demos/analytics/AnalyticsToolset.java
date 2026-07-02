@@ -87,9 +87,24 @@ final class AnalyticsToolset {
 
     private static List<String> toList(JsonNode node) {
         List<String> out = new ArrayList<>();
-        if (node != null && node.isArray()) {
-            node.forEach(item -> out.add(item.asText()));
+        if (node == null || node.isNull()) {
+            return out;
+        }
+        if (node.isArray()) {
+            node.forEach(item -> add(out, item.asText()));
+        } else {
+            // Be liberal: models often pass a scalar "a" or "a,b" instead of the ["a"] the schema asks for.
+            for (String part : node.asText().split(",")) {
+                add(out, part);
+            }
         }
         return out;
+    }
+
+    private static void add(List<String> out, String value) {
+        String trimmed = value == null ? "" : value.trim();
+        if (!trimmed.isEmpty()) {
+            out.add(trimmed);
+        }
     }
 }
