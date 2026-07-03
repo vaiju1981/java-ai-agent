@@ -37,6 +37,9 @@ final class AnalyticsAgentServer implements AutoCloseable {
     private final DataSource source;
     private final ModelPort model;
     private final Catalog catalog;
+    // ponytail: three separate volatiles, not one atomic snapshot — a request landing mid-rebuild()
+    // could read a fresh field alongside a stale one. Fine for a single-user demo; if it ever matters,
+    // wrap {profileJson, modelJson, agent} in one immutable record behind a single volatile reference.
     private volatile String profileJson;
     private volatile String modelJson;
     private volatile Agent agent;
@@ -114,22 +117,44 @@ final class AnalyticsAgentServer implements AutoCloseable {
                 respond(exchange, 200, "application/json; charset=utf-8", toJson(Map.of("ok", true)));
             } else if ("POST".equals(method) && "/api/catalog/descriptions/table".equals(path)) {
                 Map<String, Object> req = MAPPER.readValue(body(exchange), new TypeReference<>() {});
-                catalog.setTableDescription(String.valueOf(req.get("table")), String.valueOf(req.get("description")));
+                String table = requireField(req, "table");
+                if (table == null) {
+                    respond(exchange, 400, "application/json; charset=utf-8",
+                            toJson(Map.of("error", "table is required")));
+                    return;
+                }
+                catalog.setTableDescription(table, String.valueOf(req.get("description")));
                 rebuild();
                 respond(exchange, 200, "application/json; charset=utf-8", toJson(Map.of("ok", true)));
             } else if ("POST".equals(method) && "/api/catalog/descriptions/column".equals(path)) {
                 Map<String, Object> req = MAPPER.readValue(body(exchange), new TypeReference<>() {});
-                catalog.setColumnDescription(String.valueOf(req.get("table")), String.valueOf(req.get("column")),
-                        String.valueOf(req.get("description")));
+                String table = requireField(req, "table");
+                String column = requireField(req, "column");
+                if (table == null || column == null) {
+                    respond(exchange, 400, "application/json; charset=utf-8",
+                            toJson(Map.of("error", (table == null ? "table" : "column") + " is required")));
+                    return;
+                }
+                catalog.setColumnDescription(table, column, String.valueOf(req.get("description")));
                 rebuild();
                 respond(exchange, 200, "application/json; charset=utf-8", toJson(Map.of("ok", true)));
             } else {
                 respond(exchange, 404, "text/plain; charset=utf-8", "not found");
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | IOException e) {
             respond(exchange, 500, "application/json; charset=utf-8",
                     toJson(Map.of("error", String.valueOf(e.getMessage()))));
         }
+    }
+
+    /** Returns the trimmed string field, or null if missing/blank (caller responds 400). */
+    private static String requireField(Map<String, Object> req, String key) {
+        Object value = req.get(key);
+        if (value == null) {
+            return null;
+        }
+        String s = String.valueOf(value).strip();
+        return s.isEmpty() ? null : s;
     }
 
     private void handleAsk(HttpExchange exchange) throws IOException {

@@ -39,6 +39,27 @@ class AnalyticsAgentServerCatalogTest {
         }
     }
 
+    @Test
+    void includingARelationshipThroughTheApiSurvivesRebuildAndAppearsInTheCatalog() throws Exception {
+        Map<String, Path> csvs = new LinkedHashMap<>();
+        csvs.put("customers", Fixtures.customers(tempDir));
+        csvs.put("orders", Fixtures.orders(tempDir));
+        try (CsvSource src = CsvSource.of(tempDir.resolve("srvrel.duckdb"), csvs);
+                AnalyticsAgentServer server = AnalyticsAgentServer.start(
+                        src, null, Catalog.load(tempDir.resolve("catalog.json")))) {
+
+            HttpResponse<String> post = post(server.uri().resolve("api/catalog/relationships/include"), """
+                    {"fromTable":"orders","fromColumns":["customer_id"],"toTable":"customers",
+                     "toColumns":["customer_id"],"cardinality":"many_to_one"}
+                    """);
+            assertEquals(200, post.statusCode());
+
+            String catalog = get(server.uri().resolve("api/catalog")).body();
+            assertTrue(catalog.contains("\"fromTable\":\"orders\""), "included relationship must be visible: " + catalog);
+            assertTrue(catalog.contains("\"toTable\":\"customers\""), "included relationship must be visible: " + catalog);
+        }
+    }
+
     private static HttpResponse<String> get(URI uri) throws Exception {
         return HttpClient.newHttpClient().send(
                 HttpRequest.newBuilder(uri).GET().build(), HttpResponse.BodyHandlers.ofString());
