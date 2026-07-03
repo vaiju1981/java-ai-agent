@@ -3,6 +3,9 @@
 .github
 **/build
 **/.gradle
+**/node_modules
+**/dist
+workspace
 .gradle
 **/var
 *.md

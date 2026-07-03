@@ -45,6 +45,6 @@ still run, but the real behavior (tool orchestration, streaming) needs a model.
 - **MemoryAcrossSessions** — the recorded lesson is an `Episode` persisted to disk, so the learning is
   auditable and survives a restart.
 
-> More elaborate showcases (multi-agent orchestration, skills, deep-research planning, learning,
-> evaluation) live outside this repo to keep the core lean — see the cookbook ([docs/COOKBOOK.md](../docs/COOKBOOK.md))
-> for the corresponding patterns.
+> Looking for larger, product-shaped showcases rather than small recipes? See
+> [`../demos`](../demos/README.md) for deterministic scenario demos that combine planning, RAG,
+> governance, replay, observability, and evaluation.
