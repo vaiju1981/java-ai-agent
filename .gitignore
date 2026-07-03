@@ -25,3 +25,7 @@ replay_pid*
 # Local env / secrets
 .env
 *.local
+workspace/
+
+# Working design/planning docs — kept in-repo for reference, not committed
+docs/superpowers/
