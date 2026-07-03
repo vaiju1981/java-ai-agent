@@ -22,8 +22,10 @@ import dev.vaijanath.aiagent.model.Usage;
 import dev.vaijanath.aiagent.rag.InMemoryVectorStore;
 import dev.vaijanath.aiagent.rag.RetrievedChunk;
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -42,7 +44,7 @@ public final class IncidentResponseWarRoom {
     public record DemoRun(String output, Map<String, String> workspace, Path auditLog) {}
 
     public static void main(String[] args) throws IOException {
-        Path audit = Files.createTempFile("java-ai-agent-incident-", ".audit");
+        Path audit = tempAuditLog();
         DemoRun run = runDemo(audit);
 
         System.out.println("== IncidentResponseWarRoom ==\n");
@@ -205,5 +207,12 @@ public final class IncidentResponseWarRoom {
         public String name() {
             return "card-data-scrubber";
         }
+    }
+
+    private static Path tempAuditLog() throws IOException {
+        return FileSystems.getDefault().supportedFileAttributeViews().contains("posix")
+                ? Files.createTempFile("java-ai-agent-incident-", ".audit",
+                        PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+                : Files.createTempFile("java-ai-agent-incident-", ".audit");
     }
 }

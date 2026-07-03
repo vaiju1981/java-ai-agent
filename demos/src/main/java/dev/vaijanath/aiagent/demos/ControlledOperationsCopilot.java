@@ -26,8 +26,10 @@ import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -356,7 +358,10 @@ public final class ControlledOperationsCopilot {
 
     private static Path tempDatabase(String prefix) {
         try {
-            return Files.createTempFile(prefix, ".sqlite");
+            return FileSystems.getDefault().supportedFileAttributeViews().contains("posix")
+                    ? Files.createTempFile(prefix, ".sqlite",
+                            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+                    : Files.createTempFile(prefix, ".sqlite");
         } catch (IOException e) {
             throw new IllegalStateException("failed to create demo database", e);
         }

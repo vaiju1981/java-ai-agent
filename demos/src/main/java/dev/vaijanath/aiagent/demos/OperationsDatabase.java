@@ -85,7 +85,7 @@ final class OperationsDatabase implements AutoCloseable {
                       refund_id, account_id, invoice_id, amount_cents, idempotency_key, status, created_at
                     ) values (?, ?, ?, ?, ?, 'issued', ?)
                     """)) {
-                insert.setString(1, "rfnd-" + Math.abs(idempotencyKey.hashCode()));
+                insert.setString(1, "rfnd-" + Integer.toHexString(idempotencyKey.hashCode()));
                 insert.setString(2, accountId);
                 insert.setString(3, invoiceId);
                 insert.setInt(4, amountCents);
@@ -110,11 +110,16 @@ final class OperationsDatabase implements AutoCloseable {
             rollbackQuietly();
             throw new IllegalStateException("failed to issue refund", e);
         } finally {
-            try {
-                connection.setAutoCommit(true);
-            } catch (SQLException e) {
-                throw new IllegalStateException("failed to restore autocommit", e);
-            }
+            restoreAutoCommitQuietly();
+        }
+    }
+
+    private void restoreAutoCommitQuietly() {
+        try {
+            connection.setAutoCommit(true);
+        } catch (SQLException ignored) {
+            // best-effort: the refund above already committed or rolled back; throwing here would
+            // mask that outcome. A failed restore surfaces on the connection's next use instead.
         }
     }
 

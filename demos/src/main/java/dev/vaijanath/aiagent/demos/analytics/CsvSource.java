@@ -50,7 +50,7 @@ final class CsvSource implements DataSource {
     }
 
     private static String readCsv(Path csv, Map<String, String> overrides) {
-        String path = csv.toAbsolutePath().toString();
+        String path = sqlLiteral(csv.toAbsolutePath().toString());
         // sample_size=-1: infer each column's type from the whole file so a stray value deep in a
         // large CSV widens the column to text instead of failing the import. No rows are dropped.
         if (overrides.isEmpty()) {
@@ -61,9 +61,14 @@ final class CsvSource implements DataSource {
             if (types.length() > 0) {
                 types.append(", ");
             }
-            types.append("'").append(col).append("': '").append(type).append("'");
+            types.append("'").append(sqlLiteral(col)).append("': '").append(sqlLiteral(type)).append("'");
         });
         return "read_csv('" + path + "', auto_detect=true, sample_size=-1, types={" + types + "})";
+    }
+
+    /** Escapes a value for use inside a single-quoted SQL string literal (doubles embedded quotes). */
+    private static String sqlLiteral(String value) {
+        return value.replace("'", "''");
     }
 
     Connection connection() {
@@ -138,7 +143,7 @@ final class CsvSource implements DataSource {
     }
 
     static String identifier(String value) {
-        String id = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        String id = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^(?:_+)|(?:_+)$", "");
         return id.isBlank() || Character.isDigit(id.charAt(0)) ? "t_" + id : id;
     }
 
