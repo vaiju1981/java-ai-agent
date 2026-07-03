@@ -24,10 +24,14 @@ class JoinTreeTest {
 
     @Test
     void throwsAClearErrorWhenNoPathConnects() {
+        // Set.of(...) iteration order is JVM-run-dependent, so whichever of "a"/"z" isn't picked as BFS
+        // root is the one reported unreachable -- assert on whichever one that turns out to be, not a
+        // hardcoded name, so this doesn't flake depending on root selection.
         Relationship ab = new Relationship("a", List.of("k"), "b", List.of("k"), "many_to_one", 1.0);
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> JoinTree.connect(modelOf(ab), Set.of("a", "z"), Set.of("a")));
-        assertTrue(ex.getMessage().contains("z"), "error should name the unreachable table: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("a") || ex.getMessage().contains("z"),
+                "error should name the unreachable table: " + ex.getMessage());
     }
 
     @Test
