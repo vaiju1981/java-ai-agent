@@ -15,8 +15,7 @@ Run a demo:
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.IncidentResponseWarRoom
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.ControlledOperationsCopilot
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsInsightAgent
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsDashboardServer
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.analytics.AnalyticsAgentServer --args="t=/path/to/data.csv"
 ```
 
 ## IncidentResponseWarRoom
@@ -42,77 +41,48 @@ An operations copilot workflow:
 - records the run and replays it without re-executing tools;
 - reports token usage and runs a small eval suite against the same agent shape.
 
-## AnalyticsInsightAgent
+## Analytics agent (`demos/.../analytics`)
 
-A CSV-to-insights analytics workflow:
+A generic, schema-driven analytics agent over DuckDB. Nothing is dataset-specific: point it at any
+CSV(s) (or a live SQL database via `SqlSource`) and it profiles the data, infers roles and
+relationships, and answers natural-language questions through a small set of read-only tools.
 
-- accepts a caller-provided CSV path, or creates a sample marketing CSV when no path is passed;
-- loads the CSV into Tablesaw for dataframe metadata and imports it into a SQLite table named `data`
-  with inferred numeric/categorical columns;
-- exposes read-only tools for schema inspection, Tablesaw-backed dataset profiling, column profiling,
-  data quality scans, outlier detection, Tablesaw-backed Pearson/Spearman correlations, interesting
-  feature ranking, a metric/dimension catalog, semantic query planning, Tablesaw-backed group-by aggregates, pivots,
-  distribution comparisons, hypothesis-test approximations, regression feature screens, anomaly
-  detection, simple forecasts, Tablesaw-prepared chart specs, causal sanity checks, guarded SQL, and
-  dashboard creation;
-- reports regression diagnostics, normalized feature importance, in-sample evaluation metrics, and a
-  model card from the existing regression workflow;
-- answers questions such as "what features matter?", "which columns correlate with revenue?", and
-  "does discount_rate cause revenue?";
-- maps natural-language metric questions through the semantic layer before executing governed SQL;
-- writes a persisted evidence manifest with dataset lineage, semantic plans, SQL results, and dashboard
-  artifacts;
-- creates a dashboard JSON object model with filters, layout, KPI/chart/table/insight tiles, and
-  drilldown metadata, then renders it to HTML;
-- updates the persisted dashboard from a follow-up prompt, including re-rendering HTML and recording
-  update evidence;
-- applies dashboard filters and tile drilldowns against SQLite, refreshes tile data in the dashboard
-  model, re-renders HTML, and records interaction evidence;
-- includes a local hosted dashboard server that serves the dashboard UI plus `/api/dashboard` and
-  `/api/filter` endpoints for interactive inspection;
-- imports multiple related CSVs into SQLite, discovers likely join relationships, defines semantic
-  metrics/dimensions across the join, and runs a governed joined customer-segment rollup;
-- exposes scale-readiness tools for optional Hugging Face, Kaggle, and BigQuery public dataset
-  references, warehouse-style pushdown estimates, deterministic SQL sampling, result caching, and
-  million-row demo planning without loading raw large datasets into model context;
-- writes a persisted analyst decision log that links owner, status, conclusion, rationale, and evidence
-  ids;
-- refuses to claim causation from observational data while still surfacing measured associations;
-- writes dashboard JSON and HTML artifacts from computed tool results;
-- runs an eval suite against the same agent and database-backed tools.
+- **Ingestion:** `CsvSource` imports one or more CSVs into DuckDB (multi-table); `SqlSource` proves
+  the same stack works over any JDBC database (tested against SQLite).
+- **Profiling:** `DatasetProfiler`/`ColumnProfiler` deterministically infer column roles (identifier,
+  dimension, measure, date/timestamp, boolean) and `RelationshipDiscovery` finds join keys — including
+  2-column composite keys — purely from the data (coverage/cardinality), never from column names.
+- **Semantic model + planning:** `SemanticModel` turns the profile into metrics/dimensions/entity
+  keys/time columns; `QueryPlanner` (via `JoinTree`, a BFS spanning tree over discovered relationships)
+  builds fan-out-safe SQL for single/star/2-fact-chain joins — pre-aggregating shared-key joins so
+  fact-to-fact joins never double-count.
+- **Data catalog:** `Catalog` persists relationship include/exclude overrides and free-text
+  table/column descriptions as JSON, applied on top of auto-discovery and folded into the schema the
+  agent sees — exposed live via `/api/catalog/*` on `AnalyticsAgentServer` (edits take effect
+  immediately, no restart).
+- **Agent + tools:** `AnalyticsAgent` wires a config-selected `ModelPort` (see `AnalyticsModels`) to
+  generic read-only tools — `describe_dataset`, `run_query`, `summarize`, `outliers`, `regression`,
+  `correlate`, `run_sql` (a guarded, single-SELECT DuckDB escape hatch for anything the structured
+  tools can't express). `AnalyticsSupervisor` optionally routes between an analyst and a
+  schema-explainer specialist.
+- **Server:** `AnalyticsAgentServer` is a minimal HTTP app (chat UI + `/api/ask`, `/api/profile`,
+  `/api/model`, `/api/catalog/*`) with per-session memory.
 
-See [`ANALYTICS_AGENT_TOOL_CATALOG.md`](ANALYTICS_AGENT_TOOL_CATALOG.md) for the full product-level
-tool catalog and roadmap toward larger public datasets, semantic modeling, warehouse pushdown, and
-advanced ML/causal workflows.
-
-See [`analytics-ui/PLAN.md`](analytics-ui/PLAN.md) for the installable analytics app plan, including
-the React UI shape, backend APIs, Docker target, milestones, and acceptance criteria.
-
-Pass a CSV path after `--args`:
+Run it:
 
 ```bash
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsInsightAgent --args="/path/to/upload.csv"
+ANALYTICS_MODEL_PROVIDER=ollama ANALYTICS_MODEL=gemma4:31b-cloud \
+  ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.analytics.AnalyticsAgentServer \
+  --args="orders=/path/to/orders.csv customers=/path/to/customers.csv"
 ```
 
-Run the hosted analytics UI:
+The server prints a local URL. Table names are inferred from the file name if you pass bare CSV paths
+instead of `name=path` pairs. Without `ANALYTICS_MODEL_PROVIDER` set, `/api/ask` is disabled but
+`/api/profile`/`/api/model` still serve the deterministic profiler output (no LLM needed).
 
-```bash
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsDashboardServer
-```
-
-The server prints a local URL. Pass a CSV path after `--args` to serve your own dataset. The UI also
-supports browser CSV upload, data-driven filter values from the active table, and an "Ask The Data"
-chat panel. Chat always runs local analytics tools first; when `OLLAMA_BASE_URL` is set, the answer
-is summarized only with Ollama `gemma4:31b-cloud`.
-
-Run the React analytics UI scaffold:
-
-```bash
-ANALYTICS_PORT=8080 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsDashboardServer
-cd demos/analytics-ui
-npm install
-npm run dev
-```
+Relevant env vars: `ANALYTICS_PORT` (default: random free port), `ANALYTICS_DB` (DuckDB file, default
+`workspace/analytics.duckdb`), `ANALYTICS_CATALOG` (catalog JSON file, default
+`workspace/catalog.json`), `OLLAMA_BASE_URL` (default `http://localhost:11434`).
 
 Run deterministic demo tests:
 
@@ -120,9 +90,45 @@ Run deterministic demo tests:
 ./gradlew :demos:check
 ```
 
-The live model smoke test is opt-in and skipped unless `OLLAMA_BASE_URL` is set. It always calls
-Ollama with `gemma4:31b-cloud`.
+Live model tests are opt-in and skipped unless `OLLAMA_BASE_URL` is set (they call Ollama with
+`gemma4:31b-cloud`):
 
 ```bash
-OLLAMA_BASE_URL=http://localhost:11434 ./gradlew :demos:test --tests '*AnalyticsInsightAgentLiveTest'
+OLLAMA_BASE_URL=http://localhost:11434 ./gradlew :demos:test --tests '*AnalyticsAgentLiveTest'
 ```
+
+The manual real-data acceptance test is gated behind `-PrunManual` plus `ANALYTICS_REAL_DATA_DIR`
+(a directory of large CSVs) — it is never part of `:demos:check` or CI:
+
+```bash
+ANALYTICS_REAL_DATA_DIR=/path/to/large-csvs \
+  ./gradlew :demos:test --tests '*RealDataAcceptanceTest' -PrunManual
+```
+
+### Known gaps / remaining work
+
+Composite-key discovery, N-table fan-out-safe planning, and the live data catalog shipped in
+[PR #103](https://github.com/vaiju1981/java-ai-agent/pull/103). Deliberately out of scope there,
+still open:
+
+- **Tool gap audit** — no forecast tool, no pivot/crosstab, no saved views, no export. The current
+  tool set (`run_query`/`summarize`/`outliers`/`regression`/`correlate`/`run_sql`) has been
+  user-validated end-to-end on real data, but hasn't had a systematic "what's missing" pass.
+- **UI** — chat + plots/charts, and a UI for editing catalog relationships/descriptions (the
+  `/api/catalog/*` endpoints exist specifically so a future UI can drive this) is not built. Deferred
+  pending the tool/data layer being solid first.
+- **Fact chains are capped at exactly 2 fact tables** (documented ceiling, not a bug) — chains of 3+
+  fact tables need a generalized grain-union algorithm that wasn't built to avoid shipping an untested
+  join strategy. `QueryPlanner` throws a clear error rather than attempting one.
+- **Composite keys are capped at 2 columns** (`RelationshipDiscovery.MAX_COMPOSITE_KEY_SIZE`) —
+  arbitrary N-column keys need the pairing search generalized past "one seed + one extra column."
+- **No `GraphSource`** (Neo4j) — the profiler/planner emit SQL strings, so a graph source needs an
+  engine-neutral aggregate capability plus Cypher-native profiling; not a quick adapter.
+- **Non-ISO text dates** aren't parsed — `SemanticModel.TimeEncoding.TEXT` only handles ISO-parseable
+  strings via `try_cast`; other formats need `strptime` format detection.
+- **Latency**: no streaming yet; the biggest lever after model choice.
+- **`AnalyticsAgentServer`'s live-rebuild has a documented, accepted atomicity gap** for a single-user
+  demo (see the `ponytail:` comment above its volatile fields) — a request landing mid-catalog-edit
+  could theoretically see one updated field alongside one stale field. Not a real risk today; the
+  upgrade path (one immutable snapshot record behind a single volatile) is noted in code if it ever
+  matters.
