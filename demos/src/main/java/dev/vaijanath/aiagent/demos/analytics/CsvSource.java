@@ -27,6 +27,11 @@ final class CsvSource implements DataSource {
         return of(dbFile, namedCsvs, Map.of());
     }
 
+    // The table name and CSV path/type-override values can't be bound as PreparedStatement
+    // parameters (they're identifiers and read_csv(...) function arguments, not literal values in a
+    // fixed query shape); identifiers are restricted to [a-z0-9_] by identifier(), and every
+    // interpolated literal is escaped by sqlLiteral() before being embedded.
+    @SuppressWarnings("java:S2077")
     static CsvSource of(Path dbFile, Map<String, Path> namedCsvs,
             Map<String, Map<String, String>> typeOverrides) {
         try {
@@ -143,7 +148,7 @@ final class CsvSource implements DataSource {
     }
 
     static String identifier(String value) {
-        String id = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^(?:_+)|(?:_+)$", "");
+        String id = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("(?:^_+)|(?:_+$)", "");
         return id.isBlank() || Character.isDigit(id.charAt(0)) ? "t_" + id : id;
     }
 
