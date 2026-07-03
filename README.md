@@ -237,14 +237,14 @@ export AGENT_MODEL=gemma4:31b-cloud   # any pulled, tool-capable Ollama model
 ```
 
 For full-fledged scenario showcases — incident response with deep-agent planning/RAG/governance,
-an SQLite-backed operations copilot with transactional writes, and a CSV-to-SQLite analytics agent
-for profiling/correlation/feature discovery/causal caveats — see
+an SQLite-backed operations copilot with transactional writes, and a generic DuckDB-backed analytics
+agent with relationship discovery, fan-out-safe query planning, and a live data catalog — see
 [`demos`](demos/README.md):
 
 ```bash
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.IncidentResponseWarRoom
 ./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.ControlledOperationsCopilot
-./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.AnalyticsInsightAgent
+./gradlew :demos:run -PmainClass=dev.vaijanath.aiagent.demos.analytics.AnalyticsAgentServer --args="t=/path/to/data.csv"
 ```
 
 ## Modules
