@@ -64,8 +64,9 @@ final class AnalyticsToolset {
                                     catalog == null ? null : catalog.descriptionForColumn(t.name(), c.name())))
                                     .toList())).toList(),
                     "relationships", model.relationships().stream()
-                            .map(r -> r.fromTable() + "." + r.fromColumn() + " ~ "
-                                    + r.toTable() + "." + r.toColumn() + " (" + r.cardinality() + ")").toList()));
+                            .map(r -> r.fromTable() + "." + String.join(",", r.fromColumns()) + " ~ "
+                                    + r.toTable() + "." + String.join(",", r.toColumns())
+                                    + " (" + r.cardinality() + ")").toList()));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("failed to serialize catalog", e);
         }
