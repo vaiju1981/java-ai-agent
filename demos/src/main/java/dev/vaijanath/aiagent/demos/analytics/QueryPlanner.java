@@ -52,6 +52,10 @@ final class QueryPlanner {
         String where = buildWhere(model, spec);
         Set<String> factTables = new LinkedHashSet<>();
         Set<String> requested = new LinkedHashSet<>();
+        // Metrics (fact tables) must be added to `requested` before dimensions: JoinTree.connect roots
+        // its BFS at requested.iterator().next(), and factChainJoin's edge-orientation logic depends on
+        // a fact table being reachable early in the traversal. Reordering this could silently break the
+        // star/fact-chain split.
         ms.forEach(m -> {
             factTables.add(m.table());
             requested.add(m.table());

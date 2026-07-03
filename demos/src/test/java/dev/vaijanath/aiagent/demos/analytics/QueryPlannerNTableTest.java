@@ -69,6 +69,27 @@ class QueryPlannerNTableTest {
     }
 
     @Test
+    void rejectsTwoFactsConnectedOnlyThroughABridgeDimension() {
+        // visits and sessions share no column and no direct relationship; each relates to players
+        // via a different key (player_id / session_key). factChainJoin requires a direct fact-to-fact
+        // shared_key edge, so BFS routing both facts through the players dimension must be rejected
+        // rather than silently joining them through it.
+        SemanticModel.Metric visitsCoinIn = new SemanticModel.Metric("visits", "coin_in", "sum");
+        SemanticModel.Metric sessionsNetWin = new SemanticModel.Metric("sessions", "net_win", "sum");
+        Relationship visitsToPlayers = new Relationship(
+                "visits", List.of("player_id"), "players", List.of("player_id"), "many_to_one", 1.0);
+        Relationship sessionsToPlayers = new Relationship(
+                "sessions", List.of("session_key"), "players", List.of("session_key"), "many_to_one", 1.0);
+        SemanticModel model = new SemanticModel(
+                List.of(visitsCoinIn, sessionsNetWin), List.of(), List.of(), List.of(),
+                List.of(visitsToPlayers, sessionsToPlayers));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> QueryPlanner.plan(model,
+                new QueryPlanner.QuerySpec(List.of("visits.coin_in", "sessions.net_win"), List.of())));
+        assertEquals("fact tables are not directly connected by a shared key", ex.getMessage());
+    }
+
+    @Test
     void rejectsThreeFactTableChains() throws Exception {
         Path a = tempDir.resolve("a4.csv");
         Files.writeString(a, "player_id,x\n1,10\n1,20\n");
