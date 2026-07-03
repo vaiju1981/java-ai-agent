@@ -25,14 +25,20 @@ final class AnalyticsToolset {
 
     private final DataSource source;
     private final SemanticModel model;
+    private final Catalog catalog;
 
     AnalyticsToolset(DataSource source) {
-        this(source, SemanticModel.fromProfile(DatasetProfiler.profile(source)));
+        this(source, SemanticModel.fromProfile(DatasetProfiler.profile(source)), null);
     }
 
     AnalyticsToolset(DataSource source, SemanticModel model) {
+        this(source, model, null);
+    }
+
+    AnalyticsToolset(DataSource source, SemanticModel model, Catalog catalog) {
         this.source = source;
         this.model = model;
+        this.catalog = catalog;
     }
 
     SemanticModel model() {
@@ -43,20 +49,30 @@ final class AnalyticsToolset {
     String catalogJson() {
         try {
             return MAPPER.writeValueAsString(Map.of(
-                    "metrics", model.metrics().stream().map(SemanticModel.Metric::ref).toList(),
-                    "dimensions", model.dimensions().stream().map(SemanticModel.Dimension::ref).toList(),
+                    "metrics", model.metrics().stream().map(m -> describeRef(m.ref(),
+                            catalog == null ? null : catalog.descriptionForColumn(m.table(), m.column()))).toList(),
+                    "dimensions", model.dimensions().stream().map(d -> describeRef(d.ref(),
+                            catalog == null ? null : catalog.descriptionForColumn(d.table(), d.column()))).toList(),
                     "timeColumns", model.timeColumns().stream()
                             .map(t -> t.ref() + " (" + t.encoding() + ")").toList(),
                     "tables", source.tables().stream().map(t -> Map.of(
                             "name", t.name(),
-                            "columns", t.columns().stream()
-                                    .map(c -> c.name() + " " + c.physicalType()).toList())).toList(),
+                            "description", java.util.Optional.ofNullable(
+                                    catalog == null ? null : catalog.descriptionForTable(t.name())).orElse(""),
+                            "columns", t.columns().stream().map(c -> describeRef(
+                                    c.name() + " " + c.physicalType(),
+                                    catalog == null ? null : catalog.descriptionForColumn(t.name(), c.name())))
+                                    .toList())).toList(),
                     "relationships", model.relationships().stream()
                             .map(r -> r.fromTable() + "." + r.fromColumn() + " ~ "
                                     + r.toTable() + "." + r.toColumn() + " (" + r.cardinality() + ")").toList()));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("failed to serialize catalog", e);
         }
+    }
+
+    private static String describeRef(String ref, String description) {
+        return description == null || description.isBlank() ? ref : ref + " -- " + description;
     }
 
     Tool describeDataset() {

@@ -10,6 +10,10 @@ final class DatasetProfiler {
     private DatasetProfiler() {}
 
     static DatasetProfile profile(DataSource src) {
+        return profile(src, null);
+    }
+
+    static DatasetProfile profile(DataSource src, Catalog catalog) {
         List<TableSchema> tables = src.tables();
         List<ColumnProfile> columns = new ArrayList<>();
         Map<String, Map<String, ColumnRole>> rolesByTable = new LinkedHashMap<>();
@@ -35,6 +39,9 @@ final class DatasetProfiler {
         }
 
         List<Relationship> relationships = RelationshipDiscovery.discover(src, rolesByTable, statsByRef(columns));
+        if (catalog != null) {
+            relationships = catalog.apply(relationships);
+        }
         return new DatasetProfile(typedTables, columns, relationships, importPlan);
     }
 
