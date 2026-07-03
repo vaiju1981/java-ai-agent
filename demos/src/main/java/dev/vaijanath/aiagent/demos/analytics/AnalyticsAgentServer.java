@@ -34,28 +34,41 @@ final class AnalyticsAgentServer implements AutoCloseable {
 
     private final HttpServer server;
     private final ExecutorService executor;
-    private final String profileJson;
-    private final String modelJson;
-    private final Agent agent;
+    private final DataSource source;
+    private final ModelPort model;
+    private final Catalog catalog;
+    private volatile String profileJson;
+    private volatile String modelJson;
+    private volatile Agent agent;
 
-    private AnalyticsAgentServer(HttpServer server, ExecutorService executor,
-            String profileJson, String modelJson, Agent agent) {
+    private AnalyticsAgentServer(HttpServer server, ExecutorService executor, DataSource source,
+            ModelPort model, Catalog catalog) {
         this.server = server;
         this.executor = executor;
-        this.profileJson = profileJson;
-        this.modelJson = modelJson;
-        this.agent = agent;
+        this.source = source;
+        this.model = model;
+        this.catalog = catalog;
+        rebuild();
+    }
+
+    private synchronized void rebuild() {
+        DatasetProfile profile = DatasetProfiler.profile(source, catalog);
+        SemanticModel semantic = SemanticModel.fromProfile(profile);
+        this.profileJson = profile.toJson();
+        this.modelJson = semantic.toJson();
+        this.agent = model == null ? null : AnalyticsAgent.create(source, semantic, model);
     }
 
     static AnalyticsAgentServer start(DataSource source, ModelPort model) {
-        DatasetProfile profile = DatasetProfiler.profile(source);
-        SemanticModel semantic = SemanticModel.fromProfile(profile);
-        Agent agent = model == null ? null : AnalyticsAgent.create(source, semantic, model);
+        return start(source, model, Catalog.load(Path.of(
+                System.getenv().getOrDefault("ANALYTICS_CATALOG", "workspace/catalog.json"))));
+    }
+
+    static AnalyticsAgentServer start(DataSource source, ModelPort model, Catalog catalog) {
         try {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port()), 0);
             ExecutorService executor = Executors.newFixedThreadPool(4);
-            AnalyticsAgentServer hosted = new AnalyticsAgentServer(
-                    server, executor, profile.toJson(), semantic.toJson(), agent);
+            AnalyticsAgentServer hosted = new AnalyticsAgentServer(server, executor, source, model, catalog);
             server.createContext("/", hosted::route);
             server.setExecutor(executor);
             server.start();
@@ -87,6 +100,29 @@ final class AnalyticsAgentServer implements AutoCloseable {
                 respond(exchange, 200, "application/json; charset=utf-8", modelJson);
             } else if ("POST".equals(method) && "/api/ask".equals(path)) {
                 handleAsk(exchange);
+            } else if ("GET".equals(method) && "/api/catalog".equals(path)) {
+                respond(exchange, 200, "application/json; charset=utf-8", toJson(catalog.toMap()));
+            } else if ("POST".equals(method) && "/api/catalog/relationships/include".equals(path)) {
+                Catalog.RelationshipRef ref = MAPPER.readValue(body(exchange), Catalog.RelationshipRef.class);
+                catalog.addInclude(ref);
+                rebuild();
+                respond(exchange, 200, "application/json; charset=utf-8", toJson(Map.of("ok", true)));
+            } else if ("POST".equals(method) && "/api/catalog/relationships/exclude".equals(path)) {
+                Catalog.ExcludeRef ref = MAPPER.readValue(body(exchange), Catalog.ExcludeRef.class);
+                catalog.addExclude(ref);
+                rebuild();
+                respond(exchange, 200, "application/json; charset=utf-8", toJson(Map.of("ok", true)));
+            } else if ("POST".equals(method) && "/api/catalog/descriptions/table".equals(path)) {
+                Map<String, Object> req = MAPPER.readValue(body(exchange), new TypeReference<>() {});
+                catalog.setTableDescription(String.valueOf(req.get("table")), String.valueOf(req.get("description")));
+                rebuild();
+                respond(exchange, 200, "application/json; charset=utf-8", toJson(Map.of("ok", true)));
+            } else if ("POST".equals(method) && "/api/catalog/descriptions/column".equals(path)) {
+                Map<String, Object> req = MAPPER.readValue(body(exchange), new TypeReference<>() {});
+                catalog.setColumnDescription(String.valueOf(req.get("table")), String.valueOf(req.get("column")),
+                        String.valueOf(req.get("description")));
+                rebuild();
+                respond(exchange, 200, "application/json; charset=utf-8", toJson(Map.of("ok", true)));
             } else {
                 respond(exchange, 404, "text/plain; charset=utf-8", "not found");
             }
@@ -97,7 +133,7 @@ final class AnalyticsAgentServer implements AutoCloseable {
     }
 
     private void handleAsk(HttpExchange exchange) throws IOException {
-        String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        String body = body(exchange);
         Map<String, Object> request = body.isBlank()
                 ? Map.of()
                 : MAPPER.readValue(body, new TypeReference<>() {});
@@ -119,6 +155,10 @@ final class AnalyticsAgentServer implements AutoCloseable {
                 question, RequestContext.session(session.isEmpty() ? "web" : session)));
         respond(exchange, 200, "application/json; charset=utf-8",
                 toJson(Map.of("answer", response.output(), "blocked", response.blocked())));
+    }
+
+    private static String body(HttpExchange exchange) throws IOException {
+        return new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
     }
 
     private static void respond(HttpExchange exchange, int status, String contentType, String body)
