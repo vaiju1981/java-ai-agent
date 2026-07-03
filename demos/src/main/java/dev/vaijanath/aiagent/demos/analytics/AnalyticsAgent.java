@@ -28,6 +28,9 @@ final class AnalyticsAgent {
                         + "Answer each question by calling ONE tool, then replying in plain text with the numbers:\n"
                         + "- run_query: metrics grouped by dimensions; 'last N days' -> lastDays + timeColumn; "
                         + "'top N' -> limit; simple filters {column,op,value}. Cross-table joins are fan-out-safe.\n"
+                        + "- compare: period-over-period comparison; requires metrics, timeColumn, lastDays; "
+                        + "optionally dimensions/filters.\n"
+                        + "- trend: single-table trend by day/week/month with optional naive linear forecast.\n"
                         + "- summarize(metric): distribution/percentiles of one measure.\n"
                         + "- correlate(target): 'what correlates with / drives' a metric.\n"
                         + "- outliers(metric): unusual values by z-score.\n"
@@ -40,6 +43,8 @@ final class AnalyticsAgent {
                         + "do not claim causation from correlation.")
                 .tool(tools.describeDataset())
                 .tool(tools.runQuery())
+                .tool(tools.compare())
+                .tool(tools.trend())
                 .tool(tools.correlate())
                 .tool(tools.summarize())
                 .tool(tools.outliers())

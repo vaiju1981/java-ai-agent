@@ -26,16 +26,22 @@ final class QueryPlanner {
     record QuerySpec(
             List<String> metrics, List<String> dimensions, List<Filter> filters,
             Integer lastDays, String timeColumn,
-            String orderBy, boolean descending, Integer limit) {
+            String orderBy, boolean descending, Integer limit, Integer offsetDays) {
         QuerySpec {
             metrics = metrics == null ? List.of() : List.copyOf(metrics);
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
             filters = filters == null ? List.of() : List.copyOf(filters);
+            offsetDays = offsetDays == null ? 0 : Math.max(0, offsetDays);
+        }
+
+        QuerySpec(List<String> metrics, List<String> dimensions, List<Filter> filters,
+                Integer lastDays, String timeColumn, String orderBy, boolean descending, Integer limit) {
+            this(metrics, dimensions, filters, lastDays, timeColumn, orderBy, descending, limit, 0);
         }
 
         QuerySpec(List<String> metrics, List<String> dimensions, List<Filter> filters,
                 Integer lastDays, String timeColumn) {
-            this(metrics, dimensions, filters, lastDays, timeColumn, null, true, null);
+            this(metrics, dimensions, filters, lastDays, timeColumn, null, true, null, 0);
         }
 
         QuerySpec(List<String> metrics, List<String> dimensions) {
@@ -229,8 +235,14 @@ final class QueryPlanner {
             // data's own latest value, so "last N days" is exact and different N give different windows.
             String outer = tc.toTimestamp(qcol(tc.table(), tc.column()));
             String inner = tc.toTimestamp(q(tc.column()));
+            int lastDays = Math.max(0, spec.lastDays());
+            int offsetDays = Math.max(0, spec.offsetDays());
             conditions.add(outer + " >= (select max(" + inner + ") from " + q(tc.table())
-                    + ") - INTERVAL '" + Math.max(0, spec.lastDays()) + " days'");
+                    + ") - INTERVAL '" + (lastDays + offsetDays) + " days'");
+            if (offsetDays > 0) {
+                conditions.add(outer + " < (select max(" + inner + ") from " + q(tc.table())
+                        + ") - INTERVAL '" + offsetDays + " days'");
+            }
         }
         return conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions);
     }
