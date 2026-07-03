@@ -8,6 +8,7 @@ import dev.vaijanath.aiagent.tool.ToolEffect;
 import dev.vaijanath.aiagent.tool.ToolResult;
 import dev.vaijanath.aiagent.tool.ToolSpec;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -140,6 +141,140 @@ final class AnalyticsToolset {
                             metrics, dimensions, filters, lastDays, timeColumn, orderBy, descending, limit));
                     List<Map<String, Object>> rows = source.nativeQuery(sql);
                     return ToolResult.ok(MAPPER.writeValueAsString(Map.of("sql", sql, "rows", rows)));
+                } catch (RuntimeException | JsonProcessingException e) {
+                    return ToolResult.error(String.valueOf(e.getMessage()));
+                }
+            }
+        };
+    }
+
+    Tool compare() {
+        return new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec(
+                        "compare",
+                        "Compare one or more metrics for the latest period against the immediately preceding "
+                                + "period of the same length. Use for period-over-period questions. Args: metrics "
+                                + "(refs), optional dimensions and filters, required timeColumn and lastDays.",
+                        "{\"type\":\"object\",\"properties\":{"
+                                + "\"metrics\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},"
+                                + "\"dimensions\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},"
+                                + "\"filters\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{"
+                                + "\"column\":{\"type\":\"string\"},\"op\":{\"type\":\"string\"},"
+                                + "\"value\":{\"type\":\"string\"}}}},"
+                                + "\"timeColumn\":{\"type\":\"string\"},"
+                                + "\"lastDays\":{\"type\":\"integer\"}},"
+                                + "\"required\":[\"metrics\",\"timeColumn\",\"lastDays\"]}",
+                        ToolEffect.READ_ONLY);
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                try {
+                    JsonNode node = readArgs(argumentsJson);
+                    List<String> metrics = toList(node.get("metrics"));
+                    List<String> dimensions = toList(node.get("dimensions"));
+                    List<QueryPlanner.Filter> filters = toFilters(node.get("filters"));
+                    String timeColumn = node.path("timeColumn").asText("").trim();
+                    int lastDays = node.path("lastDays").asInt(0);
+                    if (lastDays <= 0) {
+                        return ToolResult.error("lastDays must be greater than 0");
+                    }
+                    if (timeColumn.isBlank()) {
+                        return ToolResult.error("timeColumn is required");
+                    }
+                    List<SemanticModel.Metric> resolvedMetrics = metrics.stream().map(AnalyticsToolset.this::requireMetric)
+                            .toList();
+                    List<SemanticModel.Dimension> resolvedDimensions = dimensions.stream()
+                            .map(AnalyticsToolset.this::requireDimension).toList();
+                    requireTimeColumn(timeColumn);
+
+                    String currentSql = QueryPlanner.plan(model, new QueryPlanner.QuerySpec(
+                            metrics, dimensions, filters, lastDays, timeColumn, null, true, null, 0));
+                    String previousSql = QueryPlanner.plan(model, new QueryPlanner.QuerySpec(
+                            metrics, dimensions, filters, lastDays, timeColumn, null, true, null, lastDays));
+                    List<Map<String, Object>> currentRows = source.nativeQuery(currentSql);
+                    List<Map<String, Object>> previousRows = source.nativeQuery(previousSql);
+                    List<Map<String, Object>> rows = mergeComparisonRows(
+                            resolvedMetrics, resolvedDimensions, currentRows, previousRows);
+
+                    Map<String, Object> out = new LinkedHashMap<>();
+                    out.put("currentSql", currentSql);
+                    out.put("previousSql", previousSql);
+                    out.put("lastDays", lastDays);
+                    out.put("timeColumn", timeColumn);
+                    out.put("rows", rows);
+                    return ToolResult.ok(MAPPER.writeValueAsString(out));
+                } catch (RuntimeException | JsonProcessingException e) {
+                    return ToolResult.error(String.valueOf(e.getMessage()));
+                }
+            }
+        };
+    }
+
+    Tool trend() {
+        return new Tool() {
+            @Override
+            public ToolSpec spec() {
+                return new ToolSpec(
+                        "trend",
+                        "Compute a single-table metric trend over day/week/month buckets and optionally a naive "
+                                + "linear extrapolation. Use for 'trending up/down' or rough projection questions. "
+                                + "Args: metric, timeColumn, optional bucket day|week|month, optional periodsAhead. "
+                                + "Naive linear extrapolation only; not seasonality-aware and not causal.",
+                        "{\"type\":\"object\",\"properties\":{"
+                                + "\"metric\":{\"type\":\"string\"},"
+                                + "\"timeColumn\":{\"type\":\"string\"},"
+                                + "\"bucket\":{\"type\":\"string\",\"enum\":[\"day\",\"week\",\"month\"]},"
+                                + "\"periodsAhead\":{\"type\":\"integer\"}},"
+                                + "\"required\":[\"metric\",\"timeColumn\"]}",
+                        ToolEffect.READ_ONLY);
+            }
+
+            @Override
+            public ToolResult invoke(String argumentsJson) {
+                try {
+                    JsonNode node = readArgs(argumentsJson);
+                    SemanticModel.Metric metric = requireMetric(node.path("metric").asText(""));
+                    SemanticModel.TimeColumn timeColumn = requireTimeColumn(node.path("timeColumn").asText(""));
+                    if (!metric.table().equals(timeColumn.table())) {
+                        return ToolResult.error("trend requires metric and timeColumn from the same table");
+                    }
+                    String bucket = node.path("bucket").asText("day").trim().toLowerCase(Locale.ROOT);
+                    if (!Set.of("day", "week", "month").contains(bucket)) {
+                        return ToolResult.error("bucket must be one of day, week, or month");
+                    }
+                    int periodsAhead = Math.max(0, node.path("periodsAhead").asInt(0));
+                    String cte = trendCte(metric, timeColumn, bucket);
+                    List<Map<String, Object>> seriesRows = source.nativeQuery(
+                            cte + " select period, value, x from indexed order by period");
+                    Map<String, Object> fit = source.nativeQuery(cte
+                            + " select regr_slope(value, x) slope, regr_r2(value, x) r2, "
+                            + "regr_intercept(value, x) intercept, avg(value) average, count(*) n from indexed")
+                            .get(0);
+                    double slope = number(fit.get("slope"));
+                    double intercept = number(fit.get("intercept"));
+                    double average = number(fit.get("average"));
+                    long n = fit.get("n") instanceof Number count ? count.longValue() : 0L;
+                    String direction = direction(slope, average);
+                    List<Map<String, Object>> forecast = forecast(bucket, periodsAhead, n, slope, intercept, cte);
+
+                    Map<String, Object> out = new LinkedHashMap<>();
+                    out.put("metric", metric.ref());
+                    out.put("timeColumn", timeColumn.ref());
+                    out.put("bucket", bucket);
+                    out.put("series", seriesRows.stream().map(row -> {
+                        Map<String, Object> point = new LinkedHashMap<>();
+                        point.put("period", row.get("period"));
+                        point.put("value", row.get("value"));
+                        return point;
+                    }).toList());
+                    out.put("slope", Double.isFinite(slope) ? slope : null);
+                    out.put("r2", fit.get("r2"));
+                    out.put("direction", direction);
+                    out.put("forecast", forecast);
+                    return ToolResult.ok(MAPPER.writeValueAsString(out));
                 } catch (RuntimeException | JsonProcessingException e) {
                     return ToolResult.error(String.valueOf(e.getMessage()));
                 }
@@ -292,6 +427,152 @@ final class AnalyticsToolset {
         final String resolved = r;
         return model.metrics().stream().filter(m -> m.ref().equals(resolved)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("unknown metric: " + resolved));
+    }
+
+    private SemanticModel.Dimension requireDimension(String ref) {
+        String r = stripAnnotation(ref);
+        return model.dimensions().stream().filter(d -> d.ref().equals(r)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown dimension: " + r));
+    }
+
+    private SemanticModel.TimeColumn requireTimeColumn(String ref) {
+        String r = stripAnnotation(ref);
+        return model.timeColumn(r).orElseThrow(() -> new IllegalArgumentException("not a time column: " + r));
+    }
+
+    private static String stripAnnotation(String ref) {
+        String r = ref == null ? "" : ref.trim();
+        int annotation = r.indexOf(" (");
+        return annotation > 0 ? r.substring(0, annotation).trim() : r;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> mergeComparisonRows(
+            List<SemanticModel.Metric> metrics,
+            List<SemanticModel.Dimension> dimensions,
+            List<Map<String, Object>> currentRows,
+            List<Map<String, Object>> previousRows) {
+        LinkedHashMap<String, Map<String, Object>> merged = new LinkedHashMap<>();
+        addComparisonSide(merged, metrics, dimensions, currentRows, "current");
+        addComparisonSide(merged, metrics, dimensions, previousRows, "previous");
+        for (Map<String, Object> row : merged.values()) {
+            Map<String, Object> metricResults = (Map<String, Object>) row.get("metrics");
+            for (SemanticModel.Metric metric : metrics) {
+                Map<String, Object> values = (Map<String, Object>) metricResults.get(metric.ref());
+                double current = numberOrZero(values.get("current"));
+                double previous = numberOrZero(values.get("previous"));
+                values.put("current", current);
+                values.put("previous", previous);
+                values.put("absoluteChange", current - previous);
+                values.put("percentChange", previous == 0.0 ? null : ((current - previous) / previous) * 100.0);
+            }
+        }
+        return new ArrayList<>(merged.values());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void addComparisonSide(
+            LinkedHashMap<String, Map<String, Object>> merged,
+            List<SemanticModel.Metric> metrics,
+            List<SemanticModel.Dimension> dimensions,
+            List<Map<String, Object>> sourceRows,
+            String side) {
+        for (Map<String, Object> sourceRow : sourceRows) {
+            String key = dimensionKey(dimensions, sourceRow);
+            Map<String, Object> row = merged.computeIfAbsent(key, ignored -> comparisonRow(dimensions, sourceRow));
+            Map<String, Object> metricResults = (Map<String, Object>) row.get("metrics");
+            for (SemanticModel.Metric metric : metrics) {
+                Map<String, Object> values = (Map<String, Object>) metricResults.computeIfAbsent(
+                        metric.ref(), ignored -> {
+                            Map<String, Object> empty = new LinkedHashMap<>();
+                            empty.put("current", 0.0);
+                            empty.put("previous", 0.0);
+                            return empty;
+                        });
+                values.put(side, numberOrZero(sourceRow.get(metric.column())));
+            }
+        }
+    }
+
+    private static Map<String, Object> comparisonRow(
+            List<SemanticModel.Dimension> dimensions, Map<String, Object> sourceRow) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        Map<String, Object> dimensionValues = new LinkedHashMap<>();
+        for (SemanticModel.Dimension dimension : dimensions) {
+            dimensionValues.put(dimension.ref(), sourceRow.get(dimension.column()));
+        }
+        row.put("dimensions", dimensionValues);
+        row.put("metrics", new LinkedHashMap<String, Object>());
+        return row;
+    }
+
+    private static String dimensionKey(List<SemanticModel.Dimension> dimensions, Map<String, Object> row) {
+        if (dimensions.isEmpty()) {
+            return "__all__";
+        }
+        List<String> values = new ArrayList<>();
+        for (SemanticModel.Dimension dimension : dimensions) {
+            values.add(String.valueOf(row.get(dimension.column())));
+        }
+        return String.join("\u001f", values);
+    }
+
+    private static String trendCte(
+            SemanticModel.Metric metric, SemanticModel.TimeColumn timeColumn, String bucket) {
+        String ts = timeColumn.toTimestamp(Sql.quote(timeColumn.column()));
+        String value = metric.aggregation() + "(cast(" + Sql.quote(metric.column()) + " as double))";
+        return "with buckets as (select date_trunc('" + bucket + "', " + ts + ") as period, "
+                + value + " as value from " + Sql.quote(metric.table())
+                + " where " + ts + " is not null group by period), "
+                + "indexed as (select period, value, row_number() over (order by period) - 1 as x from buckets)";
+    }
+
+    private List<Map<String, Object>> forecast(
+            String bucket, int periodsAhead, long observedPeriods, double slope, double intercept, String cte) {
+        if (periodsAhead <= 0 || observedPeriods <= 0 || !Double.isFinite(slope) || !Double.isFinite(intercept)) {
+            return List.of();
+        }
+        String interval = switch (bucket) {
+            case "week" -> "week";
+            case "month" -> "month";
+            default -> "day";
+        };
+        List<String> values = new ArrayList<>();
+        for (int k = 1; k <= periodsAhead; k++) {
+            values.add("(" + k + ")");
+        }
+        String sql = cte + " select k, max(period) + (k * INTERVAL '1 " + interval
+                + "') as period from indexed, (values " + String.join(", ", values)
+                + ") steps(k) group by k order by k";
+        List<Map<String, Object>> periods = source.nativeQuery(sql);
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> period : periods) {
+            int k = ((Number) period.get("k")).intValue();
+            Map<String, Object> point = new LinkedHashMap<>();
+            point.put("period", period.get("period"));
+            point.put("value", intercept + slope * (observedPeriods + k - 1));
+            out.add(point);
+        }
+        return out;
+    }
+
+    private static String direction(double slope, double average) {
+        if (!Double.isFinite(slope)) {
+            return "flat";
+        }
+        double epsilon = Math.max(1e-9, Math.abs(average) * 1e-9);
+        if (Math.abs(slope) < epsilon) {
+            return "flat";
+        }
+        return slope > 0.0 ? "increasing" : "decreasing";
+    }
+
+    private static double number(Object value) {
+        return value instanceof Number n ? n.doubleValue() : Double.NaN;
+    }
+
+    private static double numberOrZero(Object value) {
+        return value instanceof Number n ? n.doubleValue() : 0.0;
     }
 
     Tool runSql() {

@@ -78,4 +78,31 @@ class QueryPlannerFilterTest {
             assertEquals("west", String.valueOf(rows.get(0).get("region"))); // west 60 > east 40
         }
     }
+
+    @Test
+    void offsetDaysShiftsTimeWindowWithoutChangingDefault() throws Exception {
+        Path events = tempDir.resolve("periods.csv");
+        Files.writeString(events, """
+                day,amount
+                2025-02-10,10
+                2025-02-20,20
+                2025-03-10,30
+                2025-03-31,40
+                """);
+        Map<String, Path> csvs = new LinkedHashMap<>();
+        csvs.put("periods", events);
+        try (CsvSource src = CsvSource.of(tempDir.resolve("periods.duckdb"), csvs)) {
+            SemanticModel m = model(src);
+            String defaultSql = QueryPlanner.plan(m, new QueryPlanner.QuerySpec(
+                    List.of("periods.amount"), List.of(), List.of(), 30, "periods.day"));
+            String explicitZeroSql = QueryPlanner.plan(m, new QueryPlanner.QuerySpec(
+                    List.of("periods.amount"), List.of(), List.of(), 30, "periods.day", null, true, null, 0));
+            String previousSql = QueryPlanner.plan(m, new QueryPlanner.QuerySpec(
+                    List.of("periods.amount"), List.of(), List.of(), 30, "periods.day", null, true, null, 30));
+
+            assertEquals(defaultSql, explicitZeroSql, "offsetDays=0 preserves existing run_query SQL");
+            assertEquals(70.0, total(src, defaultSql), 0.001); // Mar 10 + Mar 31
+            assertEquals(30.0, total(src, previousSql), 0.001); // Feb 10 + Feb 20, excludes Mar 10+
+        }
+    }
 }
