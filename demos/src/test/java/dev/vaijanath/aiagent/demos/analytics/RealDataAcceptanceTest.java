@@ -48,4 +48,29 @@ class RealDataAcceptanceTest {
             assertTrue(!byClub.isEmpty(), "planner answered a real grouped query");
         }
     }
+
+    @Test
+    void discoversCompositeKeysAcrossFourRealTablesWithinATimeBudget() {
+        String dir = System.getenv("ANALYTICS_REAL_DATA_DIR");
+        assumeTrue(dir != null && Files.isDirectory(Path.of(dir)),
+                "set ANALYTICS_REAL_DATA_DIR to the training_data folder to run");
+
+        Map<String, Path> csvs = new LinkedHashMap<>();
+        csvs.put("playerVisits", Path.of(dir, "STATION_playerVisits_REDROCK.csv"));
+        csvs.put("sessions", Path.of(dir, "STATION_sessions_REDROCK.csv"));
+        csvs.put("assetDaily", Path.of(dir, "STATION_assetDaily_REDROCK.csv"));
+        csvs.put("changeLog", Path.of(dir, "changeLog_REDROCK.csv"));
+
+        try (CsvSource src = CsvSource.of(tempDir.resolve("real4.duckdb"), csvs)) {
+            long start = System.currentTimeMillis();
+            DatasetProfile profile = DatasetProfiler.profile(src);
+            long elapsedMs = System.currentTimeMillis() - start;
+            System.out.println("profiled 4 real tables (composite discovery included) in " + elapsedMs + "ms");
+            assertTrue(elapsedMs < 180_000, "composite discovery must stay within a 3 minute budget on real data");
+
+            assertTrue(profile.relationships().stream().anyMatch(r -> r.fromColumns().size() > 1
+                    || r.toColumns().size() > 1), "at least one real composite key should be found: "
+                    + profile.relationships());
+        }
+    }
 }
