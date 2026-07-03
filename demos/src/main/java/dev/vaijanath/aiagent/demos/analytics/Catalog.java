@@ -28,7 +28,7 @@ final class Catalog {
         }
     }
 
-    record ExcludeRef(String fromTable, String toTable, List<String> columns) {}
+    record ExcludeRef(String fromTable, List<String> fromColumns, String toTable, List<String> toColumns) {}
 
     private final Path file;
     private List<RelationshipRef> include = new ArrayList<>();
@@ -67,11 +67,12 @@ final class Catalog {
         return value instanceof Map ? (Map<String, Object>) value : Map.of();
     }
 
-    List<Relationship> apply(List<Relationship> discovered) {
+    synchronized List<Relationship> apply(List<Relationship> discovered) {
         List<Relationship> out = new ArrayList<>();
         for (Relationship r : discovered) {
             boolean excluded = exclude.stream().anyMatch(x -> x.fromTable().equals(r.fromTable())
-                    && x.toTable().equals(r.toTable()) && x.columns().equals(r.fromColumns()));
+                    && x.toTable().equals(r.toTable()) && x.fromColumns().equals(r.fromColumns())
+                    && x.toColumns().equals(r.toColumns()));
             if (!excluded) {
                 out.add(r);
             }
@@ -80,11 +81,11 @@ final class Catalog {
         return out;
     }
 
-    String descriptionForTable(String table) {
+    synchronized String descriptionForTable(String table) {
         return tableDescriptions.get(table);
     }
 
-    String descriptionForColumn(String table, String column) {
+    synchronized String descriptionForColumn(String table, String column) {
         return columnDescriptions.get(table + "." + column);
     }
 
@@ -108,10 +109,11 @@ final class Catalog {
         save();
     }
 
-    Map<String, Object> toMap() {
+    synchronized Map<String, Object> toMap() {
         return Map.of(
-                "relationships", Map.of("include", include, "exclude", exclude),
-                "descriptions", Map.of("tables", tableDescriptions, "columns", columnDescriptions));
+                "relationships", Map.of("include", List.copyOf(include), "exclude", List.copyOf(exclude)),
+                "descriptions", Map.of("tables", Map.copyOf(tableDescriptions), "columns",
+                        Map.copyOf(columnDescriptions)));
     }
 
     private void save() {
